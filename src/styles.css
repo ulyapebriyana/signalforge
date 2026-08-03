@@ -74,6 +74,7 @@ button:disabled {
   display: grid;
   grid-template-columns: 220px minmax(680px, 1fr) 300px;
   grid-template-rows: 72px minmax(0, 1fr) 42px;
+  height: 100dvh;
   min-height: 100vh;
   background-image: linear-gradient(rgba(255,255,255,0.007) 1px, transparent 1px);
   background-size: 100% 4px;
@@ -891,8 +892,10 @@ button:disabled {
   position: relative;
   width: 100%;
   height: 100%;
+  min-height: 0;
   overflow: auto;
   overscroll-behavior: contain;
+  scrollbar-gutter: stable;
   scrollbar-color: var(--faint) transparent;
   scrollbar-width: thin;
 }
@@ -902,6 +905,10 @@ table {
   min-width: 880px;
   border-collapse: collapse;
   font-size: 11px;
+}
+
+.table-scroll > table {
+  min-width: 1440px;
 }
 
 thead {
@@ -961,7 +968,7 @@ td:last-child {
 }
 
 td {
-  height: 64px;
+  height: 72px;
   padding: 6px 12px;
   border-top: 1px solid var(--line);
   color: #c7d4ce;
@@ -991,6 +998,15 @@ td {
   color: var(--faint);
   font-family: var(--mono);
   font-size: 9px;
+}
+
+.fee-breakdown-cell strong {
+  color: var(--text);
+  font-size: 11px;
+}
+
+.fee-breakdown-cell small {
+  line-height: 1.2;
 }
 
 .pool-name {
@@ -1479,6 +1495,44 @@ td > strong + small {
 .notification-header h2 {
   margin: 0;
   font-size: 16px;
+}
+
+.notification-controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.notification-control {
+  display: inline-flex;
+  min-width: 0;
+  min-height: 34px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 10px;
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  background: rgba(7, 16, 14, 0.38);
+  cursor: pointer;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.notification-control:hover,
+.notification-control.active {
+  border-color: rgba(216, 255, 87, 0.42);
+  color: var(--lime);
+  background: rgba(216, 255, 87, 0.055);
+}
+
+.notification-control svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
 }
 
 .notification-list {
@@ -2028,6 +2082,14 @@ code {
   color: var(--danger);
 }
 
+.toast.warning {
+  border-color: rgba(255, 179, 92, 0.42);
+}
+
+.toast.warning svg {
+  color: var(--warning);
+}
+
 .spin {
   animation: spin 720ms linear infinite;
 }
@@ -2104,6 +2166,7 @@ code {
   .app-shell {
     grid-template-columns: 72px minmax(0, 1fr);
     grid-template-rows: 64px auto auto 42px;
+    height: auto;
     min-height: 100vh;
   }
 
@@ -2310,7 +2373,9 @@ code {
   }
 
   .table-frame {
+    height: min(620px, 70vh);
     min-height: 420px;
+    flex: none;
   }
 
   .inspector {

@@ -4,13 +4,16 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { normalizePool, PRESETS } from "../shared/scoring.js";
+import { collectSignalEntries } from "../shared/signalTransitions.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, "..");
 const app = express();
 const port = Number(process.env.PORT || 4173);
 const scanIntervalSeconds = Math.max(20, Number(process.env.SCAN_INTERVAL_SECONDS || 30));
+const scannerPresetName = PRESETS[process.env.SCANNER_PRESET] ? process.env.SCANNER_PRESET : "safer";
 const dataApi = "https://dlmm.datapi.meteora.ag";
+const poolDiscoveryApi = "https://pool-discovery-api.datapi.meteora.ag";
 
 app.disable("x-powered-by");
 app.use(express.json({ limit: "32kb" }));
@@ -21,6 +24,8 @@ let activeFetch = null;
 let signalHistory = [];
 const alertCooldowns = new Map();
 const detectionCooldowns = new Map();
+let detectionStatuses = new Map();
+let detectionInitialized = false;
 const historyFile = path.join(projectRoot, "data", "signal-history.json");
 let historyWriteQueue = Promise.resolve();
 
@@ -89,6 +94,28 @@ const fetchMomentum = async (address) => {
   }
 };
 
+const fetchPoolAnalytics = async (addresses) => {
+  if (!addresses.length) return new Map();
+
+  try {
+    const batches = Array.from({ length: Math.ceil(addresses.length / 24) }, (_, index) =>
+      addresses.slice(index * 24, (index + 1) * 24));
+    const payloads = await Promise.all(batches.map((batch) => {
+      const query = new URLSearchParams({
+        page_size: String(batch.length),
+        category: "all",
+        timeframe: "1h",
+        filter_by: `pool_address=[${batch.join(",")}]`,
+      });
+      return fetchJson(`${poolDiscoveryApi}/pools?${query}`);
+    }));
+    const pools = payloads.flatMap((payload) => Array.isArray(payload.data) ? payload.data : []);
+    return new Map(pools.map((pool) => [pool.pool_address, pool]));
+  } catch {
+    return new Map();
+  }
+};
+
 const loadPools = async ({ force = false } = {}) => {
   const cacheAge = Date.now() - poolCacheAt;
   if (!force && poolCache && cacheAge < scanIntervalSeconds * 1_000 - 1_000) return poolCache;
@@ -109,10 +136,16 @@ const loadPools = async ({ force = false } = {}) => {
       )
       .slice(0, 48);
 
-    const enriched = await mapConcurrent(candidates, 6, async ({ raw }) => {
-      const momentum = await fetchMomentum(raw.address);
-      return normalizePool(raw, momentum);
-    });
+    const [momentumByPool, analyticsByPool] = await Promise.all([
+      mapConcurrent(candidates, 6, async ({ raw }) => [raw.address, await fetchMomentum(raw.address)]),
+      fetchPoolAnalytics(candidates.map(({ raw }) => raw.address)),
+    ]);
+    const momentumMap = new Map(momentumByPool);
+    const enriched = candidates.map(({ raw }) => normalizePool(
+      raw,
+      momentumMap.get(raw.address),
+      analyticsByPool.get(raw.address),
+    ));
 
     enriched.sort((a, b) => b.score - a.score || b.volume1h - a.volume1h);
     const now = new Date().toISOString();
@@ -180,9 +213,9 @@ const alertMessage = (pool, source = "manual") => [
   `<i>${source === "auto" ? "Alert otomatis" : "Dikirim manual"}; ini bukan rekomendasi finansial.</i>`,
 ].join("\n");
 
-const recordSignal = (pool, source, delivered) => {
+const recordSignal = (pool, source, delivered, details = {}) => {
   signalHistory = [{
-    id: `${pool.address}-${Date.now()}`,
+    id: `${pool.address}-${source}-${Date.now()}`,
     address: pool.address,
     pair: pool.pair,
     score: pool.score,
@@ -193,6 +226,7 @@ const recordSignal = (pool, source, delivered) => {
     volume1h: pool.volume1h,
     source,
     delivered,
+    ...details,
     createdAt: new Date().toISOString(),
   }, ...signalHistory].slice(0, 250);
   persistHistory();
@@ -200,13 +234,22 @@ const recordSignal = (pool, source, delivered) => {
 
 const recordDetectedSignals = (pools) => {
   const cooldownMs = 15 * 60_000;
-  for (const pool of pools) {
-    const qualified = pool.qualifies.safer.passed || pool.qualifies.yanman.passed;
-    if (!qualified || pool.score < 65) continue;
-    if (Date.now() - (detectionCooldowns.get(pool.address) || 0) < cooldownMs) continue;
-    detectionCooldowns.set(pool.address, Date.now());
-    recordSignal(pool, "scanner", null);
+  const { currentStatuses, entries } = collectSignalEntries(pools, scannerPresetName, detectionStatuses);
+
+  if (!detectionInitialized) {
+    detectionStatuses = currentStatuses;
+    detectionInitialized = true;
+    return;
   }
+
+  for (const { pool, status, previousStatus } of entries) {
+    const cooldownKey = `${pool.address}:${status}`;
+    if (Date.now() - (detectionCooldowns.get(cooldownKey) || 0) < cooldownMs) continue;
+    detectionCooldowns.set(cooldownKey, Date.now());
+    recordSignal(pool, "scanner", null, { eventType: "status-entry", previousStatus });
+  }
+
+  detectionStatuses = currentStatuses;
 };
 
 const findPool = async (address) => {
@@ -232,7 +275,7 @@ app.get("/api/status", (_request, response) => {
     telegramConfigured: telegramConfigured(),
     autoAlertsEnabled: process.env.ENABLE_ALERTS === "true",
     scanIntervalSeconds,
-    preset: PRESETS[process.env.SCANNER_PRESET] ? process.env.SCANNER_PRESET : "safer",
+    preset: scannerPresetName,
     historyPersistent: true,
   });
 });
@@ -244,6 +287,8 @@ app.get("/api/history", (_request, response) => {
 app.delete("/api/history", (_request, response) => {
   signalHistory = [];
   detectionCooldowns.clear();
+  detectionStatuses = new Map();
+  detectionInitialized = false;
   persistHistory();
   response.json({ ok: true });
 });
@@ -274,7 +319,7 @@ const runAlertScan = async () => {
   if (process.env.ENABLE_ALERTS !== "true" || !telegramConfigured()) return;
   try {
     const payload = await loadPools({ force: true });
-    const presetName = PRESETS[process.env.SCANNER_PRESET] ? process.env.SCANNER_PRESET : "safer";
+    const presetName = scannerPresetName;
     const preset = PRESETS[presetName];
     const minScore = Number(process.env.ALERT_MIN_SCORE || preset.minScore);
     const maxRisk = Number(process.env.ALERT_MAX_RISK || preset.maxRisk);

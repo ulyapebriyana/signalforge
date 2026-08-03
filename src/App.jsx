@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useGSAP } from "@gsap/react";
 import gsap from "gsap";
 import {
@@ -28,9 +28,12 @@ import {
   SlidersHorizontal,
   Trash2,
   TriangleAlert,
+  Volume2,
+  VolumeX,
   X,
 } from "lucide-react";
 import { PRESETS } from "../shared/scoring.js";
+import { collectSignalEntries } from "../shared/signalTransitions.js";
 import { usePools } from "./hooks/usePools.js";
 import { useSignalHistory } from "./hooks/useSignalHistory.js";
 import { formatAge, formatNumber, formatPercent, formatUsd, formatWibTime } from "./lib/format.js";
@@ -54,8 +57,12 @@ const SORT_COLUMNS = [
   ["score", "Score"],
   ["priceChange1h", "1h"],
   ["tvl", "TVL"],
+  ["totalLps", "Total LPs"],
   ["volume1h", "Vol 1h"],
+  ["swaps1h", "Swaps"],
+  ["traders1h", "Traders"],
   ["volumeTvl1h", "Vol/TVL"],
+  ["totalFees1h", "Fees 1h"],
   ["feeTvl1h", "Fee/TVL"],
   ["risk", "Risk"],
   ["ageHours", "Age"],
@@ -82,6 +89,35 @@ const formatHistoryTime = (iso) => new Intl.DateTimeFormat("id-ID", {
   minute: "2-digit",
   hour12: false,
 }).format(new Date(iso));
+
+const formatOptionalNumber = (value) => Number.isFinite(value) ? formatNumber(value) : "—";
+
+const playAlertTone = (context, status) => {
+  if (!context || context.state !== "running") return;
+  const frequencies = status === "hot" ? [880, 1_175] : [660];
+
+  frequencies.forEach((frequency, index) => {
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+    const startsAt = context.currentTime + index * 0.16;
+    oscillator.type = status === "hot" ? "triangle" : "sine";
+    oscillator.frequency.setValueAtTime(frequency, startsAt);
+    gain.gain.setValueAtTime(0.0001, startsAt);
+    gain.gain.exponentialRampToValueAtTime(0.16, startsAt + 0.025);
+    gain.gain.exponentialRampToValueAtTime(0.0001, startsAt + 0.14);
+    oscillator.connect(gain);
+    gain.connect(context.destination);
+    oscillator.start(startsAt);
+    oscillator.stop(startsAt + 0.15);
+  });
+};
+
+const notificationItemLabel = (item) => {
+  if (item.eventType === "status-entry") return `Baru masuk ${String(item.status).toUpperCase()}`;
+  if (item.source === "scanner") return "Terdeteksi scanner";
+  if (item.source === "auto") return "Alert otomatis";
+  return "Alert manual";
+};
 
 function BrandMark() {
   return (
@@ -303,7 +339,7 @@ function PoolIcon({ symbol }) {
 function SkeletonRows() {
   return Array.from({ length: 7 }, (_, index) => (
     <tr className="skeleton-row" key={index}>
-      <td><span /></td><td><span /></td><td><span /></td><td><span /></td><td><span /></td><td><span /></td><td><span /></td><td><span /></td><td><span /></td><td><span /></td>
+      {Array.from({ length: SORT_COLUMNS.length + 1 }, (_, cellIndex) => <td key={cellIndex}><span /></td>)}
     </tr>
   ));
 }
@@ -357,8 +393,16 @@ function PoolTable({ rows, selected, onSelect, loading, sort, onSort }) {
                 <td><span className="score-cell">{pool.score}</span><span className={`signal-label ${pool.status}`}>{STATUS_LABEL[pool.status]}</span></td>
                 <td className={pool.priceChange1h >= 0 ? "positive" : "negative"}>{formatPercent(pool.priceChange1h)}</td>
                 <td>{formatUsd(pool.tvl)}</td>
+                <td>{formatOptionalNumber(pool.totalLps)}</td>
                 <td>{formatUsd(pool.volume1h)}</td>
+                <td>{formatOptionalNumber(pool.swaps1h)}</td>
+                <td>{formatOptionalNumber(pool.traders1h)}</td>
                 <td>{pool.volumeTvl1h.toFixed(2)}x</td>
+                <td className="fee-breakdown-cell">
+                  <strong>{formatUsd(pool.totalFees1h)}</strong>
+                  <small>LP {formatUsd(pool.lpFees1h)} · Protocol {formatUsd(pool.protocolFees1h)}</small>
+                  <small>Base {pool.baseFeePct.toFixed(2)}% · Dynamic {pool.dynamicFeePct.toFixed(2)}%</small>
+                </td>
                 <td>{pool.feeTvl1h.toFixed(2)}%</td>
                 <td><strong className={pool.risk <= 35 ? "risk-low" : pool.risk <= 55 ? "risk-medium" : "risk-high"}>{pool.risk}</strong><small>{pool.risk <= 35 ? "Low" : pool.risk <= 55 ? "Medium" : "High"}</small></td>
                 <td>{formatAge(pool.ageHours)}</td>
@@ -444,17 +488,49 @@ function Inspector({ pool, preset, onAlert, alertState }) {
   );
 }
 
-function NotificationPanel({ history, loading, onClose, onOpenHistory }) {
+function NotificationPanel({
+  history,
+  loading,
+  notificationPermission,
+  onClose,
+  onOpenHistory,
+  onRequestPermission,
+  onToggleSound,
+  soundEnabled,
+}) {
+  const desktopNotificationsEnabled = notificationPermission === "granted";
+  const desktopNotificationLabel = desktopNotificationsEnabled
+    ? "Desktop aktif"
+    : notificationPermission === "denied"
+      ? "Desktop diblokir"
+      : notificationPermission === "unsupported"
+        ? "Desktop tidak didukung"
+        : "Aktifkan desktop";
+
   return (
     <section className="notification-panel" role="dialog" aria-label="Notifikasi sinyal">
       <div className="notification-header"><div><span>Live feed</span><h2>Notifikasi Sinyal</h2></div><button className="icon-button" type="button" onClick={onClose} aria-label="Tutup notifikasi"><X /></button></div>
+      <div className="notification-controls" aria-label="Pengaturan notifikasi">
+        <button className={`notification-control ${soundEnabled ? "active" : ""}`} type="button" aria-pressed={soundEnabled} onClick={onToggleSound}>
+          {soundEnabled ? <Volume2 /> : <VolumeX />} Bunyi {soundEnabled ? "aktif" : "mati"}
+        </button>
+        <button
+          className={`notification-control ${desktopNotificationsEnabled ? "active" : ""}`}
+          type="button"
+          aria-pressed={desktopNotificationsEnabled}
+          disabled={notificationPermission === "denied" || notificationPermission === "unsupported"}
+          onClick={onRequestPermission}
+        >
+          <Bell /> {desktopNotificationLabel}
+        </button>
+      </div>
       <div className="notification-list">
         {loading ? <div className="panel-empty"><RefreshCw className="spin" /> Memuat riwayat…</div> : null}
         {!loading && history.length === 0 ? <div className="panel-empty"><Bell /><strong>Belum ada sinyal</strong><span>Sinyal yang lolos preset akan muncul setelah scan.</span></div> : null}
         {history.slice(0, 6).map((item) => (
           <div className="notification-item" key={item.id}>
             <span className={`notification-indicator ${item.status || "watch"}`} />
-            <div><strong>{item.pair}</strong><span>{item.source === "scanner" ? "Terdeteksi scanner" : item.source === "auto" ? "Alert otomatis" : "Alert manual"}</span></div>
+            <div><strong>{item.pair}</strong><span>{notificationItemLabel(item)}</span></div>
             <div><strong>{item.score}</strong><span>{formatHistoryTime(item.createdAt)}</span></div>
           </div>
         ))}
@@ -586,6 +662,54 @@ export default function App() {
   const [navOpen, setNavOpen] = useState(false);
   const [toast, setToast] = useState(null);
   const [alertState, setAlertState] = useState("idle");
+  const [soundEnabled, setSoundEnabled] = useState(() => localStorage.getItem("signalforge:notificationSound") !== "false");
+  const [notificationPermission, setNotificationPermission] = useState(() =>
+    typeof window.Notification === "undefined" ? "unsupported" : window.Notification.permission);
+  const audioContextRef = useRef(null);
+  const signalSnapshotRef = useRef({ preset: null, scannedAt: null, statuses: new Map() });
+  const showToast = useCallback((message, tone = "info") => setToast({ message, tone }), []);
+
+  const primeSignalAudio = useCallback(async () => {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) return null;
+    if (!audioContextRef.current) audioContextRef.current = new AudioContextClass();
+    if (audioContextRef.current.state === "suspended") {
+      try {
+        await audioContextRef.current.resume();
+      } catch {
+        return null;
+      }
+    }
+    return audioContextRef.current;
+  }, []);
+
+  const playSignalTone = useCallback(async (signalStatus) => {
+    if (!soundEnabled) return;
+    const context = await primeSignalAudio();
+    playAlertTone(context, signalStatus);
+  }, [primeSignalAudio, soundEnabled]);
+
+  const requestDesktopNotifications = useCallback(async () => {
+    if (typeof window.Notification === "undefined") return;
+    if (window.Notification.permission === "default") {
+      const permission = await window.Notification.requestPermission();
+      setNotificationPermission(permission);
+      if (permission === "granted") showToast("Notifikasi desktop berhasil diaktifkan.", "success");
+    }
+  }, [showToast]);
+
+  const toggleSound = useCallback(async () => {
+    const nextEnabled = !soundEnabled;
+    setSoundEnabled(nextEnabled);
+    localStorage.setItem("signalforge:notificationSound", String(nextEnabled));
+    if (nextEnabled) {
+      const context = await primeSignalAudio();
+      playAlertTone(context, "watch");
+      showToast("Bunyi notifikasi diaktifkan.", "success");
+    } else {
+      showToast("Bunyi notifikasi dimatikan.");
+    }
+  }, [primeSignalAudio, showToast, soundEnabled]);
 
   useGSAP(() => {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
@@ -597,6 +721,50 @@ export default function App() {
     const timer = window.setTimeout(() => setToast(null), 4_000);
     return () => window.clearTimeout(timer);
   }, [toast]);
+
+  useEffect(() => {
+    if (!soundEnabled) return undefined;
+    const prime = () => { void primeSignalAudio(); };
+    window.addEventListener("pointerdown", prime, { once: true });
+    window.addEventListener("keydown", prime, { once: true });
+    return () => {
+      window.removeEventListener("pointerdown", prime);
+      window.removeEventListener("keydown", prime);
+    };
+  }, [primeSignalAudio, soundEnabled]);
+
+  useEffect(() => {
+    if (!meta?.scannedAt || !pools.length) return;
+    const snapshot = signalSnapshotRef.current;
+    if (snapshot.preset === preset && snapshot.scannedAt === meta.scannedAt) return;
+
+    const { currentStatuses, entries } = collectSignalEntries(pools, preset, snapshot.statuses);
+    const shouldNotify = snapshot.preset === preset && snapshot.scannedAt !== null;
+    signalSnapshotRef.current = { preset, scannedAt: meta.scannedAt, statuses: currentStatuses };
+    if (!shouldNotify || !entries.length) return;
+
+    const orderedEntries = entries.toSorted((left, right) => (right.status === "hot") - (left.status === "hot"));
+    const primary = orderedEntries[0];
+    const statusLabel = primary.status.toUpperCase();
+    const message = orderedEntries.length === 1
+      ? `${primary.pool.pair} baru masuk ${statusLabel}.`
+      : `${orderedEntries.length} pair baru masuk Watch/Hot. ${primary.pool.pair} paling kuat (${statusLabel}).`;
+
+    void playSignalTone(primary.status);
+    showToast(message, primary.status === "hot" ? "warning" : "success");
+    signalHistory.refresh();
+
+    if (notificationPermission === "granted" && typeof window.Notification !== "undefined") {
+      try {
+        new window.Notification(`SignalForge · ${statusLabel}`, {
+          body: message,
+          tag: `signalforge-${primary.pool.address}-${primary.status}`,
+        });
+      } catch {
+        // In-app toast and sound remain available when native notifications are blocked by the platform.
+      }
+    }
+  }, [meta?.scannedAt, notificationPermission, playSignalTone, pools, preset, showToast, signalHistory.refresh]);
 
   useEffect(() => {
     if (!selectedAddress && pools[0]) setSelectedAddress(pools[0].address);
@@ -660,8 +828,6 @@ export default function App() {
   }, [poolProjection, activeTab, sort]);
 
   const selected = pools.find((pool) => pool.address === selectedAddress) || visiblePools[0] || pools[0] || null;
-  const showToast = (message, tone = "info") => setToast({ message, tone });
-
   const changeSort = (key) => setSort((current) => ({ key, direction: current.key === key && current.direction === "desc" ? "asc" : "desc" }));
 
   const resetAll = () => {
@@ -696,6 +862,14 @@ export default function App() {
 
   const openScanner = () => setActiveView("pool-scanner");
   const mainWide = activeView !== "pool-scanner";
+  const toggleNotifications = () => {
+    const nextOpen = !notificationsOpen;
+    setNotificationsOpen(nextOpen);
+    if (nextOpen) {
+      signalHistory.refresh();
+      if (soundEnabled) void primeSignalAudio();
+    }
+  };
 
   return (
     <div className="app-shell" ref={appRef}>
@@ -707,7 +881,7 @@ export default function App() {
         onToggleNav={() => setNavOpen((value) => !value)}
         scanInterval={scanInterval}
         onScanInterval={setIntervalPreference}
-        onToggleNotifications={() => { setNotificationsOpen((value) => !value); signalHistory.refresh(); }}
+        onToggleNotifications={toggleNotifications}
         notificationsOpen={notificationsOpen}
         notificationCount={signalHistory.history.length}
       />
@@ -734,9 +908,9 @@ export default function App() {
       </main>
       {activeView === "pool-scanner" ? <Inspector pool={selected} preset={preset} onAlert={sendAlert} alertState={alertState} /> : null}
       <StatusBar meta={meta} preset={preset} scanInterval={scanInterval} />
-      {notificationsOpen ? <NotificationPanel history={signalHistory.history} loading={signalHistory.loading} onClose={() => setNotificationsOpen(false)} onOpenHistory={() => navigate("signal-history")} /> : null}
+      {notificationsOpen ? <NotificationPanel history={signalHistory.history} loading={signalHistory.loading} notificationPermission={notificationPermission} onClose={() => setNotificationsOpen(false)} onOpenHistory={() => navigate("signal-history")} onRequestPermission={requestDesktopNotifications} onToggleSound={toggleSound} soundEnabled={soundEnabled} /> : null}
       {settingsOpen ? <SettingsSheet runtimeStatus={status} onClose={() => setSettingsOpen(false)} onToast={showToast} /> : null}
-      {toast ? <div className={`toast ${toast.tone}`} role="status">{toast.tone === "success" ? <Check /> : toast.tone === "error" ? <TriangleAlert /> : <Activity />}<span>{toast.message}</span></div> : null}
+      {toast ? <div className={`toast ${toast.tone}`} role="status">{toast.tone === "success" ? <Check /> : toast.tone === "error" ? <TriangleAlert /> : toast.tone === "warning" ? <Bell /> : <Activity />}<span>{toast.message}</span></div> : null}
     </div>
   );
 }

@@ -43,13 +43,42 @@ describe("SignalForge scoring", () => {
       tvl: 20_000,
       volume: { "1h": 25_000, "24h": 100_000 },
       fees: { "1h": 200 },
+      protocol_fees: { "1h": 20 },
       fee_tvl_ratio: { "1h": 1 },
       pool_config: { base_fee_pct: 0.2 },
+      dynamic_fee_pct: 0.1,
       is_blacklisted: false,
-    }, { priceChange1h: 15, sparkline: [1, 2] });
+    }, { priceChange1h: 15, sparkline: [1, 2] }, {
+      total_lps: 42,
+      swap_count: 180,
+      unique_traders: 73,
+    });
 
     expect(normalized.baseSymbol).toBe("TOKEN");
     expect(normalized.pair).toBe("SOL / TOKEN");
     expect(normalized.volumeTvl1h).toBe(1.25);
+    expect(normalized.totalLps).toBe(42);
+    expect(normalized.swaps1h).toBe(180);
+    expect(normalized.traders1h).toBe(73);
+    expect(normalized.totalFees1h).toBe(220);
+    expect(normalized.lpFees1h).toBe(200);
+    expect(normalized.protocolFees1h).toBe(20);
+  });
+
+  it("keeps optional analytics empty when discovery data is unavailable", () => {
+    const normalized = normalizePool({
+      address: "pool-without-analytics",
+      token_x: { symbol: "TOKEN" },
+      token_y: { symbol: "SOL" },
+      volume: {},
+      fees: {},
+      protocol_fees: {},
+      fee_tvl_ratio: {},
+      pool_config: {},
+    });
+
+    expect(normalized.totalLps).toBeNull();
+    expect(normalized.swaps1h).toBeNull();
+    expect(normalized.traders1h).toBeNull();
   });
 });

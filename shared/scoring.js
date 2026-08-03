@@ -40,6 +40,12 @@ const number = (value, fallback = 0) => {
   return Number.isFinite(parsed) ? parsed : fallback;
 };
 
+const optionalNumber = (value) => {
+  if (value === null || value === undefined || value === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 
 const scaled = (value, inputMin, inputMax, outputMax) => {
@@ -158,10 +164,12 @@ export function evaluatePreset(pool, presetInput) {
   return { passed: misses.length === 0, misses };
 }
 
-export function normalizePool(raw, momentum = {}) {
+export function normalizePool(raw, momentum = {}, analytics = {}) {
   const { base, quote } = chooseTokens(raw.token_x, raw.token_y);
   const tvl = number(raw.tvl);
   const volume1h = number(raw.volume?.["1h"]);
+  const lpFees1h = number(raw.fees?.["1h"]);
+  const protocolFees1h = number(raw.protocol_fees?.["1h"]);
   const priceChange1h = Number.isFinite(momentum.priceChange1h)
     ? momentum.priceChange1h
     : Number.isFinite(raw.price_change_1h)
@@ -186,11 +194,17 @@ export function normalizePool(raw, momentum = {}) {
     tvl,
     volume1h,
     volume24h: number(raw.volume?.["24h"]),
-    fees1h: number(raw.fees?.["1h"]),
+    fees1h: lpFees1h,
+    lpFees1h,
+    protocolFees1h,
+    totalFees1h: lpFees1h + protocolFees1h,
     feeTvl1h: number(raw.fee_tvl_ratio?.["1h"]),
     volumeTvl1h: tvl > 0 ? volume1h / tvl : 0,
     baseFeePct: number(raw.pool_config?.base_fee_pct),
     dynamicFeePct: number(raw.dynamic_fee_pct),
+    totalLps: optionalNumber(analytics.total_lps),
+    swaps1h: optionalNumber(analytics.swap_count),
+    traders1h: optionalNumber(analytics.unique_traders),
     currentPrice: number(raw.current_price),
     priceChange1h,
     sparkline: Array.isArray(momentum.sparkline) ? momentum.sparkline : [],

@@ -11,6 +11,7 @@ SignalForge adalah screener Meteora DLMM untuk mencari pool Solana dengan moment
 - Risk score 0–100 dengan flag freeze authority, blacklist, verifikasi, TVL tipis, usia pool, dan data holder yang belum tersedia.
 - Pencarian, filter angka, tab Hot/Watch/Skipped, panel inspeksi, tautan ke Meteora.
 - Telegram alert manual dan scanner otomatis opsional, dengan cooldown per pool.
+- Notifikasi Watch/Hot berbunyi saat pool baru masuk status atau naik dari Watch ke Hot, dengan opsi desktop notification.
 - Tampilan desktop, tablet, dan mobile; animasi menghormati `prefers-reduced-motion`.
 
 ## Menjalankan
