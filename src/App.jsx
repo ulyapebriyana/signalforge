@@ -37,6 +37,7 @@ import { collectSignalEntries } from "../shared/signalTransitions.js";
 import { usePools } from "./hooks/usePools.js";
 import { useSignalHistory } from "./hooks/useSignalHistory.js";
 import { formatAge, formatNumber, formatPercent, formatUsd, formatWibTime } from "./lib/format.js";
+import { NOTIFICATION_SOUND_URL } from "./lib/notificationSound.js";
 import { Sparkline } from "./components/Sparkline.jsx";
 import { ScoreRing } from "./components/ScoreRing.jsx";
 
@@ -91,26 +92,6 @@ const formatHistoryTime = (iso) => new Intl.DateTimeFormat("id-ID", {
 }).format(new Date(iso));
 
 const formatOptionalNumber = (value) => Number.isFinite(value) ? formatNumber(value) : "—";
-
-const playAlertTone = (context, status) => {
-  if (!context || context.state !== "running") return;
-  const frequencies = status === "hot" ? [880, 1_175] : [660];
-
-  frequencies.forEach((frequency, index) => {
-    const oscillator = context.createOscillator();
-    const gain = context.createGain();
-    const startsAt = context.currentTime + index * 0.16;
-    oscillator.type = status === "hot" ? "triangle" : "sine";
-    oscillator.frequency.setValueAtTime(frequency, startsAt);
-    gain.gain.setValueAtTime(0.0001, startsAt);
-    gain.gain.exponentialRampToValueAtTime(0.16, startsAt + 0.025);
-    gain.gain.exponentialRampToValueAtTime(0.0001, startsAt + 0.14);
-    oscillator.connect(gain);
-    gain.connect(context.destination);
-    oscillator.start(startsAt);
-    oscillator.stop(startsAt + 0.15);
-  });
-};
 
 const notificationItemLabel = (item) => {
   if (item.eventType === "status-entry") return `Baru masuk ${String(item.status).toUpperCase()}`;
@@ -512,7 +493,7 @@ function NotificationPanel({
       <div className="notification-header"><div><span>Live feed</span><h2>Notifikasi Sinyal</h2></div><button className="icon-button" type="button" onClick={onClose} aria-label="Tutup notifikasi"><X /></button></div>
       <div className="notification-controls" aria-label="Pengaturan notifikasi">
         <button className={`notification-control ${soundEnabled ? "active" : ""}`} type="button" aria-pressed={soundEnabled} onClick={onToggleSound}>
-          {soundEnabled ? <Volume2 /> : <VolumeX />} Bunyi {soundEnabled ? "aktif" : "mati"}
+          {soundEnabled ? <Volume2 /> : <VolumeX />} {soundEnabled ? "Hidup Jokowi aktif" : "Bunyi mati"}
         </button>
         <button
           className={`notification-control ${desktopNotificationsEnabled ? "active" : ""}`}
@@ -665,29 +646,50 @@ export default function App() {
   const [soundEnabled, setSoundEnabled] = useState(() => localStorage.getItem("signalforge:notificationSound") !== "false");
   const [notificationPermission, setNotificationPermission] = useState(() =>
     typeof window.Notification === "undefined" ? "unsupported" : window.Notification.permission);
-  const audioContextRef = useRef(null);
+  const notificationAudioRef = useRef(null);
   const signalSnapshotRef = useRef({ preset: null, scannedAt: null, statuses: new Map() });
   const showToast = useCallback((message, tone = "info") => setToast({ message, tone }), []);
 
-  const primeSignalAudio = useCallback(async () => {
-    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-    if (!AudioContextClass) return null;
-    if (!audioContextRef.current) audioContextRef.current = new AudioContextClass();
-    if (audioContextRef.current.state === "suspended") {
-      try {
-        await audioContextRef.current.resume();
-      } catch {
-        return null;
-      }
+  const getNotificationAudio = useCallback(() => {
+    if (!notificationAudioRef.current) {
+      notificationAudioRef.current = new Audio(NOTIFICATION_SOUND_URL);
+      notificationAudioRef.current.preload = "auto";
+      notificationAudioRef.current.volume = 1;
     }
-    return audioContextRef.current;
+    return notificationAudioRef.current;
   }, []);
 
-  const playSignalTone = useCallback(async (signalStatus) => {
+  const unlockNotificationAudio = useCallback(async () => {
+    const audio = getNotificationAudio();
+    audio.muted = true;
+    try {
+      await audio.play();
+      audio.pause();
+      audio.currentTime = 0;
+    } catch {
+      // The next explicit user interaction will retry unlocking playback.
+    } finally {
+      audio.muted = false;
+    }
+  }, [getNotificationAudio]);
+
+  const playNotificationSound = useCallback(async () => {
+    const audio = getNotificationAudio();
+    audio.pause();
+    audio.currentTime = 0;
+    audio.muted = false;
+    audio.volume = 1;
+    try {
+      await audio.play();
+    } catch {
+      // Toast remains available when autoplay is blocked before the first interaction.
+    }
+  }, [getNotificationAudio]);
+
+  const playSignalSound = useCallback(async () => {
     if (!soundEnabled) return;
-    const context = await primeSignalAudio();
-    playAlertTone(context, signalStatus);
-  }, [primeSignalAudio, soundEnabled]);
+    await playNotificationSound();
+  }, [playNotificationSound, soundEnabled]);
 
   const requestDesktopNotifications = useCallback(async () => {
     if (typeof window.Notification === "undefined") return;
@@ -703,13 +705,12 @@ export default function App() {
     setSoundEnabled(nextEnabled);
     localStorage.setItem("signalforge:notificationSound", String(nextEnabled));
     if (nextEnabled) {
-      const context = await primeSignalAudio();
-      playAlertTone(context, "watch");
+      await playNotificationSound();
       showToast("Bunyi notifikasi diaktifkan.", "success");
     } else {
       showToast("Bunyi notifikasi dimatikan.");
     }
-  }, [primeSignalAudio, showToast, soundEnabled]);
+  }, [playNotificationSound, showToast, soundEnabled]);
 
   useGSAP(() => {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
@@ -724,14 +725,19 @@ export default function App() {
 
   useEffect(() => {
     if (!soundEnabled) return undefined;
-    const prime = () => { void primeSignalAudio(); };
+    const prime = () => { void unlockNotificationAudio(); };
     window.addEventListener("pointerdown", prime, { once: true });
     window.addEventListener("keydown", prime, { once: true });
     return () => {
       window.removeEventListener("pointerdown", prime);
       window.removeEventListener("keydown", prime);
     };
-  }, [primeSignalAudio, soundEnabled]);
+  }, [soundEnabled, unlockNotificationAudio]);
+
+  useEffect(() => () => {
+    notificationAudioRef.current?.pause();
+    notificationAudioRef.current = null;
+  }, []);
 
   useEffect(() => {
     if (!meta?.scannedAt || !pools.length) return;
@@ -750,7 +756,7 @@ export default function App() {
       ? `${primary.pool.pair} baru masuk ${statusLabel}.`
       : `${orderedEntries.length} pair baru masuk Watch/Hot. ${primary.pool.pair} paling kuat (${statusLabel}).`;
 
-    void playSignalTone(primary.status);
+    void playSignalSound();
     showToast(message, primary.status === "hot" ? "warning" : "success");
     signalHistory.refresh();
 
@@ -764,7 +770,7 @@ export default function App() {
         // In-app toast and sound remain available when native notifications are blocked by the platform.
       }
     }
-  }, [meta?.scannedAt, notificationPermission, playSignalTone, pools, preset, showToast, signalHistory.refresh]);
+  }, [meta?.scannedAt, notificationPermission, playSignalSound, pools, preset, showToast, signalHistory.refresh]);
 
   useEffect(() => {
     if (!selectedAddress && pools[0]) setSelectedAddress(pools[0].address);
@@ -867,7 +873,7 @@ export default function App() {
     setNotificationsOpen(nextOpen);
     if (nextOpen) {
       signalHistory.refresh();
-      if (soundEnabled) void primeSignalAudio();
+      if (soundEnabled) void unlockNotificationAudio();
     }
   };
 
