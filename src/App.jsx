@@ -691,7 +691,7 @@ function NotificationPanel({
       <div className="notification-header"><div><span>Live feed</span><h2>Notifikasi Sinyal</h2></div><button className="icon-button" type="button" onClick={onClose} aria-label="Tutup notifikasi"><X /></button></div>
       <div className="notification-controls" aria-label="Pengaturan notifikasi">
         <button className={`notification-control ${soundEnabled ? "active" : ""}`} type="button" aria-pressed={soundEnabled} onClick={onToggleSound}>
-          {soundEnabled ? <Volume2 /> : <VolumeX />} {soundEnabled ? "Hidup Jokowi aktif" : "Bunyi mati"}
+          {soundEnabled ? <Volume2 /> : <VolumeX />} {soundEnabled ? "Saya Akan Lawan aktif" : "Bunyi mati"}
         </button>
         <button
           className={`notification-control ${desktopNotificationsEnabled ? "active" : ""}`}
