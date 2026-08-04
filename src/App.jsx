@@ -1,4 +1,5 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useGSAP } from "@gsap/react";
 import gsap from "gsap";
 import {
@@ -115,15 +116,104 @@ const securityDetails = (items) => Array.isArray(items) && items.length
   ? items.map((item) => `${humanizeSecurityType(item.type || item.name)}: ${item.message || item.description || "Perlu diperiksa"}`).join("\n")
   : "Tidak ada peringatan yang terdeteksi";
 
-function JupShieldCell({ pool }) {
+function JupShieldCell({ pool, open, onOpen, onClose }) {
+  const triggerRef = useRef(null);
+  const closeTimerRef = useRef(null);
+  const [position, setPosition] = useState(null);
+
+  const cancelScheduledClose = () => {
+    window.clearTimeout(closeTimerRef.current);
+    closeTimerRef.current = null;
+  };
+
+  const scheduleClose = () => {
+    cancelScheduledClose();
+    closeTimerRef.current = window.setTimeout(onClose, 160);
+  };
+
+  useEffect(() => () => window.clearTimeout(closeTimerRef.current), []);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const updatePosition = () => {
+      const rect = triggerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const panelWidth = 320;
+      const estimatedHeight = 300;
+      const spaceBelow = window.innerHeight - rect.bottom;
+      setPosition({
+        left: Math.min(Math.max(12, rect.right - panelWidth), window.innerWidth - panelWidth - 12),
+        top: spaceBelow >= estimatedHeight
+          ? rect.bottom + 8
+          : Math.max(12, rect.top - estimatedHeight - 8),
+      });
+    };
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [open]);
+
   if (pool.jupShieldStatus === null) return <span className="security-unavailable">—</span>;
   const warningCount = pool.jupShieldWarnings.length;
   const label = warningCount ? `${warningCount} alert` : "Clear";
+  const popoverId = `jupshield-${pool.address}`;
+  const popover = open && position ? createPortal(
+    <section
+      className="jupshield-popover"
+      id={popoverId}
+      role="dialog"
+      aria-label={`Detail JupShield ${pool.pair}`}
+      style={position}
+      onMouseEnter={cancelScheduledClose}
+      onMouseLeave={scheduleClose}
+      onClick={(event) => event.stopPropagation()}
+    >
+      <div className="jupshield-popover-header">
+        <div><span>Token protection</span><h3>JupShield · {pool.baseSymbol}</h3></div>
+        <button type="button" onClick={onClose} aria-label="Tutup detail JupShield"><X /></button>
+      </div>
+      <div className="jupshield-alert-list">
+        {warningCount ? pool.jupShieldWarnings.map((warning, index) => (
+          <article className={`jupshield-alert ${warning.severity}`} key={`${warning.type}-${index}`}>
+            <div>
+              <span>{warning.severity}</span>
+              <strong>{humanizeSecurityType(warning.type)}</strong>
+            </div>
+            <p>{warning.message}</p>
+          </article>
+        )) : (
+          <div className="jupshield-clear-state"><Check /><div><strong>Tidak ada alert</strong><span>JupShield tidak mendeteksi peringatan pada token ini.</span></div></div>
+        )}
+      </div>
+      <div className="jupshield-popover-footer">
+        <span>Mint <code>{pool.baseAddress ? `${pool.baseAddress.slice(0, 5)}…${pool.baseAddress.slice(-5)}` : "—"}</code></span>
+        <a href={`https://rugcheck.xyz/tokens/${pool.baseAddress}`} target="_blank" rel="noreferrer">Buka RugCheck <ExternalLink /></a>
+      </div>
+    </section>,
+    document.body,
+  ) : null;
+
   return (
-    <span className={`security-chip ${pool.jupShieldStatus}`} title={securityDetails(pool.jupShieldWarnings)}>
-      {warningCount ? <TriangleAlert /> : <Check />}
-      {label}
-    </span>
+    <>
+      <button
+        ref={triggerRef}
+        className={`security-chip jupshield-trigger ${pool.jupShieldStatus}`}
+        type="button"
+        aria-expanded={open}
+        aria-controls={open ? popoverId : undefined}
+        onMouseEnter={() => { cancelScheduledClose(); onOpen(); }}
+        onMouseLeave={scheduleClose}
+        onClick={(event) => { event.stopPropagation(); onOpen(); }}
+      >
+        {warningCount ? <TriangleAlert /> : <Check />}
+        {label}
+      </button>
+      {popover}
+    </>
   );
 }
 
@@ -404,7 +494,27 @@ function SortIcon({ active, direction }) {
 
 function PoolTable({ rows, selected, onSelect, loading, sort, onSort }) {
   const bodyRef = useRef(null);
+  const [openShieldAddress, setOpenShieldAddress] = useState(null);
   const rowKey = rows.map((row) => row.address).join(":");
+
+  useEffect(() => {
+    if (!openShieldAddress) return undefined;
+    const closeFromOutside = (event) => {
+      if (!(event.target instanceof Element)) return;
+      if (!event.target.closest(".jupshield-trigger") && !event.target.closest(".jupshield-popover")) {
+        setOpenShieldAddress(null);
+      }
+    };
+    const closeFromEscape = (event) => {
+      if (event.key === "Escape") setOpenShieldAddress(null);
+    };
+    document.addEventListener("pointerdown", closeFromOutside);
+    document.addEventListener("keydown", closeFromEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeFromOutside);
+      document.removeEventListener("keydown", closeFromEscape);
+    };
+  }, [openShieldAddress]);
 
   useGSAP(() => {
     if (loading || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
@@ -456,7 +566,14 @@ function PoolTable({ rows, selected, onSelect, loading, sort, onSort }) {
                 <td>{formatOptionalNumber(pool.traders1h)}</td>
                 <td><span className={`concentration-value ${concentrationTone(pool.top10HoldersPct, 30, 50)}`}>{formatOptionalPercent(pool.top10HoldersPct)}</span></td>
                 <td><span className={`concentration-value ${concentrationTone(pool.devBalancePct, 5, 10)}`}>{formatOptionalPercent(pool.devBalancePct)}</span></td>
-                <td><JupShieldCell pool={pool} /></td>
+                <td>
+                  <JupShieldCell
+                    pool={pool}
+                    open={openShieldAddress === pool.address}
+                    onOpen={() => setOpenShieldAddress(pool.address)}
+                    onClose={() => setOpenShieldAddress(null)}
+                  />
+                </td>
                 <td><RugCheckCell pool={pool} /></td>
                 <td><OrganicScoreCell pool={pool} /></td>
                 <td>{pool.volumeTvl1h.toFixed(2)}x</td>

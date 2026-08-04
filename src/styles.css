@@ -1101,6 +1101,10 @@ td {
   text-decoration: none;
 }
 
+button.security-chip {
+  cursor: pointer;
+}
+
 .security-chip svg {
   width: 11px;
   height: 11px;
@@ -1127,10 +1131,218 @@ td {
 }
 
 a.security-chip:hover,
-a.security-chip:focus-visible {
+a.security-chip:focus-visible,
+button.security-chip:hover,
+button.security-chip:focus-visible,
+button.security-chip[aria-expanded="true"] {
   filter: brightness(1.2);
   outline: none;
   box-shadow: 0 0 0 2px rgba(189, 255, 44, 0.16);
+}
+
+.jupshield-popover {
+  position: fixed;
+  z-index: 1200;
+  width: min(320px, calc(100vw - 24px));
+  max-height: min(440px, calc(100vh - 24px));
+  overflow: auto;
+  border: 1px solid rgba(119, 174, 234, 0.38);
+  border-radius: 10px;
+  color: var(--text);
+  background: #0a1512;
+  box-shadow: 0 22px 64px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.025) inset;
+  font-family: inherit;
+  text-align: left;
+}
+
+.jupshield-popover-header {
+  position: sticky;
+  z-index: 1;
+  top: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 14px 12px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(10, 21, 18, 0.96);
+  backdrop-filter: blur(12px);
+}
+
+.jupshield-popover-header span {
+  display: block;
+  margin-bottom: 3px;
+  color: #77aeea;
+  font-family: var(--mono);
+  font-size: 8px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.jupshield-popover-header h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.jupshield-popover-header button {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--muted);
+  background: transparent;
+  cursor: pointer;
+}
+
+.jupshield-popover-header button:hover,
+.jupshield-popover-header button:focus-visible {
+  color: var(--text);
+  border-color: var(--faint);
+  outline: none;
+}
+
+.jupshield-popover-header svg {
+  width: 14px;
+  height: 14px;
+}
+
+.jupshield-alert-list {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+}
+
+.jupshield-alert {
+  padding: 10px 11px;
+  border: 1px solid var(--line);
+  border-left: 3px solid #77aeea;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.018);
+}
+
+.jupshield-alert.warning,
+.jupshield-alert.warn {
+  border-left-color: var(--warning);
+}
+
+.jupshield-alert.danger,
+.jupshield-alert.critical,
+.jupshield-alert.error {
+  border-left-color: var(--danger);
+}
+
+.jupshield-alert > div {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.jupshield-alert > div span {
+  padding: 3px 5px;
+  border-radius: 3px;
+  color: #77aeea;
+  background: rgba(119, 174, 234, 0.1);
+  font-family: var(--mono);
+  font-size: 7px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.jupshield-alert strong {
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.jupshield-alert p {
+  margin: 7px 0 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.jupshield-clear-state {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 11px;
+  border: 1px solid rgba(62, 223, 188, 0.24);
+  border-radius: 6px;
+  background: rgba(62, 223, 188, 0.045);
+}
+
+.jupshield-clear-state > svg {
+  width: 15px;
+  color: var(--teal);
+}
+
+.jupshield-clear-state strong,
+.jupshield-clear-state span {
+  display: block;
+}
+
+.jupshield-clear-state strong {
+  font-size: 10px;
+}
+
+.jupshield-clear-state span {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.4;
+}
+
+.jupshield-popover-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 14px 12px;
+  border-top: 1px solid var(--line);
+}
+
+.jupshield-popover-footer > span {
+  color: var(--faint);
+  font-size: 8px;
+}
+
+.jupshield-popover-footer code {
+  color: var(--muted);
+  font-family: var(--mono);
+}
+
+.jupshield-popover-footer a {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--lime);
+  font-size: 9px;
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.jupshield-popover-footer a:hover,
+.jupshield-popover-footer a:focus-visible {
+  text-decoration: underline;
+  outline: none;
+}
+
+.jupshield-popover-footer svg {
+  width: 11px;
+  height: 11px;
+}
+
+@media (max-width: 720px) {
+  .jupshield-popover {
+    top: auto !important;
+    right: 12px;
+    bottom: 12px;
+    left: 12px !important;
+    width: auto;
+    max-height: min(70vh, 460px);
+  }
 }
 
 .security-unavailable {
