@@ -62,6 +62,8 @@ const SORT_COLUMNS = [
   ["volume1h", "Vol 1h"],
   ["swaps1h", "Swaps"],
   ["traders1h", "Traders"],
+  ["top10HoldersPct", "Top 10 holders"],
+  ["devBalancePct", "Dev balance"],
   ["volumeTvl1h", "Vol/TVL"],
   ["totalFees1h", "Fees 1h"],
   ["feeTvl1h", "Fee/TVL"],
@@ -92,6 +94,14 @@ const formatHistoryTime = (iso) => new Intl.DateTimeFormat("id-ID", {
 }).format(new Date(iso));
 
 const formatOptionalNumber = (value) => Number.isFinite(value) ? formatNumber(value) : "—";
+const formatOptionalPercent = (value) => Number.isFinite(value) ? `${value.toFixed(2)}%` : "—";
+
+const concentrationTone = (value, warningAt, dangerAt) => {
+  if (!Number.isFinite(value)) return "unavailable";
+  if (value >= dangerAt) return "danger";
+  if (value >= warningAt) return "warning";
+  return "healthy";
+};
 
 const notificationItemLabel = (item) => {
   if (item.eventType === "status-entry") return `Baru masuk ${String(item.status).toUpperCase()}`;
@@ -320,7 +330,9 @@ function PoolIcon({ symbol }) {
 function SkeletonRows() {
   return Array.from({ length: 7 }, (_, index) => (
     <tr className="skeleton-row" key={index}>
-      {Array.from({ length: SORT_COLUMNS.length + 1 }, (_, cellIndex) => <td key={cellIndex}><span /></td>)}
+      {Array.from({ length: SORT_COLUMNS.length + 1 }, (_, cellIndex) => (
+        <td className={cellIndex === 0 ? "sticky-pool" : cellIndex === 1 ? "sticky-score" : undefined} key={cellIndex}><span /></td>
+      ))}
     </tr>
   ));
 }
@@ -355,7 +367,11 @@ function PoolTable({ rows, selected, onSelect, loading, sort, onSort }) {
           <thead>
             <tr>
               {SORT_COLUMNS.map(([key, label]) => (
-                <th key={key} aria-sort={sort.key === key ? (sort.direction === "asc" ? "ascending" : "descending") : "none"}>
+                <th
+                  className={key === "pair" ? "sticky-pool" : key === "score" ? "sticky-score" : undefined}
+                  key={key}
+                  aria-sort={sort.key === key ? (sort.direction === "asc" ? "ascending" : "descending") : "none"}
+                >
                   <button type="button" className="sort-button" aria-label={`Sortir ${label}`} onClick={() => onSort(key)}>
                     {label}<SortIcon active={sort.key === key} direction={sort.direction} />
                   </button>
@@ -367,17 +383,19 @@ function PoolTable({ rows, selected, onSelect, loading, sort, onSort }) {
           <tbody ref={bodyRef}>
             {loading ? <SkeletonRows /> : rows.map((pool) => (
               <tr className={`pool-row ${selected?.address === pool.address ? "selected" : ""}`} key={pool.address} onClick={() => onSelect(pool)}>
-                <td>
+                <td className="sticky-pool">
                   <div className="pool-name"><span className="sol-token">S</span><PoolIcon symbol={pool.baseSymbol} /><strong>{pool.pair}</strong></div>
                   <small>MC {formatUsd(pool.marketCap)}</small>
                 </td>
-                <td><span className="score-cell">{pool.score}</span><span className={`signal-label ${pool.status}`}>{STATUS_LABEL[pool.status]}</span></td>
+                <td className="sticky-score"><span className="score-cell">{pool.score}</span><span className={`signal-label ${pool.status}`}>{STATUS_LABEL[pool.status]}</span></td>
                 <td className={pool.priceChange1h >= 0 ? "positive" : "negative"}>{formatPercent(pool.priceChange1h)}</td>
                 <td>{formatUsd(pool.tvl)}</td>
                 <td>{formatOptionalNumber(pool.totalLps)}</td>
                 <td>{formatUsd(pool.volume1h)}</td>
                 <td>{formatOptionalNumber(pool.swaps1h)}</td>
                 <td>{formatOptionalNumber(pool.traders1h)}</td>
+                <td><span className={`concentration-value ${concentrationTone(pool.top10HoldersPct, 30, 50)}`}>{formatOptionalPercent(pool.top10HoldersPct)}</span></td>
+                <td><span className={`concentration-value ${concentrationTone(pool.devBalancePct, 5, 10)}`}>{formatOptionalPercent(pool.devBalancePct)}</span></td>
                 <td>{pool.volumeTvl1h.toFixed(2)}x</td>
                 <td className="fee-breakdown-cell">
                   <strong>{formatUsd(pool.totalFees1h)}</strong>

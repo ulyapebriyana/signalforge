@@ -26,6 +26,14 @@ describe("SignalForge scoring", () => {
     expect(risky).toBeGreaterThan(safe + 35);
   });
 
+  it("raises risk for concentrated holders and a high developer balance", () => {
+    const distributed = calculateRisk({ ...healthyPool, top10HoldersPct: 18, devBalancePct: 1 });
+    const concentrated = calculateRisk({ ...healthyPool, top10HoldersPct: 62, devBalancePct: 14 });
+
+    expect(concentrated.value).toBeGreaterThan(distributed.value + 30);
+    expect(distributed.flags.some((flag) => flag.label.includes("belum tersedia"))).toBe(false);
+  });
+
   it("keeps Safer and Yanman-like filters distinct", () => {
     const aggressiveOnly = { ...healthyPool, tvl: 7_000, priceChange1h: 26, volumeTvl1h: 0.8, feeTvl1h: 0.7 };
     expect(evaluatePreset(aggressiveOnly, PRESETS.safer).passed).toBe(false);
@@ -52,6 +60,8 @@ describe("SignalForge scoring", () => {
       total_lps: 42,
       swap_count: 180,
       unique_traders: 73,
+      token_x: { address: "token", top_holders_pct: 27.5, dev_balance_pct: 3.25 },
+      token_y: { address: "sol", top_holders_pct: 12, dev_balance_pct: 0 },
     });
 
     expect(normalized.baseSymbol).toBe("TOKEN");
@@ -60,6 +70,8 @@ describe("SignalForge scoring", () => {
     expect(normalized.totalLps).toBe(42);
     expect(normalized.swaps1h).toBe(180);
     expect(normalized.traders1h).toBe(73);
+    expect(normalized.top10HoldersPct).toBe(27.5);
+    expect(normalized.devBalancePct).toBe(3.25);
     expect(normalized.totalFees1h).toBe(220);
     expect(normalized.lpFees1h).toBe(200);
     expect(normalized.protocolFees1h).toBe(20);
@@ -80,5 +92,7 @@ describe("SignalForge scoring", () => {
     expect(normalized.totalLps).toBeNull();
     expect(normalized.swaps1h).toBeNull();
     expect(normalized.traders1h).toBeNull();
+    expect(normalized.top10HoldersPct).toBeNull();
+    expect(normalized.devBalancePct).toBeNull();
   });
 });

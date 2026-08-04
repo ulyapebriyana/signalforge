@@ -889,6 +889,8 @@ button:disabled {
 }
 
 .table-scroll {
+  --sticky-pool-width: 240px;
+  --sticky-score-width: 108px;
   position: relative;
   width: 100%;
   height: 100%;
@@ -908,7 +910,9 @@ table {
 }
 
 .table-scroll > table {
-  min-width: 1440px;
+  min-width: 1660px;
+  border-collapse: separate;
+  border-spacing: 0;
 }
 
 thead {
@@ -977,6 +981,42 @@ td {
   white-space: nowrap;
 }
 
+.table-scroll th.sticky-pool,
+.table-scroll td.sticky-pool,
+.table-scroll th.sticky-score,
+.table-scroll td.sticky-score {
+  position: sticky;
+  background: #07100e;
+}
+
+.table-scroll th.sticky-pool,
+.table-scroll td.sticky-pool {
+  left: 0;
+  width: var(--sticky-pool-width);
+  min-width: var(--sticky-pool-width);
+  max-width: var(--sticky-pool-width);
+}
+
+.table-scroll th.sticky-score,
+.table-scroll td.sticky-score {
+  left: var(--sticky-pool-width);
+  width: var(--sticky-score-width);
+  min-width: var(--sticky-score-width);
+  max-width: var(--sticky-score-width);
+  box-shadow: 12px 0 18px -18px rgba(0, 0, 0, 0.95);
+}
+
+.table-scroll thead th.sticky-pool,
+.table-scroll thead th.sticky-score {
+  z-index: 7;
+  background: #07100e;
+}
+
+.table-scroll tbody td.sticky-pool,
+.table-scroll tbody td.sticky-score {
+  z-index: 2;
+}
+
 .pool-row {
   position: relative;
   cursor: pointer;
@@ -986,6 +1026,13 @@ td {
 .pool-row:hover,
 .pool-row.selected {
   background: rgba(20, 35, 29, 0.72);
+}
+
+.pool-row:hover td.sticky-pool,
+.pool-row:hover td.sticky-score,
+.pool-row.selected td.sticky-pool,
+.pool-row.selected td.sticky-score {
+  background: #11201b;
 }
 
 .pool-row.selected td:first-child {
@@ -1007,6 +1054,26 @@ td {
 
 .fee-breakdown-cell small {
   line-height: 1.2;
+}
+
+.concentration-value {
+  font-weight: 650;
+}
+
+.concentration-value.healthy {
+  color: var(--teal);
+}
+
+.concentration-value.warning {
+  color: var(--warning);
+}
+
+.concentration-value.danger {
+  color: var(--danger);
+}
+
+.concentration-value.unavailable {
+  color: var(--faint);
 }
 
 .pool-name {

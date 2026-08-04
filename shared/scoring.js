@@ -137,8 +137,34 @@ export function calculateRisk(pool) {
     flags.push({ type: "warning", label: "Pool berumur kurang dari 30 menit" });
   }
 
-  risk += 8;
-  flags.push({ type: "warning", label: "Konsentrasi top-10 belum tersedia" });
+  if (Number.isFinite(pool.top10HoldersPct)) {
+    if (pool.top10HoldersPct >= 50) {
+      risk += 20;
+      flags.push({ type: "danger", label: `Top-10 holder sangat terkonsentrasi (${pool.top10HoldersPct.toFixed(1)}%)` });
+    } else if (pool.top10HoldersPct >= 30) {
+      risk += 12;
+      flags.push({ type: "warning", label: `Top-10 holder terkonsentrasi (${pool.top10HoldersPct.toFixed(1)}%)` });
+    } else {
+      flags.push({ type: "success", label: `Top-10 holder ${pool.top10HoldersPct.toFixed(1)}%` });
+    }
+  } else {
+    risk += 8;
+    flags.push({ type: "warning", label: "Konsentrasi top-10 belum tersedia" });
+  }
+
+  if (Number.isFinite(pool.devBalancePct)) {
+    if (pool.devBalancePct >= 10) {
+      risk += 20;
+      flags.push({ type: "danger", label: `Dev balance tinggi (${pool.devBalancePct.toFixed(1)}%)` });
+    } else if (pool.devBalancePct >= 5) {
+      risk += 10;
+      flags.push({ type: "warning", label: `Dev balance perlu dipantau (${pool.devBalancePct.toFixed(1)}%)` });
+    } else {
+      flags.push({ type: "success", label: `Dev balance ${pool.devBalancePct.toFixed(1)}%` });
+    }
+  } else {
+    flags.push({ type: "warning", label: "Dev balance belum tersedia" });
+  }
 
   return { value: clamp(Math.round(risk), 0, 100), flags };
 }
@@ -166,6 +192,8 @@ export function evaluatePreset(pool, presetInput) {
 
 export function normalizePool(raw, momentum = {}, analytics = {}) {
   const { base, quote } = chooseTokens(raw.token_x, raw.token_y);
+  const analyticsBaseToken = [analytics.token_x, analytics.token_y]
+    .find((token) => token?.address === base.address);
   const tvl = number(raw.tvl);
   const volume1h = number(raw.volume?.["1h"]);
   const lpFees1h = number(raw.fees?.["1h"]);
@@ -205,6 +233,8 @@ export function normalizePool(raw, momentum = {}, analytics = {}) {
     totalLps: optionalNumber(analytics.total_lps),
     swaps1h: optionalNumber(analytics.swap_count),
     traders1h: optionalNumber(analytics.unique_traders),
+    top10HoldersPct: optionalNumber(analyticsBaseToken?.top_holders_pct),
+    devBalancePct: optionalNumber(analyticsBaseToken?.dev_balance_pct),
     currentPrice: number(raw.current_price),
     priceChange1h,
     sparkline: Array.isArray(momentum.sparkline) ? momentum.sparkline : [],
