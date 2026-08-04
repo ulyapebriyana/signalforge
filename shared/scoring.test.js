@@ -60,8 +60,19 @@ describe("SignalForge scoring", () => {
       total_lps: 42,
       swap_count: 180,
       unique_traders: 73,
-      token_x: { address: "token", top_holders_pct: 27.5, dev_balance_pct: 3.25 },
+      token_x: {
+        address: "token",
+        top_holders_pct: 27.5,
+        dev_balance_pct: 3.25,
+        warnings: [{ type: "HAS_MINT_AUTHORITY", message: "Mint authority aktif", severity: "warning" }],
+        organic_score: 82.4,
+        organic_score_label: "high",
+      },
       token_y: { address: "sol", top_holders_pct: 12, dev_balance_pct: 0 },
+    }, {
+      score_normalised: 7,
+      risks: [{ name: "Mutable metadata", description: "Metadata dapat diubah", level: "warn", score: 7 }],
+      lpLockedPct: 72.5,
     });
 
     expect(normalized.baseSymbol).toBe("TOKEN");
@@ -72,6 +83,14 @@ describe("SignalForge scoring", () => {
     expect(normalized.traders1h).toBe(73);
     expect(normalized.top10HoldersPct).toBe(27.5);
     expect(normalized.devBalancePct).toBe(3.25);
+    expect(normalized.jupShieldStatus).toBe("warning");
+    expect(normalized.jupShieldWarnings).toHaveLength(1);
+    expect(normalized.organicScore).toBe(82.4);
+    expect(normalized.organicScoreLabel).toBe("high");
+    expect(normalized.rugCheckScore).toBe(7);
+    expect(normalized.rugCheckRiskCount).toBe(1);
+    expect(normalized.rugCheckStatus).toBe("warning");
+    expect(normalized.rugCheckLpLockedPct).toBe(72.5);
     expect(normalized.totalFees1h).toBe(220);
     expect(normalized.lpFees1h).toBe(200);
     expect(normalized.protocolFees1h).toBe(20);
@@ -94,5 +113,29 @@ describe("SignalForge scoring", () => {
     expect(normalized.traders1h).toBeNull();
     expect(normalized.top10HoldersPct).toBeNull();
     expect(normalized.devBalancePct).toBeNull();
+    expect(normalized.jupShieldStatus).toBeNull();
+    expect(normalized.jupShieldWarnings).toBeNull();
+    expect(normalized.organicScore).toBeNull();
+    expect(normalized.rugCheckScore).toBeNull();
+    expect(normalized.rugCheckRisks).toBeNull();
+  });
+
+  it("marks empty security warning lists as clear", () => {
+    const normalized = normalizePool({
+      address: "clear-pool",
+      token_x: { address: "token", symbol: "TOKEN" },
+      token_y: { address: "sol", symbol: "SOL" },
+      volume: {},
+      fees: {},
+      protocol_fees: {},
+      fee_tvl_ratio: {},
+      pool_config: {},
+    }, {}, {
+      token_x: { address: "token", warnings: [], organic_score: 91, organic_score_label: "high" },
+    }, { score_normalised: 1, risks: [], lpLockedPct: 100 });
+
+    expect(normalized.jupShieldStatus).toBe("clear");
+    expect(normalized.rugCheckStatus).toBe("clear");
+    expect(normalized.rugCheckRiskCount).toBe(0);
   });
 });

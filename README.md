@@ -10,6 +10,7 @@ SignalForge adalah screener Meteora DLMM untuk mencari pool Solana dengan moment
 - Score 0–100: momentum 25, fee efficiency 25, volume quality 20, security 20, freshness 10.
 - Risk score 0–100 dengan flag freeze authority, blacklist, verifikasi, TVL tipis, usia pool, dan data holder yang belum tersedia.
 - Pencarian, filter angka, tab Hot/Watch/Skipped, panel inspeksi, tautan ke Meteora.
+- Kolom keamanan JupShield, RugCheck, dan Jupiter Organic Score dengan fallback saat data belum tersedia.
 - Telegram alert manual dan scanner otomatis opsional, dengan cooldown per pool.
 - Notifikasi Watch/Hot berbunyi saat pool baru masuk status atau naik dari Watch ke Hot, dengan opsi desktop notification.
 - Tampilan desktop, tablet, dan mobile; animasi menghormati `prefers-reduced-motion`.
@@ -59,6 +60,6 @@ Preset “Yanman-like” meniru filter publik yang dianalisis, bukan klaim bahwa
 
 ## Catatan risiko
 
-- `Top-10 holders` belum tersedia pada endpoint pool Meteora, sehingga selalu ditandai sebagai data yang belum diketahui dan menambah risk score.
+- Data Top-10 holders, dev balance, JupShield, dan Organic Score berasal dari Pool Discovery API Meteora. RugCheck disimpan dalam cache agar pemindaian tidak membebani layanan eksternal.
 - Tidak ada score yang menjamin profit. Slippage, perubahan liquidity bin, smart-contract risk, dan pergerakan harga setelah alert tetap dapat menghasilkan kerugian.
 - Backtest historis penuh belum termasuk MVP; endpoint `/api/history` merekam alert selama proses server masih hidup untuk paper review.

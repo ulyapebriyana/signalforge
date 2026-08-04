@@ -46,6 +46,23 @@ const optionalNumber = (value) => {
   return Number.isFinite(parsed) ? parsed : null;
 };
 
+const riskLevelRank = (level) => {
+  const normalized = String(level || "").toLowerCase();
+  if (["critical", "danger", "error", "high"].includes(normalized)) return 3;
+  if (["warning", "warn", "medium"].includes(normalized)) return 2;
+  if (["info", "low"].includes(normalized)) return 1;
+  return 0;
+};
+
+const securityStatus = (items) => {
+  if (!Array.isArray(items)) return null;
+  const rank = items.reduce((highest, item) => Math.max(highest, riskLevelRank(item?.severity || item?.level)), 0);
+  if (rank >= 3) return "danger";
+  if (rank >= 2) return "warning";
+  if (rank >= 1) return "info";
+  return "clear";
+};
+
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 
 const scaled = (value, inputMin, inputMax, outputMax) => {
@@ -190,7 +207,7 @@ export function evaluatePreset(pool, presetInput) {
   return { passed: misses.length === 0, misses };
 }
 
-export function normalizePool(raw, momentum = {}, analytics = {}) {
+export function normalizePool(raw, momentum = {}, analytics = {}, rugCheck = null) {
   const { base, quote } = chooseTokens(raw.token_x, raw.token_y);
   const analyticsBaseToken = [analytics.token_x, analytics.token_y]
     .find((token) => token?.address === base.address);
@@ -203,6 +220,22 @@ export function normalizePool(raw, momentum = {}, analytics = {}) {
     : Number.isFinite(raw.price_change_1h)
       ? raw.price_change_1h
       : null;
+  const jupShieldWarnings = Array.isArray(analyticsBaseToken?.warnings)
+    ? analyticsBaseToken.warnings.map((warning) => ({
+      type: String(warning?.type || "UNKNOWN"),
+      message: String(warning?.message || "Peringatan token"),
+      severity: String(warning?.severity || "warning").toLowerCase(),
+    }))
+    : null;
+  const rugCheckRisks = Array.isArray(rugCheck?.risks)
+    ? rugCheck.risks.map((riskItem) => ({
+      name: String(riskItem?.name || "Risk"),
+      description: String(riskItem?.description || ""),
+      level: String(riskItem?.level || "warning").toLowerCase(),
+      score: optionalNumber(riskItem?.score),
+      value: String(riskItem?.value || ""),
+    }))
+    : null;
 
   const normalized = {
     address: raw.address,
@@ -235,6 +268,18 @@ export function normalizePool(raw, momentum = {}, analytics = {}) {
     traders1h: optionalNumber(analytics.unique_traders),
     top10HoldersPct: optionalNumber(analyticsBaseToken?.top_holders_pct),
     devBalancePct: optionalNumber(analyticsBaseToken?.dev_balance_pct),
+    jupShieldWarnings,
+    jupShieldStatus: securityStatus(jupShieldWarnings),
+    jupShieldRank: jupShieldWarnings === null ? null : Math.max(0, ...jupShieldWarnings.map((warning) => riskLevelRank(warning.severity))),
+    organicScore: optionalNumber(analyticsBaseToken?.organic_score),
+    organicScoreLabel: analyticsBaseToken?.organic_score_label
+      ? String(analyticsBaseToken.organic_score_label).toLowerCase()
+      : null,
+    rugCheckScore: optionalNumber(rugCheck?.score_normalised ?? rugCheck?.score),
+    rugCheckRisks,
+    rugCheckRiskCount: rugCheckRisks?.length ?? null,
+    rugCheckStatus: securityStatus(rugCheckRisks),
+    rugCheckLpLockedPct: optionalNumber(rugCheck?.lpLockedPct),
     currentPrice: number(raw.current_price),
     priceChange1h,
     sparkline: Array.isArray(momentum.sparkline) ? momentum.sparkline : [],

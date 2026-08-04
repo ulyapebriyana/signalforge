@@ -14,6 +14,9 @@ const scanIntervalSeconds = Math.max(20, Number(process.env.SCAN_INTERVAL_SECOND
 const scannerPresetName = PRESETS[process.env.SCANNER_PRESET] ? process.env.SCANNER_PRESET : "safer";
 const dataApi = "https://dlmm.datapi.meteora.ag";
 const poolDiscoveryApi = "https://pool-discovery-api.datapi.meteora.ag";
+const rugCheckApi = "https://api.rugcheck.xyz";
+const rugCheckCacheTtlMs = Math.max(5, Number(process.env.RUGCHECK_CACHE_MINUTES || 15)) * 60_000;
+const rugCheckFailureTtlMs = 2 * 60_000;
 
 app.disable("x-powered-by");
 app.use(express.json({ limit: "32kb" }));
@@ -24,6 +27,7 @@ let activeFetch = null;
 let signalHistory = [];
 const alertCooldowns = new Map();
 const detectionCooldowns = new Map();
+const rugCheckCache = new Map();
 let detectionStatuses = new Map();
 let detectionInitialized = false;
 const historyFile = path.join(projectRoot, "data", "signal-history.json");
@@ -51,15 +55,42 @@ const persistHistory = () => {
 };
 
 const fetchJson = async (url, options = {}) => {
+  const { timeoutMs = 12_000, ...fetchOptions } = options;
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 12_000);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetch(url, { ...options, signal: controller.signal });
+    const response = await fetch(url, { ...fetchOptions, signal: controller.signal });
     if (!response.ok) throw new Error(`Upstream ${response.status}`);
     return await response.json();
   } finally {
     clearTimeout(timeout);
   }
+};
+
+const fetchRugCheckSummary = async (mint) => {
+  const cached = rugCheckCache.get(mint);
+  if (cached && cached.expiresAt > Date.now()) return cached.data;
+
+  try {
+    const payload = await fetchJson(`${rugCheckApi}/v1/tokens/${mint}/report/summary`, { timeoutMs: 5_000 });
+    const data = {
+      score: payload.score,
+      score_normalised: payload.score_normalised,
+      risks: Array.isArray(payload.risks) ? payload.risks : [],
+      lpLockedPct: payload.lpLockedPct,
+    };
+    rugCheckCache.set(mint, { data, expiresAt: Date.now() + rugCheckCacheTtlMs });
+    return data;
+  } catch {
+    rugCheckCache.set(mint, { data: null, expiresAt: Date.now() + rugCheckFailureTtlMs });
+    return null;
+  }
+};
+
+const fetchRugCheckSummaries = async (mints) => {
+  const uniqueMints = [...new Set(mints.filter(Boolean))];
+  const entries = await mapConcurrent(uniqueMints, 6, async (mint) => [mint, await fetchRugCheckSummary(mint)]);
+  return new Map(entries);
 };
 
 const mapConcurrent = async (items, concurrency, mapper) => {
@@ -136,15 +167,17 @@ const loadPools = async ({ force = false } = {}) => {
       )
       .slice(0, 48);
 
-    const [momentumByPool, analyticsByPool] = await Promise.all([
+    const [momentumByPool, analyticsByPool, rugCheckByMint] = await Promise.all([
       mapConcurrent(candidates, 6, async ({ raw }) => [raw.address, await fetchMomentum(raw.address)]),
       fetchPoolAnalytics(candidates.map(({ raw }) => raw.address)),
+      fetchRugCheckSummaries(candidates.map(({ normalized }) => normalized.baseAddress)),
     ]);
     const momentumMap = new Map(momentumByPool);
-    const enriched = candidates.map(({ raw }) => normalizePool(
+    const enriched = candidates.map(({ raw, normalized }) => normalizePool(
       raw,
       momentumMap.get(raw.address),
       analyticsByPool.get(raw.address),
+      rugCheckByMint.get(normalized.baseAddress),
     ));
 
     enriched.sort((a, b) => b.score - a.score || b.volume1h - a.volume1h);

@@ -64,6 +64,9 @@ const SORT_COLUMNS = [
   ["traders1h", "Traders"],
   ["top10HoldersPct", "Top 10 holders"],
   ["devBalancePct", "Dev balance"],
+  ["jupShieldRank", "JupShield"],
+  ["rugCheckScore", "RugCheck"],
+  ["organicScore", "Organic Score"],
   ["volumeTvl1h", "Vol/TVL"],
   ["totalFees1h", "Fees 1h"],
   ["feeTvl1h", "Fee/TVL"],
@@ -102,6 +105,63 @@ const concentrationTone = (value, warningAt, dangerAt) => {
   if (value >= warningAt) return "warning";
   return "healthy";
 };
+
+const humanizeSecurityType = (value) => String(value || "Risk")
+  .toLowerCase()
+  .replaceAll("_", " ")
+  .replace(/\b\w/g, (character) => character.toUpperCase());
+
+const securityDetails = (items) => Array.isArray(items) && items.length
+  ? items.map((item) => `${humanizeSecurityType(item.type || item.name)}: ${item.message || item.description || "Perlu diperiksa"}`).join("\n")
+  : "Tidak ada peringatan yang terdeteksi";
+
+function JupShieldCell({ pool }) {
+  if (pool.jupShieldStatus === null) return <span className="security-unavailable">—</span>;
+  const warningCount = pool.jupShieldWarnings.length;
+  const label = warningCount ? `${warningCount} alert` : "Clear";
+  return (
+    <span className={`security-chip ${pool.jupShieldStatus}`} title={securityDetails(pool.jupShieldWarnings)}>
+      {warningCount ? <TriangleAlert /> : <Check />}
+      {label}
+    </span>
+  );
+}
+
+function RugCheckCell({ pool }) {
+  if (pool.rugCheckStatus === null) return <span className="security-unavailable">—</span>;
+  const label = pool.rugCheckRiskCount ? `${pool.rugCheckRiskCount} risk` : "Clear";
+  const details = [
+    securityDetails(pool.rugCheckRisks),
+    Number.isFinite(pool.rugCheckLpLockedPct) ? `LP locked ${pool.rugCheckLpLockedPct.toFixed(1)}%` : null,
+  ].filter(Boolean).join("\n");
+  return (
+    <div className="security-cell">
+      <a
+        className={`security-chip ${pool.rugCheckStatus}`}
+        href={`https://rugcheck.xyz/tokens/${pool.baseAddress}`}
+        target="_blank"
+        rel="noreferrer"
+        title={details}
+        onClick={(event) => event.stopPropagation()}
+      >
+        {pool.rugCheckRiskCount ? <TriangleAlert /> : <Check />}
+        {label}
+      </a>
+      <small>Score {formatOptionalNumber(pool.rugCheckScore)}{Number.isFinite(pool.rugCheckLpLockedPct) ? ` · LP ${pool.rugCheckLpLockedPct.toFixed(0)}%` : ""}</small>
+    </div>
+  );
+}
+
+function OrganicScoreCell({ pool }) {
+  if (!Number.isFinite(pool.organicScore)) return <span className="security-unavailable">—</span>;
+  const tone = pool.organicScore >= 80 ? "clear" : pool.organicScore >= 50 ? "warning" : "danger";
+  return (
+    <div className="security-cell">
+      <span className={`organic-score ${tone}`}>{Math.round(pool.organicScore)}</span>
+      <small>{pool.organicScoreLabel || "unrated"}</small>
+    </div>
+  );
+}
 
 const notificationItemLabel = (item) => {
   if (item.eventType === "status-entry") return `Baru masuk ${String(item.status).toUpperCase()}`;
@@ -396,6 +456,9 @@ function PoolTable({ rows, selected, onSelect, loading, sort, onSort }) {
                 <td>{formatOptionalNumber(pool.traders1h)}</td>
                 <td><span className={`concentration-value ${concentrationTone(pool.top10HoldersPct, 30, 50)}`}>{formatOptionalPercent(pool.top10HoldersPct)}</span></td>
                 <td><span className={`concentration-value ${concentrationTone(pool.devBalancePct, 5, 10)}`}>{formatOptionalPercent(pool.devBalancePct)}</span></td>
+                <td><JupShieldCell pool={pool} /></td>
+                <td><RugCheckCell pool={pool} /></td>
+                <td><OrganicScoreCell pool={pool} /></td>
                 <td>{pool.volumeTvl1h.toFixed(2)}x</td>
                 <td className="fee-breakdown-cell">
                   <strong>{formatUsd(pool.totalFees1h)}</strong>
