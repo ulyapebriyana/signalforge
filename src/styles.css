@@ -1901,6 +1901,39 @@ td > strong + small {
   flex: 0 0 auto;
 }
 
+.notification-sound-picker {
+  justify-content: flex-start;
+  padding-right: 8px;
+}
+
+.notification-sound-picker:focus-within {
+  border-color: var(--lime);
+  box-shadow: 0 0 0 2px rgba(216, 255, 87, 0.12);
+}
+
+.notification-sound-picker select {
+  min-width: 0;
+  flex: 1;
+  appearance: none;
+  border: 0;
+  outline: 0;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+}
+
+.notification-sound-picker option {
+  color: var(--text);
+  background: var(--surface);
+}
+
+.notification-sound-picker .sound-picker-chevron {
+  width: 12px;
+  height: 12px;
+  pointer-events: none;
+}
+
 .notification-list {
   display: grid;
   max-height: 380px;

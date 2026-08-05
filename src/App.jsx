@@ -38,7 +38,12 @@ import { collectSignalEntries } from "../shared/signalTransitions.js";
 import { usePools } from "./hooks/usePools.js";
 import { useSignalHistory } from "./hooks/useSignalHistory.js";
 import { formatAge, formatNumber, formatPercent, formatUsd, formatWibTime } from "./lib/format.js";
-import { NOTIFICATION_SOUND_URL } from "./lib/notificationSound.js";
+import {
+  NOTIFICATION_SOUNDS,
+  NOTIFICATION_SOUND_OFF,
+  NOTIFICATION_SOUND_OPTIONS,
+  resolveNotificationSoundChoice,
+} from "./lib/notificationSounds.js";
 import { Sparkline } from "./components/Sparkline.jsx";
 import { ScoreRing } from "./components/ScoreRing.jsx";
 
@@ -674,9 +679,10 @@ function NotificationPanel({
   onClose,
   onOpenHistory,
   onRequestPermission,
-  onToggleSound,
-  soundEnabled,
+  onSoundChange,
+  soundChoice,
 }) {
+  const soundEnabled = soundChoice !== NOTIFICATION_SOUND_OFF;
   const desktopNotificationsEnabled = notificationPermission === "granted";
   const desktopNotificationLabel = desktopNotificationsEnabled
     ? "Desktop aktif"
@@ -690,9 +696,13 @@ function NotificationPanel({
     <section className="notification-panel" role="dialog" aria-label="Notifikasi sinyal">
       <div className="notification-header"><div><span>Live feed</span><h2>Notifikasi Sinyal</h2></div><button className="icon-button" type="button" onClick={onClose} aria-label="Tutup notifikasi"><X /></button></div>
       <div className="notification-controls" aria-label="Pengaturan notifikasi">
-        <button className={`notification-control ${soundEnabled ? "active" : ""}`} type="button" aria-pressed={soundEnabled} onClick={onToggleSound}>
-          {soundEnabled ? <Volume2 /> : <VolumeX />} {soundEnabled ? "Saya Akan Lawan aktif" : "Bunyi mati"}
-        </button>
+        <label className={`notification-control notification-sound-picker ${soundEnabled ? "active" : ""}`}>
+          {soundEnabled ? <Volume2 /> : <VolumeX />}
+          <select aria-label="Pilih suara notifikasi" value={soundChoice} onChange={(event) => onSoundChange(event.target.value)}>
+            {NOTIFICATION_SOUND_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </select>
+          <ChevronDown className="sound-picker-chevron" />
+        </label>
         <button
           className={`notification-control ${desktopNotificationsEnabled ? "active" : ""}`}
           type="button"
@@ -841,24 +851,33 @@ export default function App() {
   const [navOpen, setNavOpen] = useState(false);
   const [toast, setToast] = useState(null);
   const [alertState, setAlertState] = useState("idle");
-  const [soundEnabled, setSoundEnabled] = useState(() => localStorage.getItem("signalforge:notificationSound") !== "false");
+  const [soundChoice, setSoundChoice] = useState(() => resolveNotificationSoundChoice(
+    localStorage.getItem("signalforge:notificationSoundChoice"),
+    localStorage.getItem("signalforge:notificationSound"),
+  ));
+  const soundEnabled = soundChoice !== NOTIFICATION_SOUND_OFF;
   const [notificationPermission, setNotificationPermission] = useState(() =>
     typeof window.Notification === "undefined" ? "unsupported" : window.Notification.permission);
   const notificationAudioRef = useRef(null);
   const signalSnapshotRef = useRef({ preset: null, scannedAt: null, statuses: new Map() });
   const showToast = useCallback((message, tone = "info") => setToast({ message, tone }), []);
 
-  const getNotificationAudio = useCallback(() => {
-    if (!notificationAudioRef.current) {
-      notificationAudioRef.current = new Audio(NOTIFICATION_SOUND_URL);
-      notificationAudioRef.current.preload = "auto";
-      notificationAudioRef.current.volume = 1;
+  const getNotificationAudio = useCallback((choice = soundChoice) => {
+    const selectedSound = NOTIFICATION_SOUNDS[choice];
+    if (!selectedSound) return null;
+    if (notificationAudioRef.current?.choice !== choice) {
+      notificationAudioRef.current?.audio.pause();
+      const audio = new Audio(selectedSound.url);
+      audio.preload = "auto";
+      audio.volume = 1;
+      notificationAudioRef.current = { choice, audio };
     }
-    return notificationAudioRef.current;
-  }, []);
+    return notificationAudioRef.current.audio;
+  }, [soundChoice]);
 
   const unlockNotificationAudio = useCallback(async () => {
     const audio = getNotificationAudio();
+    if (!audio) return;
     audio.muted = true;
     try {
       await audio.play();
@@ -871,8 +890,9 @@ export default function App() {
     }
   }, [getNotificationAudio]);
 
-  const playNotificationSound = useCallback(async () => {
-    const audio = getNotificationAudio();
+  const playNotificationSound = useCallback(async (choice = soundChoice) => {
+    const audio = getNotificationAudio(choice);
+    if (!audio) return;
     audio.pause();
     audio.currentTime = 0;
     audio.muted = false;
@@ -882,12 +902,12 @@ export default function App() {
     } catch {
       // Toast remains available when autoplay is blocked before the first interaction.
     }
-  }, [getNotificationAudio]);
+  }, [getNotificationAudio, soundChoice]);
 
   const playSignalSound = useCallback(async () => {
     if (!soundEnabled) return;
-    await playNotificationSound();
-  }, [playNotificationSound, soundEnabled]);
+    await playNotificationSound(soundChoice);
+  }, [playNotificationSound, soundChoice, soundEnabled]);
 
   const requestDesktopNotifications = useCallback(async () => {
     if (typeof window.Notification === "undefined") return;
@@ -898,17 +918,20 @@ export default function App() {
     }
   }, [showToast]);
 
-  const toggleSound = useCallback(async () => {
-    const nextEnabled = !soundEnabled;
-    setSoundEnabled(nextEnabled);
+  const changeNotificationSound = useCallback(async (nextChoice) => {
+    if (nextChoice !== NOTIFICATION_SOUND_OFF && !NOTIFICATION_SOUNDS[nextChoice]) return;
+    const nextEnabled = nextChoice !== NOTIFICATION_SOUND_OFF;
+    setSoundChoice(nextChoice);
+    localStorage.setItem("signalforge:notificationSoundChoice", nextChoice);
     localStorage.setItem("signalforge:notificationSound", String(nextEnabled));
-    if (nextEnabled) {
-      await playNotificationSound();
-      showToast("Bunyi notifikasi diaktifkan.", "success");
-    } else {
+    if (!nextEnabled) {
+      notificationAudioRef.current?.audio.pause();
       showToast("Bunyi notifikasi dimatikan.");
+      return;
     }
-  }, [playNotificationSound, showToast, soundEnabled]);
+    await playNotificationSound(nextChoice);
+    showToast(`${NOTIFICATION_SOUNDS[nextChoice].label} dipilih untuk notifikasi.`, "success");
+  }, [playNotificationSound, showToast]);
 
   useGSAP(() => {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
@@ -933,7 +956,7 @@ export default function App() {
   }, [soundEnabled, unlockNotificationAudio]);
 
   useEffect(() => () => {
-    notificationAudioRef.current?.pause();
+    notificationAudioRef.current?.audio.pause();
     notificationAudioRef.current = null;
   }, []);
 
@@ -1112,7 +1135,7 @@ export default function App() {
       </main>
       {activeView === "pool-scanner" ? <Inspector pool={selected} preset={preset} onAlert={sendAlert} alertState={alertState} /> : null}
       <StatusBar meta={meta} preset={preset} scanInterval={scanInterval} />
-      {notificationsOpen ? <NotificationPanel history={signalHistory.history} loading={signalHistory.loading} notificationPermission={notificationPermission} onClose={() => setNotificationsOpen(false)} onOpenHistory={() => navigate("signal-history")} onRequestPermission={requestDesktopNotifications} onToggleSound={toggleSound} soundEnabled={soundEnabled} /> : null}
+      {notificationsOpen ? <NotificationPanel history={signalHistory.history} loading={signalHistory.loading} notificationPermission={notificationPermission} onClose={() => setNotificationsOpen(false)} onOpenHistory={() => navigate("signal-history")} onRequestPermission={requestDesktopNotifications} onSoundChange={changeNotificationSound} soundChoice={soundChoice} /> : null}
       {settingsOpen ? <SettingsSheet runtimeStatus={status} onClose={() => setSettingsOpen(false)} onToast={showToast} /> : null}
       {toast ? <div className={`toast ${toast.tone}`} role="status">{toast.tone === "success" ? <Check /> : toast.tone === "error" ? <TriangleAlert /> : toast.tone === "warning" ? <Bell /> : <Activity />}<span>{toast.message}</span></div> : null}
     </div>
