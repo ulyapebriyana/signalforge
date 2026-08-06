@@ -23,7 +23,15 @@ import "./landing.css";
 
 /* --- reveal on scroll ------------------------------------------------------ */
 
-function useReveal() {
+/** Stable identity so the default argument does not re-run the effect each render. */
+const MOUNT_ONLY = [];
+
+/**
+ * Sections that mount after their data arrives were never seen by a mount-only
+ * observer, leaving them stuck at the hidden end of the reveal animation. Pass
+ * the values that gate those sections so the sweep runs again once they exist.
+ */
+function useReveal(deps = MOUNT_ONLY) {
   const ref = useRef(null);
   useEffect(() => {
     const root = ref.current;
@@ -45,7 +53,7 @@ function useReveal() {
     );
     root.querySelectorAll("[data-reveal]").forEach((node) => observer.observe(node));
     return () => observer.disconnect();
-  }, []);
+  }, deps);
   return ref;
 }
 
@@ -457,7 +465,7 @@ export default function Landing() {
   const { theme, cycleTheme } = useTheme();
   const { pools, meta, loading, error } = usePools(60);
   const summary = useMemo(() => summarize(pools, "safer"), [pools]);
-  const revealRef = useReveal();
+  const revealRef = useReveal([loading, pools.length]);
 
   return (
     <div className="lp" ref={revealRef}>
