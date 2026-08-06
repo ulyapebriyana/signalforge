@@ -26,12 +26,12 @@ it("schedules the selected notification sound", async () => {
     };
   }
 
-  expect(await playSignalSound("fight", FakeAudioContext)).toBe(true);
-  expect(starts).toEqual([10, 10.22, 10.44]);
-  starts.length = 0;
+  expect(await playSignalSound("fight", FakeAudioContext, FakeAudio)).toBe(true);
+  expect(played).toEqual(["/sounds/saya-akan-lawan.mp3"]);
+  expect(starts).toEqual([]);
 
   expect(await playSignalSound("jokowi", FakeAudioContext, FakeAudio)).toBe(true);
-  expect(played).toEqual(["/sounds/hidup-jokowi.mp3"]);
+  expect(played).toEqual(["/sounds/saya-akan-lawan.mp3", "/sounds/hidup-jokowi.mp3"]);
   expect(starts).toEqual([]);
 
   expect(await playSignalSound("profit", FakeAudioContext)).toBe(true);
