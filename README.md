@@ -2,6 +2,26 @@
 
 SignalForge adalah screener Meteora DLMM untuk mencari pool Solana dengan momentum, efisiensi fee, dan risiko yang dapat dibandingkan dalam satu layar. Aplikasi ini **bukan bot auto-trading** dan tidak pernah meminta seed phrase atau private key.
 
+## Dua antarmuka, satu server
+
+Keduanya memakai API dan logika skor yang sama.
+
+| Rute | Antarmuka |
+| --- | --- |
+| `/` | Landing page dengan hero 3D (three.js) dan ringkasan data langsung |
+| `/app` | Dashboard **Forge**: ringkasan, scanner, riwayat sinyal, aturan, pengaturan |
+| `/classic` | Antarmuka versi pertama, tidak diubah sama sekali |
+
+Pemilihan bundel terjadi di `src/main.jsx` sebelum salah satu stylesheet dimuat, jadi CSS kedua antarmuka tidak pernah berada dalam satu dokumen. `src/App.jsx` dan `src/styles.css` milik antarmuka klasik tidak disentuh.
+
+### Yang ada di dashboard Forge
+
+- Skor dibaca sebagai suhu: satu skala warna dari besi dingin ke putih membara, dipakai di tabel, kartu, riwayat, dan command palette.
+- Scanner dengan dua bentuk tampilan (tabel padat dan kartu), pemilih kolom, kerapatan baris, dan enam tab: Semua, Lolos gate, Hot, Watch, Gagal gate, Watchlist.
+- Panel detail pool: radar lima komponen skor, dial risiko, grafik momentum, hasil gate preset, panel keamanan, dan rincian fee.
+- Watchlist tersimpan di browser, command palette `⌘K` / `Ctrl+K`, pintasan `/` untuk cari dan `r` untuk muat ulang.
+- Tema gelap, terang, atau ikut sistem.
+
 ## Yang sudah berfungsi
 
 - Scan 250 pool dari API resmi Meteora setiap 30 detik.
