@@ -23,6 +23,10 @@ it("schedules the selected notification sound", async () => {
   expect(starts).toEqual([10, 10.22, 10.44]);
   starts.length = 0;
 
+  expect(await playSignalSound("jokowi", FakeAudioContext)).toBe(true);
+  expect(starts).toEqual([10, 10.14, 10.28, 10.42]);
+  starts.length = 0;
+
   expect(await playSignalSound("profit", FakeAudioContext)).toBe(true);
   expect(starts).toEqual([10, 10.16, 10.32, 10.48]);
 });
