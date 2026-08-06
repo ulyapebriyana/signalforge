@@ -28,12 +28,15 @@ import {
   SlidersHorizontal,
   Trash2,
   TriangleAlert,
+  Volume2,
+  VolumeX,
   X,
 } from "lucide-react";
 import { PRESETS } from "../shared/scoring.js";
 import { usePools } from "./hooks/usePools.js";
 import { useSignalHistory } from "./hooks/useSignalHistory.js";
 import { formatAge, formatNumber, formatPercent, formatUsd, formatWibTime } from "./lib/format.js";
+import { playProfitSignal } from "./lib/signalSound.js";
 import { Sparkline } from "./components/Sparkline.jsx";
 import { ScoreRing } from "./components/ScoreRing.jsx";
 
@@ -444,10 +447,15 @@ function Inspector({ pool, preset, onAlert, alertState }) {
   );
 }
 
-function NotificationPanel({ history, loading, onClose, onOpenHistory }) {
+function NotificationPanel({ history, loading, soundEnabled, onToggleSound, onClose, onOpenHistory }) {
   return (
     <section className="notification-panel" role="dialog" aria-label="Notifikasi sinyal">
       <div className="notification-header"><div><span>Live feed</span><h2>Notifikasi Sinyal</h2></div><button className="icon-button" type="button" onClick={onClose} aria-label="Tutup notifikasi"><X /></button></div>
+      <button className={`signal-sound-control ${soundEnabled ? "active" : ""}`} type="button" aria-pressed={soundEnabled} onClick={onToggleSound}>
+        {soundEnabled ? <Volume2 /> : <VolumeX />}
+        <span><strong>{soundEnabled ? "Suara cuan aktif" : "Aktifkan suara cuan"}</strong><small>{soundEnabled ? "Volume keras · klik untuk matikan" : "Klik untuk tes & aktifkan"}</small></span>
+        <i aria-hidden="true" />
+      </button>
       <div className="notification-list">
         {loading ? <div className="panel-empty"><RefreshCw className="spin" /> Memuat riwayat…</div> : null}
         {!loading && history.length === 0 ? <div className="panel-empty"><Bell /><strong>Belum ada sinyal</strong><span>Sinyal yang lolos preset akan muncul setelah scan.</span></div> : null}
@@ -586,6 +594,8 @@ export default function App() {
   const [navOpen, setNavOpen] = useState(false);
   const [toast, setToast] = useState(null);
   const [alertState, setAlertState] = useState("idle");
+  const [signalSoundEnabled, setSignalSoundEnabled] = useState(false);
+  const latestSignalIdRef = useRef();
 
   useGSAP(() => {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
@@ -601,6 +611,18 @@ export default function App() {
   useEffect(() => {
     if (!selectedAddress && pools[0]) setSelectedAddress(pools[0].address);
   }, [pools, selectedAddress]);
+
+  useEffect(() => {
+    if (signalHistory.loading) return;
+    const latestId = signalHistory.history[0]?.id || null;
+    if (latestSignalIdRef.current === undefined) {
+      latestSignalIdRef.current = latestId;
+      return;
+    }
+    if (!latestId || latestSignalIdRef.current === latestId) return;
+    latestSignalIdRef.current = latestId;
+    if (signalSoundEnabled) playProfitSignal().catch(() => setSignalSoundEnabled(false));
+  }, [signalHistory.history, signalHistory.loading, signalSoundEnabled]);
 
   const selectPreset = (nextPreset) => {
     setPreset(nextPreset);
@@ -661,6 +683,20 @@ export default function App() {
 
   const selected = pools.find((pool) => pool.address === selectedAddress) || visiblePools[0] || pools[0] || null;
   const showToast = (message, tone = "info") => setToast({ message, tone });
+
+  const toggleSignalSound = async () => {
+    if (signalSoundEnabled) {
+      setSignalSoundEnabled(false);
+      showToast("Suara cuan dimatikan.");
+      return;
+    }
+    if (!await playProfitSignal()) {
+      showToast("Browser ini tidak mendukung suara notifikasi.", "error");
+      return;
+    }
+    setSignalSoundEnabled(true);
+    showToast("Suara cuan keras aktif.", "success");
+  };
 
   const changeSort = (key) => setSort((current) => ({ key, direction: current.key === key && current.direction === "desc" ? "asc" : "desc" }));
 
@@ -734,7 +770,7 @@ export default function App() {
       </main>
       {activeView === "pool-scanner" ? <Inspector pool={selected} preset={preset} onAlert={sendAlert} alertState={alertState} /> : null}
       <StatusBar meta={meta} preset={preset} scanInterval={scanInterval} />
-      {notificationsOpen ? <NotificationPanel history={signalHistory.history} loading={signalHistory.loading} onClose={() => setNotificationsOpen(false)} onOpenHistory={() => navigate("signal-history")} /> : null}
+      {notificationsOpen ? <NotificationPanel history={signalHistory.history} loading={signalHistory.loading} soundEnabled={signalSoundEnabled} onToggleSound={toggleSignalSound} onClose={() => setNotificationsOpen(false)} onOpenHistory={() => navigate("signal-history")} /> : null}
       {settingsOpen ? <SettingsSheet runtimeStatus={status} onClose={() => setSettingsOpen(false)} onToast={showToast} /> : null}
       {toast ? <div className={`toast ${toast.tone}`} role="status">{toast.tone === "success" ? <Check /> : toast.tone === "error" ? <TriangleAlert /> : <Activity />}<span>{toast.message}</span></div> : null}
     </div>
