@@ -1,0 +1,493 @@
+/* ---------------------------------------------------------------------------
+   SignalForge · Forge interface
+   Design language: a screener read as a forge. Score is temperature — cold iron
+   through white heat — and that scale is the one bold move on the page. The
+   frame around it stays quiet: warm iron greys, hairline rules, machine type.
+   --------------------------------------------------------------------------- */
+
+:root {
+  color-scheme: dark;
+
+  /* Ground — warm iron, never a neutral or blue-black */
+  --f-void: #100d0b;
+  --f-iron-950: #15110e;
+  --f-iron-900: #1b1611;
+  --f-iron-850: #221b16;
+  --f-iron-800: #2a221b;
+  --f-iron-700: #362c23;
+  --f-iron-600: #4a3d31;
+
+  /* Ink */
+  --f-bone: #f7efe4;
+  --f-ash: #c3b3a1;
+  --f-slag: #8d7c6a;
+  --f-faint: #63564a;
+
+  /* Heat — the accent family */
+  --f-ember: #ff6a1f;
+  --f-ember-deep: #c2410c;
+  --f-white-hot: #ffd9a0;
+
+  /* Quench — the cool counterpoint, used for anything that means "safe" */
+  --f-quench: #37c9b8;
+  --f-quench-deep: #0e7d74;
+
+  --f-caution: #f2a93b;
+  --f-scorch: #e2402a;
+
+  /* Lines & fills */
+  --f-line: color-mix(in srgb, var(--f-slag) 22%, transparent);
+  --f-line-strong: color-mix(in srgb, var(--f-slag) 40%, transparent);
+  --f-panel: color-mix(in srgb, var(--f-iron-850) 82%, transparent);
+  --f-panel-solid: var(--f-iron-850);
+  --f-raised: var(--f-iron-800);
+  --f-hover: var(--f-iron-700);
+  --f-shadow: 0 18px 44px -22px rgb(0 0 0 / 0.85);
+
+  /* Type */
+  --f-display: "Bricolage Grotesque", "Arial Black", system-ui, sans-serif;
+  --f-body: "Hanken Grotesk", ui-sans-serif, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
+
+  /* Geometry — mostly square. This is a machine, not a card app. */
+  --f-r-sm: 3px;
+  --f-r: 6px;
+  --f-r-lg: 12px;
+
+  --f-rail: 60px;
+  --f-topbar: 58px;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --f-void: #e8ddcd;
+  --f-iron-950: #ede3d5;
+  --f-iron-900: #f3ebdf;
+  --f-iron-850: #f8f2e9;
+  --f-iron-800: #fdf9f3;
+  --f-iron-700: #ece0ce;
+  --f-iron-600: #d8c8b1;
+
+  --f-bone: #22190f;
+  --f-ash: #55483a;
+  --f-slag: #7d6d5b;
+  --f-faint: #a2917c;
+
+  --f-ember: #d64708;
+  --f-ember-deep: #a33206;
+  --f-white-hot: #b9741a;
+
+  --f-quench: #0d7f75;
+  --f-quench-deep: #0a5f58;
+
+  --f-caution: #b4720a;
+  --f-scorch: #c02b18;
+
+  --f-line: color-mix(in srgb, var(--f-slag) 26%, transparent);
+  --f-line-strong: color-mix(in srgb, var(--f-slag) 46%, transparent);
+  --f-panel: color-mix(in srgb, var(--f-iron-850) 88%, transparent);
+  --f-panel-solid: var(--f-iron-850);
+  --f-raised: var(--f-iron-800);
+  --f-hover: var(--f-iron-700);
+  --f-shadow: 0 16px 36px -24px rgb(66 44 20 / 0.5);
+}
+
+/* --- reset ---------------------------------------------------------------- */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  background: var(--f-void);
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  font-family: var(--f-body);
+  font-size: 0.9375rem;
+  line-height: 1.55;
+  color: var(--f-bone);
+  background: var(--f-void);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1,
+h2,
+h3,
+h4,
+p,
+figure,
+ul,
+ol {
+  margin: 0;
+}
+
+ul,
+ol {
+  padding: 0;
+  list-style: none;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+svg {
+  display: block;
+}
+
+img {
+  max-width: 100%;
+}
+
+:focus-visible {
+  outline: 2px solid var(--f-ember);
+  outline-offset: 2px;
+  border-radius: var(--f-r-sm);
+}
+
+::selection {
+  background: var(--f-ember);
+  color: var(--f-void);
+}
+
+/* --- typographic roles ---------------------------------------------------- */
+
+.f-display {
+  font-family: var(--f-display);
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  line-height: 0.94;
+  font-variation-settings: "wdth" 90;
+}
+
+.f-eyebrow {
+  font-family: var(--f-mono);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--f-slag);
+}
+
+.f-num {
+  font-family: var(--f-mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+  letter-spacing: -0.01em;
+}
+
+.f-lede {
+  color: var(--f-ash);
+  font-size: 1.0625rem;
+  line-height: 1.6;
+}
+
+/* --- shared primitives ---------------------------------------------------- */
+
+.f-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.9rem;
+  border: 1px solid var(--f-line-strong);
+  border-radius: var(--f-r);
+  background: var(--f-raised);
+  color: var(--f-bone);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+}
+
+.f-btn:hover:not(:disabled) {
+  background: var(--f-hover);
+  border-color: var(--f-slag);
+}
+
+.f-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.f-btn svg {
+  width: 15px;
+  height: 15px;
+}
+
+.f-btn--hot {
+  background: var(--f-ember);
+  border-color: var(--f-ember);
+  color: #1a0d04;
+}
+
+.f-btn--hot:hover:not(:disabled) {
+  background: var(--f-white-hot);
+  border-color: var(--f-white-hot);
+  color: #1a0d04;
+}
+
+.f-btn--ghost {
+  background: transparent;
+  border-color: var(--f-line);
+  color: var(--f-ash);
+}
+
+.f-btn--ghost:hover:not(:disabled) {
+  color: var(--f-bone);
+}
+
+.f-btn--danger {
+  border-color: color-mix(in srgb, var(--f-scorch) 45%, transparent);
+  color: var(--f-scorch);
+  background: transparent;
+}
+
+.f-btn--danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--f-scorch) 14%, transparent);
+  border-color: var(--f-scorch);
+}
+
+.f-btn--block {
+  width: 100%;
+}
+
+.f-panel {
+  background: var(--f-panel);
+  border: 1px solid var(--f-line);
+  border-radius: var(--f-r-lg);
+}
+
+.f-icon-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid transparent;
+  border-radius: var(--f-r);
+  color: var(--f-ash);
+  transition: background 0.16s ease, color 0.16s ease, border-color 0.16s ease;
+}
+
+.f-icon-btn:hover,
+.f-icon-btn[aria-pressed="true"],
+.f-icon-btn.is-active {
+  background: var(--f-hover);
+  color: var(--f-bone);
+  border-color: var(--f-line);
+}
+
+.f-icon-btn svg {
+  width: 17px;
+  height: 17px;
+}
+
+/* Score rendered as a temperature: a strip of metal, not a coloured pill. */
+.f-heat {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.3rem;
+  font-family: var(--f-mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--heat, var(--f-ember));
+}
+
+.f-heat-bar {
+  position: relative;
+  height: 3px;
+  width: 100%;
+  min-width: 34px;
+  background: color-mix(in srgb, var(--f-slag) 18%, transparent);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.f-heat-bar > i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  display: block;
+  background: var(--heat, var(--f-ember));
+  box-shadow: 0 0 8px var(--heat-line, transparent);
+}
+
+.f-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.14rem 0.42rem;
+  border-radius: var(--f-r-sm);
+  border: 1px solid var(--f-line);
+  font-family: var(--f-mono);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--f-ash);
+  white-space: nowrap;
+}
+
+.f-chip svg {
+  width: 11px;
+  height: 11px;
+}
+
+.f-chip--clear {
+  color: var(--f-quench);
+  border-color: color-mix(in srgb, var(--f-quench) 38%, transparent);
+  background: color-mix(in srgb, var(--f-quench) 10%, transparent);
+}
+
+.f-chip--info {
+  color: var(--f-ash);
+}
+
+.f-chip--warning {
+  color: var(--f-caution);
+  border-color: color-mix(in srgb, var(--f-caution) 38%, transparent);
+  background: color-mix(in srgb, var(--f-caution) 10%, transparent);
+}
+
+.f-chip--danger {
+  color: var(--f-scorch);
+  border-color: color-mix(in srgb, var(--f-scorch) 42%, transparent);
+  background: color-mix(in srgb, var(--f-scorch) 12%, transparent);
+}
+
+.f-pos {
+  color: var(--f-quench);
+}
+
+.f-neg {
+  color: var(--f-scorch);
+}
+
+.f-muted {
+  color: var(--f-slag);
+}
+
+.f-skeleton {
+  background: linear-gradient(90deg, var(--f-iron-800) 25%, var(--f-iron-700) 50%, var(--f-iron-800) 75%);
+  background-size: 240% 100%;
+  animation: f-shimmer 1.4s linear infinite;
+  border-radius: var(--f-r-sm);
+}
+
+@keyframes f-shimmer {
+  to {
+    background-position: -240% 0;
+  }
+}
+
+.f-spin {
+  animation: f-rotate 0.9s linear infinite;
+}
+
+@keyframes f-rotate {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Shown only while a route chunk is still in flight. */
+.f-boot {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 1.25rem;
+  background: radial-gradient(70% 55% at 50% 42%, #2a1a10 0%, var(--f-void) 70%);
+}
+
+.f-boot-mark {
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--f-ember);
+  border-radius: 3px;
+  transform: rotate(45deg);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--f-ember) 55%, transparent);
+  animation: f-forge-pulse 1.6s ease-out infinite;
+}
+
+@keyframes f-forge-pulse {
+  70% {
+    box-shadow: 0 0 0 16px transparent;
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+.f-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* --- scrollbars ----------------------------------------------------------- */
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--f-iron-600) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--f-iron-600);
+  border: 3px solid transparent;
+  background-clip: content-box;
+  border-radius: 6px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--f-slag);
+  background-clip: content-box;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

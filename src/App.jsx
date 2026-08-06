@@ -1,4 +1,5 @@
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useGSAP } from "@gsap/react";
 import gsap from "gsap";
 import {
@@ -33,10 +34,17 @@ import {
   X,
 } from "lucide-react";
 import { PRESETS } from "../shared/scoring.js";
+import { collectSignalEntries } from "../shared/signalTransitions.js";
 import { usePools } from "./hooks/usePools.js";
 import { useSignalHistory } from "./hooks/useSignalHistory.js";
 import { formatAge, formatNumber, formatPercent, formatUsd, formatWibTime } from "./lib/format.js";
-import { playSignalSound, SIGNAL_SOUNDS } from "./lib/signalSound.js";
+import {
+  NOTIFICATION_SOUNDS,
+  NOTIFICATION_SOUND_OFF,
+  NOTIFICATION_SOUND_OPTIONS,
+  resolveNotificationSoundChoice,
+} from "./lib/notificationSounds.js";
+import { playSignalSound as playSelectedSignalSound } from "./lib/signalSound.js";
 import { Sparkline } from "./components/Sparkline.jsx";
 import { ScoreRing } from "./components/ScoreRing.jsx";
 
@@ -57,8 +65,17 @@ const SORT_COLUMNS = [
   ["score", "Score"],
   ["priceChange1h", "1h"],
   ["tvl", "TVL"],
+  ["totalLps", "Total LPs"],
   ["volume1h", "Vol 1h"],
+  ["swaps1h", "Swaps"],
+  ["traders1h", "Traders"],
+  ["top10HoldersPct", "Top 10 holders"],
+  ["devBalancePct", "Dev balance"],
+  ["jupShieldRank", "JupShield"],
+  ["rugCheckScore", "RugCheck"],
+  ["organicScore", "Organic Score"],
   ["volumeTvl1h", "Vol/TVL"],
+  ["totalFees1h", "Fees 1h"],
   ["feeTvl1h", "Fee/TVL"],
   ["risk", "Risk"],
   ["ageHours", "Age"],
@@ -85,6 +102,169 @@ const formatHistoryTime = (iso) => new Intl.DateTimeFormat("id-ID", {
   minute: "2-digit",
   hour12: false,
 }).format(new Date(iso));
+
+const formatOptionalNumber = (value) => Number.isFinite(value) ? formatNumber(value) : "—";
+const formatOptionalPercent = (value) => Number.isFinite(value) ? `${value.toFixed(2)}%` : "—";
+
+const concentrationTone = (value, warningAt, dangerAt) => {
+  if (!Number.isFinite(value)) return "unavailable";
+  if (value >= dangerAt) return "danger";
+  if (value >= warningAt) return "warning";
+  return "healthy";
+};
+
+const humanizeSecurityType = (value) => String(value || "Risk")
+  .toLowerCase()
+  .replaceAll("_", " ")
+  .replace(/\b\w/g, (character) => character.toUpperCase());
+
+const securityDetails = (items) => Array.isArray(items) && items.length
+  ? items.map((item) => `${humanizeSecurityType(item.type || item.name)}: ${item.message || item.description || "Perlu diperiksa"}`).join("\n")
+  : "Tidak ada peringatan yang terdeteksi";
+
+function JupShieldCell({ pool, open, onOpen, onClose }) {
+  const triggerRef = useRef(null);
+  const closeTimerRef = useRef(null);
+  const [position, setPosition] = useState(null);
+
+  const cancelScheduledClose = () => {
+    window.clearTimeout(closeTimerRef.current);
+    closeTimerRef.current = null;
+  };
+
+  const scheduleClose = () => {
+    cancelScheduledClose();
+    closeTimerRef.current = window.setTimeout(onClose, 160);
+  };
+
+  useEffect(() => () => window.clearTimeout(closeTimerRef.current), []);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const updatePosition = () => {
+      const rect = triggerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const panelWidth = 320;
+      const estimatedHeight = 300;
+      const spaceBelow = window.innerHeight - rect.bottom;
+      setPosition({
+        left: Math.min(Math.max(12, rect.right - panelWidth), window.innerWidth - panelWidth - 12),
+        top: spaceBelow >= estimatedHeight
+          ? rect.bottom + 8
+          : Math.max(12, rect.top - estimatedHeight - 8),
+      });
+    };
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [open]);
+
+  if (pool.jupShieldStatus === null) return <span className="security-unavailable">—</span>;
+  const warningCount = pool.jupShieldWarnings.length;
+  const label = warningCount ? `${warningCount} alert` : "Clear";
+  const popoverId = `jupshield-${pool.address}`;
+  const popover = open && position ? createPortal(
+    <section
+      className="jupshield-popover"
+      id={popoverId}
+      role="dialog"
+      aria-label={`Detail JupShield ${pool.pair}`}
+      style={position}
+      onMouseEnter={cancelScheduledClose}
+      onMouseLeave={scheduleClose}
+      onClick={(event) => event.stopPropagation()}
+    >
+      <div className="jupshield-popover-header">
+        <div><span>Token protection</span><h3>JupShield · {pool.baseSymbol}</h3></div>
+        <button type="button" onClick={onClose} aria-label="Tutup detail JupShield"><X /></button>
+      </div>
+      <div className="jupshield-alert-list">
+        {warningCount ? pool.jupShieldWarnings.map((warning, index) => (
+          <article className={`jupshield-alert ${warning.severity}`} key={`${warning.type}-${index}`}>
+            <div>
+              <span>{warning.severity}</span>
+              <strong>{humanizeSecurityType(warning.type)}</strong>
+            </div>
+            <p>{warning.message}</p>
+          </article>
+        )) : (
+          <div className="jupshield-clear-state"><Check /><div><strong>Tidak ada alert</strong><span>JupShield tidak mendeteksi peringatan pada token ini.</span></div></div>
+        )}
+      </div>
+      <div className="jupshield-popover-footer">
+        <span>Mint <code>{pool.baseAddress ? `${pool.baseAddress.slice(0, 5)}…${pool.baseAddress.slice(-5)}` : "—"}</code></span>
+        <a href={`https://rugcheck.xyz/tokens/${pool.baseAddress}`} target="_blank" rel="noreferrer">Buka RugCheck <ExternalLink /></a>
+      </div>
+    </section>,
+    document.body,
+  ) : null;
+
+  return (
+    <>
+      <button
+        ref={triggerRef}
+        className={`security-chip jupshield-trigger ${pool.jupShieldStatus}`}
+        type="button"
+        aria-expanded={open}
+        aria-controls={open ? popoverId : undefined}
+        onMouseEnter={() => { cancelScheduledClose(); onOpen(); }}
+        onMouseLeave={scheduleClose}
+        onClick={(event) => { event.stopPropagation(); onOpen(); }}
+      >
+        {warningCount ? <TriangleAlert /> : <Check />}
+        {label}
+      </button>
+      {popover}
+    </>
+  );
+}
+
+function RugCheckCell({ pool }) {
+  if (pool.rugCheckStatus === null) return <span className="security-unavailable">—</span>;
+  const label = pool.rugCheckRiskCount ? `${pool.rugCheckRiskCount} risk` : "Clear";
+  const details = [
+    securityDetails(pool.rugCheckRisks),
+    Number.isFinite(pool.rugCheckLpLockedPct) ? `LP locked ${pool.rugCheckLpLockedPct.toFixed(1)}%` : null,
+  ].filter(Boolean).join("\n");
+  return (
+    <div className="security-cell">
+      <a
+        className={`security-chip ${pool.rugCheckStatus}`}
+        href={`https://rugcheck.xyz/tokens/${pool.baseAddress}`}
+        target="_blank"
+        rel="noreferrer"
+        title={details}
+        onClick={(event) => event.stopPropagation()}
+      >
+        {pool.rugCheckRiskCount ? <TriangleAlert /> : <Check />}
+        {label}
+      </a>
+      <small>Score {formatOptionalNumber(pool.rugCheckScore)}{Number.isFinite(pool.rugCheckLpLockedPct) ? ` · LP ${pool.rugCheckLpLockedPct.toFixed(0)}%` : ""}</small>
+    </div>
+  );
+}
+
+function OrganicScoreCell({ pool }) {
+  if (!Number.isFinite(pool.organicScore)) return <span className="security-unavailable">—</span>;
+  const tone = pool.organicScore >= 80 ? "clear" : pool.organicScore >= 50 ? "warning" : "danger";
+  return (
+    <div className="security-cell">
+      <span className={`organic-score ${tone}`}>{Math.round(pool.organicScore)}</span>
+      <small>{pool.organicScoreLabel || "unrated"}</small>
+    </div>
+  );
+}
+
+const notificationItemLabel = (item) => {
+  if (item.eventType === "status-entry") return `Baru masuk ${String(item.status).toUpperCase()}`;
+  if (item.source === "scanner") return "Terdeteksi scanner";
+  if (item.source === "auto") return "Alert otomatis";
+  return "Alert manual";
+};
 
 function BrandMark() {
   return (
@@ -306,7 +486,9 @@ function PoolIcon({ symbol }) {
 function SkeletonRows() {
   return Array.from({ length: 7 }, (_, index) => (
     <tr className="skeleton-row" key={index}>
-      <td><span /></td><td><span /></td><td><span /></td><td><span /></td><td><span /></td><td><span /></td><td><span /></td><td><span /></td><td><span /></td><td><span /></td>
+      {Array.from({ length: SORT_COLUMNS.length + 1 }, (_, cellIndex) => (
+        <td className={cellIndex === 0 ? "sticky-pool" : cellIndex === 1 ? "sticky-score" : undefined} key={cellIndex}><span /></td>
+      ))}
     </tr>
   ));
 }
@@ -318,7 +500,27 @@ function SortIcon({ active, direction }) {
 
 function PoolTable({ rows, selected, onSelect, loading, sort, onSort }) {
   const bodyRef = useRef(null);
+  const [openShieldAddress, setOpenShieldAddress] = useState(null);
   const rowKey = rows.map((row) => row.address).join(":");
+
+  useEffect(() => {
+    if (!openShieldAddress) return undefined;
+    const closeFromOutside = (event) => {
+      if (!(event.target instanceof Element)) return;
+      if (!event.target.closest(".jupshield-trigger") && !event.target.closest(".jupshield-popover")) {
+        setOpenShieldAddress(null);
+      }
+    };
+    const closeFromEscape = (event) => {
+      if (event.key === "Escape") setOpenShieldAddress(null);
+    };
+    document.addEventListener("pointerdown", closeFromOutside);
+    document.addEventListener("keydown", closeFromEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeFromOutside);
+      document.removeEventListener("keydown", closeFromEscape);
+    };
+  }, [openShieldAddress]);
 
   useGSAP(() => {
     if (loading || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
@@ -341,7 +543,11 @@ function PoolTable({ rows, selected, onSelect, loading, sort, onSort }) {
           <thead>
             <tr>
               {SORT_COLUMNS.map(([key, label]) => (
-                <th key={key} aria-sort={sort.key === key ? (sort.direction === "asc" ? "ascending" : "descending") : "none"}>
+                <th
+                  className={key === "pair" ? "sticky-pool" : key === "score" ? "sticky-score" : undefined}
+                  key={key}
+                  aria-sort={sort.key === key ? (sort.direction === "asc" ? "ascending" : "descending") : "none"}
+                >
                   <button type="button" className="sort-button" aria-label={`Sortir ${label}`} onClick={() => onSort(key)}>
                     {label}<SortIcon active={sort.key === key} direction={sort.direction} />
                   </button>
@@ -353,15 +559,35 @@ function PoolTable({ rows, selected, onSelect, loading, sort, onSort }) {
           <tbody ref={bodyRef}>
             {loading ? <SkeletonRows /> : rows.map((pool) => (
               <tr className={`pool-row ${selected?.address === pool.address ? "selected" : ""}`} key={pool.address} onClick={() => onSelect(pool)}>
-                <td>
+                <td className="sticky-pool">
                   <div className="pool-name"><span className="sol-token">S</span><PoolIcon symbol={pool.baseSymbol} /><strong>{pool.pair}</strong></div>
                   <small>MC {formatUsd(pool.marketCap)}</small>
                 </td>
-                <td><span className="score-cell">{pool.score}</span><span className={`signal-label ${pool.status}`}>{STATUS_LABEL[pool.status]}</span></td>
+                <td className="sticky-score"><span className="score-cell">{pool.score}</span><span className={`signal-label ${pool.status}`}>{STATUS_LABEL[pool.status]}</span></td>
                 <td className={pool.priceChange1h >= 0 ? "positive" : "negative"}>{formatPercent(pool.priceChange1h)}</td>
                 <td>{formatUsd(pool.tvl)}</td>
+                <td>{formatOptionalNumber(pool.totalLps)}</td>
                 <td>{formatUsd(pool.volume1h)}</td>
+                <td>{formatOptionalNumber(pool.swaps1h)}</td>
+                <td>{formatOptionalNumber(pool.traders1h)}</td>
+                <td><span className={`concentration-value ${concentrationTone(pool.top10HoldersPct, 30, 50)}`}>{formatOptionalPercent(pool.top10HoldersPct)}</span></td>
+                <td><span className={`concentration-value ${concentrationTone(pool.devBalancePct, 5, 10)}`}>{formatOptionalPercent(pool.devBalancePct)}</span></td>
+                <td>
+                  <JupShieldCell
+                    pool={pool}
+                    open={openShieldAddress === pool.address}
+                    onOpen={() => setOpenShieldAddress(pool.address)}
+                    onClose={() => setOpenShieldAddress(null)}
+                  />
+                </td>
+                <td><RugCheckCell pool={pool} /></td>
+                <td><OrganicScoreCell pool={pool} /></td>
                 <td>{pool.volumeTvl1h.toFixed(2)}x</td>
+                <td className="fee-breakdown-cell">
+                  <strong>{formatUsd(pool.totalFees1h)}</strong>
+                  <small>LP {formatUsd(pool.lpFees1h)} · Protocol {formatUsd(pool.protocolFees1h)}</small>
+                  <small>Base {pool.baseFeePct.toFixed(2)}% · Dynamic {pool.dynamicFeePct.toFixed(2)}%</small>
+                </td>
                 <td>{pool.feeTvl1h.toFixed(2)}%</td>
                 <td><strong className={pool.risk <= 35 ? "risk-low" : pool.risk <= 55 ? "risk-medium" : "risk-high"}>{pool.risk}</strong><small>{pool.risk <= 35 ? "Low" : pool.risk <= 55 ? "Medium" : "High"}</small></td>
                 <td>{formatAge(pool.ageHours)}</td>
@@ -447,18 +673,45 @@ function Inspector({ pool, preset, onAlert, alertState }) {
   );
 }
 
-function NotificationPanel({ history, loading, sound, soundEnabled, onSound, onToggleSound, onClose, onOpenHistory }) {
+function NotificationPanel({
+  history,
+  loading,
+  notificationPermission,
+  onClose,
+  onOpenHistory,
+  onRequestPermission,
+  onSoundChange,
+  soundChoice,
+}) {
+  const soundEnabled = soundChoice !== NOTIFICATION_SOUND_OFF;
+  const desktopNotificationsEnabled = notificationPermission === "granted";
+  const desktopNotificationLabel = desktopNotificationsEnabled
+    ? "Desktop aktif"
+    : notificationPermission === "denied"
+      ? "Desktop diblokir"
+      : notificationPermission === "unsupported"
+        ? "Desktop tidak didukung"
+        : "Aktifkan desktop";
+
   return (
     <section className="notification-panel" role="dialog" aria-label="Notifikasi sinyal">
       <div className="notification-header"><div><span>Live feed</span><h2>Notifikasi Sinyal</h2></div><button className="icon-button" type="button" onClick={onClose} aria-label="Tutup notifikasi"><X /></button></div>
-      <div className="signal-sound-settings">
-        <label className="signal-sound-picker">
-          <Volume2 />
-          <span><small>Sound notifikasi</small><select aria-label="Pilih sound notifikasi" value={sound} onChange={(event) => onSound(event.target.value)}>{Object.values(SIGNAL_SOUNDS).map((item) => <option value={item.id} key={item.id}>{item.label}</option>)}</select></span>
-          <ChevronDown />
+      <div className="notification-controls" aria-label="Pengaturan notifikasi">
+        <label className={`notification-control notification-sound-picker ${soundEnabled ? "active" : ""}`}>
+          {soundEnabled ? <Volume2 /> : <VolumeX />}
+          <select aria-label="Pilih suara notifikasi" value={soundChoice} onChange={(event) => onSoundChange(event.target.value)}>
+            {NOTIFICATION_SOUND_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </select>
+          <ChevronDown className="sound-picker-chevron" />
         </label>
-        <button className={`signal-sound-toggle ${soundEnabled ? "active" : ""}`} type="button" aria-pressed={soundEnabled} onClick={onToggleSound}>
-          {soundEnabled ? <Volume2 /> : <VolumeX />}<span>{soundEnabled ? "Aktif" : "Aktifkan"}</span>
+        <button
+          className={`notification-control ${desktopNotificationsEnabled ? "active" : ""}`}
+          type="button"
+          aria-pressed={desktopNotificationsEnabled}
+          disabled={notificationPermission === "denied" || notificationPermission === "unsupported"}
+          onClick={onRequestPermission}
+        >
+          <Bell /> {desktopNotificationLabel}
         </button>
       </div>
       <div className="notification-list">
@@ -467,7 +720,7 @@ function NotificationPanel({ history, loading, sound, soundEnabled, onSound, onT
         {history.slice(0, 6).map((item) => (
           <div className="notification-item" key={item.id}>
             <span className={`notification-indicator ${item.status || "watch"}`} />
-            <div><strong>{item.pair}</strong><span>{item.source === "scanner" ? "Terdeteksi scanner" : item.source === "auto" ? "Alert otomatis" : "Alert manual"}</span></div>
+            <div><strong>{item.pair}</strong><span>{notificationItemLabel(item)}</span></div>
             <div><strong>{item.score}</strong><span>{formatHistoryTime(item.createdAt)}</span></div>
           </div>
         ))}
@@ -599,12 +852,83 @@ export default function App() {
   const [navOpen, setNavOpen] = useState(false);
   const [toast, setToast] = useState(null);
   const [alertState, setAlertState] = useState("idle");
-  const [signalSoundEnabled, setSignalSoundEnabled] = useState(false);
-  const [signalSound, setSignalSound] = useState(() => {
-    const saved = localStorage.getItem("signalforge:signalSound");
-    return SIGNAL_SOUNDS[saved] ? saved : "fight";
-  });
-  const latestSignalIdRef = useRef();
+  const [soundChoice, setSoundChoice] = useState(() => resolveNotificationSoundChoice(
+    localStorage.getItem("signalforge:notificationSoundChoice"),
+    localStorage.getItem("signalforge:notificationSound"),
+    localStorage.getItem("signalforge:signalSound"),
+  ));
+  const soundEnabled = soundChoice !== NOTIFICATION_SOUND_OFF;
+  const [notificationPermission, setNotificationPermission] = useState(() =>
+    typeof window.Notification === "undefined" ? "unsupported" : window.Notification.permission);
+  const notificationAudioRef = useRef(null);
+  const signalSnapshotRef = useRef({ preset: null, scannedAt: null, statuses: new Map() });
+  const showToast = useCallback((message, tone = "info") => setToast({ message, tone }), []);
+
+  const getNotificationAudio = useCallback((choice = soundChoice) => {
+    const selectedSound = NOTIFICATION_SOUNDS[choice];
+    if (!selectedSound) return null;
+    if (notificationAudioRef.current?.choice !== choice) {
+      notificationAudioRef.current?.audio.pause();
+      if (!selectedSound.src) return null;
+      const audio = new Audio(selectedSound.src);
+      audio.preload = "auto";
+      audio.volume = 1;
+      notificationAudioRef.current = { choice, audio };
+    }
+    return notificationAudioRef.current.audio;
+  }, [soundChoice]);
+
+  const unlockNotificationAudio = useCallback(async () => {
+    const audio = getNotificationAudio();
+    if (!audio) return;
+    audio.muted = true;
+    try {
+      await audio.play();
+      audio.pause();
+      audio.currentTime = 0;
+    } catch {
+      // The next explicit user interaction will retry unlocking playback.
+    } finally {
+      audio.muted = false;
+    }
+  }, [getNotificationAudio]);
+
+  const playNotificationSound = useCallback(async (choice = soundChoice) => {
+    try {
+      await playSelectedSignalSound(choice);
+    } catch {
+      // Toast remains available when autoplay is blocked before the first interaction.
+    }
+  }, [soundChoice]);
+
+  const playSignalSound = useCallback(async () => {
+    if (!soundEnabled) return;
+    await playNotificationSound(soundChoice);
+  }, [playNotificationSound, soundChoice, soundEnabled]);
+
+  const requestDesktopNotifications = useCallback(async () => {
+    if (typeof window.Notification === "undefined") return;
+    if (window.Notification.permission === "default") {
+      const permission = await window.Notification.requestPermission();
+      setNotificationPermission(permission);
+      if (permission === "granted") showToast("Notifikasi desktop berhasil diaktifkan.", "success");
+    }
+  }, [showToast]);
+
+  const changeNotificationSound = useCallback(async (nextChoice) => {
+    if (nextChoice !== NOTIFICATION_SOUND_OFF && !NOTIFICATION_SOUNDS[nextChoice]) return;
+    const nextEnabled = nextChoice !== NOTIFICATION_SOUND_OFF;
+    setSoundChoice(nextChoice);
+    localStorage.setItem("signalforge:notificationSoundChoice", nextChoice);
+    localStorage.setItem("signalforge:notificationSound", String(nextEnabled));
+    if (!nextEnabled) {
+      notificationAudioRef.current?.audio.pause();
+      showToast("Bunyi notifikasi dimatikan.");
+      return;
+    }
+    await playNotificationSound(nextChoice);
+    showToast(`${NOTIFICATION_SOUNDS[nextChoice].label} dipilih untuk notifikasi.`, "success");
+  }, [playNotificationSound, showToast]);
 
   useGSAP(() => {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
@@ -618,20 +942,57 @@ export default function App() {
   }, [toast]);
 
   useEffect(() => {
-    if (!selectedAddress && pools[0]) setSelectedAddress(pools[0].address);
-  }, [pools, selectedAddress]);
+    if (!soundEnabled) return undefined;
+    const prime = () => { void unlockNotificationAudio(); };
+    window.addEventListener("pointerdown", prime, { once: true });
+    window.addEventListener("keydown", prime, { once: true });
+    return () => {
+      window.removeEventListener("pointerdown", prime);
+      window.removeEventListener("keydown", prime);
+    };
+  }, [soundEnabled, unlockNotificationAudio]);
+
+  useEffect(() => () => {
+    notificationAudioRef.current?.audio.pause();
+    notificationAudioRef.current = null;
+  }, []);
 
   useEffect(() => {
-    if (signalHistory.loading) return;
-    const latestId = signalHistory.history[0]?.id || null;
-    if (latestSignalIdRef.current === undefined) {
-      latestSignalIdRef.current = latestId;
-      return;
+    if (!meta?.scannedAt || !pools.length) return;
+    const snapshot = signalSnapshotRef.current;
+    if (snapshot.preset === preset && snapshot.scannedAt === meta.scannedAt) return;
+
+    const { currentStatuses, entries } = collectSignalEntries(pools, preset, snapshot.statuses);
+    const shouldNotify = snapshot.preset === preset && snapshot.scannedAt !== null;
+    signalSnapshotRef.current = { preset, scannedAt: meta.scannedAt, statuses: currentStatuses };
+    if (!shouldNotify || !entries.length) return;
+
+    const orderedEntries = entries.toSorted((left, right) => (right.status === "hot") - (left.status === "hot"));
+    const primary = orderedEntries[0];
+    const statusLabel = primary.status.toUpperCase();
+    const message = orderedEntries.length === 1
+      ? `${primary.pool.pair} baru masuk ${statusLabel}.`
+      : `${orderedEntries.length} pair baru masuk Watch/Hot. ${primary.pool.pair} paling kuat (${statusLabel}).`;
+
+    void playSignalSound();
+    showToast(message, primary.status === "hot" ? "warning" : "success");
+    signalHistory.refresh();
+
+    if (notificationPermission === "granted" && typeof window.Notification !== "undefined") {
+      try {
+        new window.Notification(`SignalForge · ${statusLabel}`, {
+          body: message,
+          tag: `signalforge-${primary.pool.address}-${primary.status}`,
+        });
+      } catch {
+        // In-app toast and sound remain available when native notifications are blocked by the platform.
+      }
     }
-    if (!latestId || latestSignalIdRef.current === latestId) return;
-    latestSignalIdRef.current = latestId;
-    if (signalSoundEnabled) playSignalSound(signalSound).catch(() => setSignalSoundEnabled(false));
-  }, [signalHistory.history, signalHistory.loading, signalSound, signalSoundEnabled]);
+  }, [meta?.scannedAt, notificationPermission, playSignalSound, pools, preset, showToast, signalHistory.refresh]);
+
+  useEffect(() => {
+    if (!selectedAddress && pools[0]) setSelectedAddress(pools[0].address);
+  }, [pools, selectedAddress]);
 
   const selectPreset = (nextPreset) => {
     setPreset(nextPreset);
@@ -691,28 +1052,6 @@ export default function App() {
   }, [poolProjection, activeTab, sort]);
 
   const selected = pools.find((pool) => pool.address === selectedAddress) || visiblePools[0] || pools[0] || null;
-  const showToast = (message, tone = "info") => setToast({ message, tone });
-
-  const selectSignalSound = async (nextSound) => {
-    setSignalSound(nextSound);
-    localStorage.setItem("signalforge:signalSound", nextSound);
-    if (signalSoundEnabled) await playSignalSound(nextSound);
-  };
-
-  const toggleSignalSound = async () => {
-    if (signalSoundEnabled) {
-      setSignalSoundEnabled(false);
-      showToast("Suara cuan dimatikan.");
-      return;
-    }
-    if (!await playSignalSound(signalSound)) {
-      showToast("Browser ini tidak mendukung suara notifikasi.", "error");
-      return;
-    }
-    setSignalSoundEnabled(true);
-    showToast(`${SIGNAL_SOUNDS[signalSound].label} aktif.`, "success");
-  };
-
   const changeSort = (key) => setSort((current) => ({ key, direction: current.key === key && current.direction === "desc" ? "asc" : "desc" }));
 
   const resetAll = () => {
@@ -747,6 +1086,14 @@ export default function App() {
 
   const openScanner = () => setActiveView("pool-scanner");
   const mainWide = activeView !== "pool-scanner";
+  const toggleNotifications = () => {
+    const nextOpen = !notificationsOpen;
+    setNotificationsOpen(nextOpen);
+    if (nextOpen) {
+      signalHistory.refresh();
+      if (soundEnabled) void unlockNotificationAudio();
+    }
+  };
 
   return (
     <div className="app-shell" ref={appRef}>
@@ -758,7 +1105,7 @@ export default function App() {
         onToggleNav={() => setNavOpen((value) => !value)}
         scanInterval={scanInterval}
         onScanInterval={setIntervalPreference}
-        onToggleNotifications={() => { setNotificationsOpen((value) => !value); signalHistory.refresh(); }}
+        onToggleNotifications={toggleNotifications}
         notificationsOpen={notificationsOpen}
         notificationCount={signalHistory.history.length}
       />
@@ -785,9 +1132,9 @@ export default function App() {
       </main>
       {activeView === "pool-scanner" ? <Inspector pool={selected} preset={preset} onAlert={sendAlert} alertState={alertState} /> : null}
       <StatusBar meta={meta} preset={preset} scanInterval={scanInterval} />
-      {notificationsOpen ? <NotificationPanel history={signalHistory.history} loading={signalHistory.loading} sound={signalSound} soundEnabled={signalSoundEnabled} onSound={selectSignalSound} onToggleSound={toggleSignalSound} onClose={() => setNotificationsOpen(false)} onOpenHistory={() => navigate("signal-history")} /> : null}
+      {notificationsOpen ? <NotificationPanel history={signalHistory.history} loading={signalHistory.loading} notificationPermission={notificationPermission} onClose={() => setNotificationsOpen(false)} onOpenHistory={() => navigate("signal-history")} onRequestPermission={requestDesktopNotifications} onSoundChange={changeNotificationSound} soundChoice={soundChoice} /> : null}
       {settingsOpen ? <SettingsSheet runtimeStatus={status} onClose={() => setSettingsOpen(false)} onToast={showToast} /> : null}
-      {toast ? <div className={`toast ${toast.tone}`} role="status">{toast.tone === "success" ? <Check /> : toast.tone === "error" ? <TriangleAlert /> : <Activity />}<span>{toast.message}</span></div> : null}
+      {toast ? <div className={`toast ${toast.tone}`} role="status">{toast.tone === "success" ? <Check /> : toast.tone === "error" ? <TriangleAlert /> : toast.tone === "warning" ? <Bell /> : <Activity />}<span>{toast.message}</span></div> : null}
     </div>
   );
 }
