@@ -1,7 +1,7 @@
 import { expect, it, vi } from "vitest";
-import { playProfitSignal } from "./signalSound.js";
+import { playSignalSound } from "./signalSound.js";
 
-it("schedules a loud four-note profit signal", async () => {
+it("schedules the selected notification sound", async () => {
   const starts = [];
   class FakeAudioContext {
     state = "running";
@@ -19,6 +19,10 @@ it("schedules a loud four-note profit signal", async () => {
     });
   }
 
-  expect(await playProfitSignal(FakeAudioContext)).toBe(true);
+  expect(await playSignalSound("fight", FakeAudioContext)).toBe(true);
+  expect(starts).toEqual([10, 10.22, 10.44]);
+  starts.length = 0;
+
+  expect(await playSignalSound("profit", FakeAudioContext)).toBe(true);
   expect(starts).toEqual([10, 10.16, 10.32, 10.48]);
 });

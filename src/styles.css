@@ -1481,9 +1481,15 @@ td > strong + small {
   font-size: 16px;
 }
 
-.signal-sound-control {
+.signal-sound-settings {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+}
+
+.signal-sound-picker,
+.signal-sound-toggle {
+  display: grid;
   align-items: center;
   gap: 11px;
   min-height: 62px;
@@ -1492,49 +1498,66 @@ td > strong + small {
   border-radius: var(--radius-sm);
   color: var(--muted);
   background: rgba(255, 255, 255, 0.015);
-  text-align: left;
   transition: border-color 160ms var(--ease), box-shadow 160ms var(--ease), color 160ms var(--ease);
 }
 
-.signal-sound-control:hover,
-.signal-sound-control.active {
+.signal-sound-picker {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
+.signal-sound-picker:hover,
+.signal-sound-picker:focus-within,
+.signal-sound-toggle:hover,
+.signal-sound-toggle.active {
   border-color: var(--lime);
   color: var(--lime);
 }
 
-.signal-sound-control.active {
+.signal-sound-toggle {
+  grid-template-columns: 1fr;
+  justify-items: center;
+  min-width: 82px;
+}
+
+.signal-sound-toggle.active {
   box-shadow: 0 0 0 3px rgba(190, 255, 52, 0.12);
 }
 
-.signal-sound-control > svg {
+.signal-sound-picker > svg,
+.signal-sound-toggle > svg {
   width: 21px;
 }
 
-.signal-sound-control > span {
+.signal-sound-picker > span {
   display: grid;
-  gap: 4px;
+  min-width: 0;
+  gap: 3px;
 }
 
-.signal-sound-control strong {
-  color: currentColor;
-  font-size: 12px;
-}
-
-.signal-sound-control small {
+.signal-sound-picker small {
   color: var(--muted);
+  font-size: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.signal-sound-picker select {
+  width: 100%;
+  border: 0;
+  outline: 0;
+  appearance: none;
+  color: currentColor;
+  background: transparent;
+  font: 600 12px var(--sans);
+}
+
+.signal-sound-picker option {
+  color: var(--text);
+  background: #0d1815;
+}
+
+.signal-sound-toggle span {
   font-size: 9px;
-}
-
-.signal-sound-control > i {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--line-strong);
-}
-
-.signal-sound-control.active > i {
-  background: var(--lime);
-  box-shadow: 0 0 10px rgba(190, 255, 52, 0.5);
 }
 
 .notification-list {
