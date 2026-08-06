@@ -108,12 +108,12 @@ const FRAGMENT = /* glsl */ `
     float seam = clamp(smoothstep(0.82, 0.99, ridge) + 0.4 * smoothstep(0.90, 1.0, hairline), 0.0, 1.0);
     float core = smoothstep(0.94, 1.0, ridge);
 
-    vec3 ember = vec3(1.0, 0.38, 0.08);
-    vec3 whiteHot = vec3(1.0, 0.87, 0.66);
+    vec3 ember = vec3(0.13, 0.68, 0.95);
+    vec3 whiteHot = vec3(0.68, 0.93, 1.0);
 
-    vec3 color = vec3(0.038, 0.031, 0.028);
-    color += key * vec3(0.135, 0.108, 0.092);
-    color += fill * vec3(0.042, 0.036, 0.035);
+    vec3 color = vec3(0.028, 0.036, 0.046);
+    color += key * vec3(0.086, 0.108, 0.135);
+    color += fill * vec3(0.030, 0.038, 0.048);
     color = mix(color, ember * 1.2, seam * (0.28 + uHeat * 0.72));
     color = mix(color, whiteHot, core * (0.3 + uHeat * 0.7));
     color += ember * fresnel * (0.2 + uHeat * 0.4);
@@ -150,7 +150,7 @@ const SPARK_FRAGMENT = /* glsl */ `
     float d = length(uv);
     if (d > 0.5) discard;
     float alpha = smoothstep(0.5, 0.0, d) * vFade;
-    vec3 color = mix(vec3(1.0, 0.42, 0.10), vec3(1.0, 0.88, 0.68), smoothstep(0.25, 0.0, d));
+    vec3 color = mix(vec3(0.16, 0.70, 0.96), vec3(0.72, 0.94, 1.0), smoothstep(0.25, 0.0, d));
     gl_FragColor = vec4(color, alpha * 0.85);
   }
 `;
@@ -205,13 +205,13 @@ export default function ForgeCore({ heat = 0.4, className = "" }) {
       // The lattice is a nod to DLMM liquidity bins: discrete shells around price.
       const cage = new THREE.LineSegments(
         new THREE.EdgesGeometry(new THREE.IcosahedronGeometry(2.55, 1)),
-        new THREE.LineBasicMaterial({ color: 0xff6a1f, transparent: true, opacity: 0.16 }),
+        new THREE.LineBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.16 }),
       );
       scene.add(cage);
 
       const outerCage = new THREE.LineSegments(
         new THREE.EdgesGeometry(new THREE.IcosahedronGeometry(3.5, 0)),
-        new THREE.LineBasicMaterial({ color: 0x8d7c6a, transparent: true, opacity: 0.1 }),
+        new THREE.LineBasicMaterial({ color: 0x75879a, transparent: true, opacity: 0.1 }),
       );
       scene.add(outerCage);
 

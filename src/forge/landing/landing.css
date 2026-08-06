@@ -127,7 +127,7 @@
   position: absolute;
   inset: -20% -10% 30%;
   z-index: -2;
-  background: radial-gradient(52% 46% at 68% 48%, rgb(255 106 31 / 0.16) 0%, transparent 68%);
+  background: radial-gradient(52% 46% at 68% 48%, rgb(56 189 248 / 0.14) 0%, transparent 68%);
   pointer-events: none;
 }
 
@@ -687,7 +687,7 @@
   padding: clamp(5rem, 11vw, 9rem) var(--lp-gutter);
   text-align: center;
   border-top: 1px solid var(--f-line);
-  background: radial-gradient(60% 100% at 50% 100%, rgb(255 106 31 / 0.14), transparent 70%);
+  background: radial-gradient(60% 100% at 50% 100%, rgb(56 189 248 / 0.12), transparent 70%);
 }
 
 .lp-closing > div {

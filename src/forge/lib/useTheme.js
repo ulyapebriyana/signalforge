@@ -11,7 +11,7 @@ const applyTheme = (choice) => {
   document.documentElement.dataset.theme = resolved;
   document
     .querySelector('meta[name="theme-color"]')
-    ?.setAttribute("content", resolved === "light" ? "#e8ddcd" : "#100d0b");
+    ?.setAttribute("content", resolved === "light" ? "#e6ebf2" : "#0b0f14");
   return resolved;
 };
 

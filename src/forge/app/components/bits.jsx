@@ -29,7 +29,10 @@ export function HeatBadge({ score, status, size = "md" }) {
 }
 
 export function PoolAvatar({ symbol, quote }) {
-  const hue = [...String(symbol)].reduce((sum, character) => sum + character.charCodeAt(0), 0) % 360;
+  // Constrained to the cool arc (teal → blue → violet → magenta) so avatars stay
+  // inside the palette instead of scattering random warm hues across the table.
+  const seed = [...String(symbol)].reduce((sum, character) => sum + character.charCodeAt(0), 0);
+  const hue = 168 + (seed % 152);
   return (
     <span className="fx-avatar" aria-hidden="true">
       <i className="fx-avatar-quote">{String(quote || "?").slice(0, 1)}</i>

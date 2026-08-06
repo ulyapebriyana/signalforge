@@ -1781,7 +1781,7 @@
 
 .fx-gate,
 .fx-gate-list li,
-.fx-flag li {
+.fx-flag {
   display: flex;
   align-items: flex-start;
   gap: 0.5rem;

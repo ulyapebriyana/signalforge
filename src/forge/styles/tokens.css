@@ -1,39 +1,46 @@
 /* ---------------------------------------------------------------------------
    SignalForge · Forge interface
-   Design language: a screener read as a forge. Score is temperature — cold iron
-   through white heat — and that scale is the one bold move on the page. The
-   frame around it stays quiet: warm iron greys, hairline rules, machine type.
+   Design language: a screener read as an instrument. Score is signal strength —
+   dark steel through cold arc-light — and that scale is the one bold move on the
+   page. The frame around it stays quiet: cool graphite, hairline rules, machine
+   type. No orange anywhere: the accent family is deliberately low-glare so a
+   dashboard that stays open all day never burns.
+
+   Token names keep their original forge metaphor (ember / white-hot / quench) so
+   the markup did not have to churn; only the values moved to the cool scale.
    --------------------------------------------------------------------------- */
 
 :root {
   color-scheme: dark;
 
-  /* Ground — warm iron, never a neutral or blue-black */
-  --f-void: #100d0b;
-  --f-iron-950: #15110e;
-  --f-iron-900: #1b1611;
-  --f-iron-850: #221b16;
-  --f-iron-800: #2a221b;
-  --f-iron-700: #362c23;
-  --f-iron-600: #4a3d31;
+  /* Ground — cool graphite, blue-leaning, never warm */
+  --f-void: #0b0f14;
+  --f-iron-950: #0f141b;
+  --f-iron-900: #141a22;
+  --f-iron-850: #1a212a;
+  --f-iron-800: #212a35;
+  --f-iron-700: #2c3745;
+  --f-iron-600: #3e4c5d;
 
   /* Ink */
-  --f-bone: #f7efe4;
-  --f-ash: #c3b3a1;
-  --f-slag: #8d7c6a;
-  --f-faint: #63564a;
+  --f-bone: #e9eef5;
+  --f-ash: #a8b6c6;
+  --f-slag: #75879a;
+  --f-faint: #4f5f70;
 
-  /* Heat — the accent family */
-  --f-ember: #ff6a1f;
-  --f-ember-deep: #c2410c;
-  --f-white-hot: #ffd9a0;
+  /* Charge — the accent family (was ember orange) */
+  --f-ember: #38bdf8;
+  --f-ember-deep: #0284c7;
+  --f-white-hot: #a5e8ff;
 
-  /* Quench — the cool counterpoint, used for anything that means "safe" */
-  --f-quench: #37c9b8;
-  --f-quench-deep: #0e7d74;
+  /* Quench — the counterpoint, used for anything that means "safe" */
+  --f-quench: #34d399;
+  --f-quench-deep: #0e8f68;
 
-  --f-caution: #f2a93b;
-  --f-scorch: #e2402a;
+  /* Caution reads as violet, not amber — it has to sit apart from the accent
+     without shouting louder than danger. */
+  --f-caution: #a78bfa;
+  --f-scorch: #ee5a78;
 
   /* Lines & fills */
   --f-line: color-mix(in srgb, var(--f-slag) 22%, transparent);
@@ -61,28 +68,28 @@
 :root[data-theme="light"] {
   color-scheme: light;
 
-  --f-void: #e8ddcd;
-  --f-iron-950: #ede3d5;
-  --f-iron-900: #f3ebdf;
-  --f-iron-850: #f8f2e9;
-  --f-iron-800: #fdf9f3;
-  --f-iron-700: #ece0ce;
-  --f-iron-600: #d8c8b1;
+  --f-void: #e6ebf2;
+  --f-iron-950: #edf1f6;
+  --f-iron-900: #f4f7fb;
+  --f-iron-850: #f9fbfe;
+  --f-iron-800: #ffffff;
+  --f-iron-700: #e3e9f1;
+  --f-iron-600: #c6d1de;
 
-  --f-bone: #22190f;
-  --f-ash: #55483a;
-  --f-slag: #7d6d5b;
-  --f-faint: #a2917c;
+  --f-bone: #10161d;
+  --f-ash: #3d4a58;
+  --f-slag: #64748b;
+  --f-faint: #94a3b8;
 
-  --f-ember: #d64708;
-  --f-ember-deep: #a33206;
-  --f-white-hot: #b9741a;
+  --f-ember: #0284c7;
+  --f-ember-deep: #075985;
+  --f-white-hot: #0e7490;
 
-  --f-quench: #0d7f75;
-  --f-quench-deep: #0a5f58;
+  --f-quench: #0f9d76;
+  --f-quench-deep: #0b7357;
 
-  --f-caution: #b4720a;
-  --f-scorch: #c02b18;
+  --f-caution: #6d3fd4;
+  --f-scorch: #cf3059;
 
   --f-line: color-mix(in srgb, var(--f-slag) 26%, transparent);
   --f-line-strong: color-mix(in srgb, var(--f-slag) 46%, transparent);
@@ -90,7 +97,7 @@
   --f-panel-solid: var(--f-iron-850);
   --f-raised: var(--f-iron-800);
   --f-hover: var(--f-iron-700);
-  --f-shadow: 0 16px 36px -24px rgb(66 44 20 / 0.5);
+  --f-shadow: 0 16px 36px -24px rgb(20 38 60 / 0.5);
 }
 
 /* --- reset ---------------------------------------------------------------- */
@@ -246,13 +253,13 @@ img {
 .f-btn--hot {
   background: var(--f-ember);
   border-color: var(--f-ember);
-  color: #1a0d04;
+  color: #04141c;
 }
 
 .f-btn--hot:hover:not(:disabled) {
   background: var(--f-white-hot);
   border-color: var(--f-white-hot);
-  color: #1a0d04;
+  color: #04141c;
 }
 
 .f-btn--ghost {
@@ -424,7 +431,7 @@ img {
   place-content: center;
   justify-items: center;
   gap: 1.25rem;
-  background: radial-gradient(70% 55% at 50% 42%, #2a1a10 0%, var(--f-void) 70%);
+  background: radial-gradient(70% 55% at 50% 42%, #102837 0%, var(--f-void) 70%);
 }
 
 .f-boot-mark {

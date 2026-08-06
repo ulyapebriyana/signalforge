@@ -1,13 +1,14 @@
-// Score is rendered as temperature everywhere in the Forge interface: cold iron
-// at the bottom of the range, white-hot at the top. The stops below are the only
-// place that mapping is defined.
+// Score is rendered as signal strength everywhere in the Forge interface: dark
+// steel at the bottom of the range, cold arc-light at the top. The ramp is cool
+// on purpose — it climbs in brightness, not in warmth, so a high score never
+// glares. The stops below are the only place that mapping is defined.
 const STOPS = [
-  [0, [90, 76, 66]], // cold iron
-  [40, [138, 74, 34]], // dull heat
-  [55, [194, 65, 12]], // ember
-  [70, [255, 106, 31]], // working heat
-  [84, [255, 154, 60]], // hot
-  [100, [255, 217, 160]], // white hot
+  [0, [98, 112, 128]], // dark steel
+  [40, [45, 110, 150]], // faint charge
+  [55, [2, 132, 199]], // charge
+  [70, [56, 189, 248]], // working signal
+  [84, [103, 232, 249]], // strong
+  [100, [165, 243, 252]], // arc light
 ];
 
 const mix = (a, b, t) => Math.round(a + (b - a) * t);
