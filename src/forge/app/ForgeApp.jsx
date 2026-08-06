@@ -36,6 +36,7 @@ import {
   NOTIFICATION_SOUNDS,
   resolveNotificationSoundChoice,
 } from "../../lib/notificationSounds.js";
+import { playSignalSound, primeSignalSound, stopSignalSound } from "../../lib/signalSound.js";
 import { heatVars } from "../lib/heat.js";
 import { Link, navigate } from "../lib/router.js";
 import { summarize } from "../lib/summary.js";
@@ -233,77 +234,39 @@ export default function ForgeApp({ path }) {
     typeof window.Notification === "undefined" ? "unsupported" : window.Notification.permission,
   );
 
-  const audioRef = useRef(null);
   const snapshotRef = useRef({ preset: null, scannedAt: null, statuses: new Map() });
   const deferredSearch = useDeferredValue(scanner.search);
   const summary = useMemo(() => summarize(pools, preset), [pools, preset]);
 
   /* --- sound ------------------------------------------------------------- */
 
-  const getAudio = useCallback(
-    (choice = soundChoice) => {
-      const sound = NOTIFICATION_SOUNDS[choice];
-      if (!sound) return null;
-      if (audioRef.current?.choice !== choice) {
-        audioRef.current?.audio.pause();
-        const audio = new Audio(sound.url);
-        audio.preload = "auto";
-        audioRef.current = { choice, audio };
-      }
-      return audioRef.current.audio;
-    },
-    [soundChoice],
-  );
-
-  const unlockAudio = useCallback(async () => {
-    const audio = getAudio();
-    if (!audio) return;
-    audio.muted = true;
-    try {
-      await audio.play();
-      audio.pause();
-      audio.currentTime = 0;
-    } catch {
-      // The next real interaction retries the unlock.
-    } finally {
-      audio.muted = false;
-    }
-  }, [getAudio]);
-
+  // Playback lives in lib/signalSound.js, shared with the classic interface: it
+  // owns the one <audio> element for the file-backed sounds and synthesises the
+  // ones that have no file, which an <audio> element alone could never play.
   const playSound = useCallback(
     async (choice = soundChoice) => {
-      const audio = getAudio(choice);
-      if (!audio) return;
-      audio.pause();
-      audio.currentTime = 0;
-      audio.muted = false;
+      if (!NOTIFICATION_SOUNDS[choice]) return;
       try {
-        await audio.play();
+        await playSignalSound(choice);
       } catch {
         // Autoplay may still be blocked; the toast carries the signal regardless.
       }
     },
-    [getAudio, soundChoice],
+    [soundChoice],
   );
 
   useEffect(() => {
     if (!soundEnabled) return undefined;
-    const prime = () => void unlockAudio();
+    const prime = () => void primeSignalSound(soundChoice);
     window.addEventListener("pointerdown", prime, { once: true });
     window.addEventListener("keydown", prime, { once: true });
     return () => {
       window.removeEventListener("pointerdown", prime);
       window.removeEventListener("keydown", prime);
     };
-  }, [soundEnabled, unlockAudio]);
+  }, [soundChoice, soundEnabled]);
 
-  useEffect(
-    () => () => {
-      audioRef.current?.audio.pause();
-      audioRef.current = null;
-    },
-    [],
-  );
+  useEffect(() => stopSignalSound, []);
 
   const changeSound = useCallback(
     async (choice) => {
@@ -312,7 +275,7 @@ export default function ForgeApp({ path }) {
       localStorage.setItem("signalforge:notificationSoundChoice", choice);
       localStorage.setItem("signalforge:notificationSound", String(choice !== NOTIFICATION_SOUND_OFF));
       if (choice === NOTIFICATION_SOUND_OFF) {
-        audioRef.current?.audio.pause();
+        stopSignalSound();
         push("Bunyi sinyal dimatikan.");
         return;
       }

@@ -15,6 +15,7 @@ export async function playSignalSound(sound = "fight", AudioContextClass = globa
     audioPlayer.src = profile.src;
     audioPlayer.currentTime = 0;
     audioPlayer.volume = 1;
+    audioPlayer.muted = false;
     await audioPlayer.play();
     return true;
   }
@@ -43,4 +44,32 @@ export async function playSignalSound(sound = "fight", AudioContextClass = globa
   });
 
   return true;
+}
+
+/**
+ * Plays the file-backed sounds silently so a later autoplay is allowed. Browsers
+ * only grant an element playback rights once it has been started inside a user
+ * gesture, so callers run this on the first pointer or key event. The synth
+ * sounds need no priming — their AudioContext resumes on demand.
+ */
+export async function primeSignalSound(sound = "fight", AudioClass = globalThis.Audio) {
+  const profile = SIGNAL_SOUNDS[sound] || SIGNAL_SOUNDS.fight;
+  if (!profile.src || !AudioClass) return false;
+  audioPlayer ||= new AudioClass();
+  audioPlayer.src = profile.src;
+  audioPlayer.muted = true;
+  try {
+    await audioPlayer.play();
+    audioPlayer.pause();
+    audioPlayer.currentTime = 0;
+    return true;
+  } catch {
+    return false; // The next interaction retries the unlock.
+  } finally {
+    audioPlayer.muted = false;
+  }
+}
+
+export function stopSignalSound() {
+  audioPlayer?.pause();
 }
