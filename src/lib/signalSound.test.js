@@ -3,6 +3,7 @@ import { playSignalSound } from "./signalSound.js";
 
 it("schedules the selected notification sound", async () => {
   const starts = [];
+  const played = [];
   class FakeAudioContext {
     state = "running";
     currentTime = 10;
@@ -18,14 +19,20 @@ it("schedules the selected notification sound", async () => {
       stop: vi.fn(),
     });
   }
+  class FakeAudio {
+    play = () => {
+      played.push(this.src);
+      return Promise.resolve();
+    };
+  }
 
   expect(await playSignalSound("fight", FakeAudioContext)).toBe(true);
   expect(starts).toEqual([10, 10.22, 10.44]);
   starts.length = 0;
 
-  expect(await playSignalSound("jokowi", FakeAudioContext)).toBe(true);
-  expect(starts).toEqual([10, 10.14, 10.28, 10.42]);
-  starts.length = 0;
+  expect(await playSignalSound("jokowi", FakeAudioContext, FakeAudio)).toBe(true);
+  expect(played).toEqual(["/sounds/hidup-jokowi.mp3"]);
+  expect(starts).toEqual([]);
 
   expect(await playSignalSound("profit", FakeAudioContext)).toBe(true);
   expect(starts).toEqual([10, 10.16, 10.32, 10.48]);
