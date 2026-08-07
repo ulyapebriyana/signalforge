@@ -3,6 +3,9 @@ import { PRESETS } from "../../../../shared/scoring.js";
 import { formatUsd } from "../../../lib/format.js";
 import { heatVars } from "../../lib/heat.js";
 
+/** Em dash for a gate a preset does not declare, so the columns stay aligned. */
+const NONE = "—";
+
 const GATE_ROWS = [
   ["Market cap", (p) => `${formatUsd(p.marketCapMin)} – ${formatUsd(p.marketCapMax)}`],
   ["TVL minimum", (p) => formatUsd(p.tvlMin)],
@@ -10,6 +13,11 @@ const GATE_ROWS = [
   ["Volume 1 jam minimum", (p) => formatUsd(p.volume1hMin)],
   ["Vol/TVL minimum", (p) => `${p.volumeTvlMin}x`],
   ["Fee/TVL minimum", (p) => `${p.feeTvlMin}%`],
+  ["Bin step", (p) => (p.binStepMin ? `${p.binStepMin} – ${p.binStepMax}` : NONE)],
+  ["Base fee minimum", (p) => (p.baseFeeMin ? `${p.baseFeeMin}%` : NONE)],
+  ["Top-10 holder maksimum", (p) => (p.top10HoldersMax ? `${p.top10HoldersMax}%` : NONE)],
+  ["Saldo dev maksimum", (p) => (p.devBalanceMax ? `${p.devBalanceMax}%` : NONE)],
+  ["Umur pool maksimum", (p) => (p.ageHoursMax ? `${p.ageHoursMax} jam` : NONE)],
   ["Skor minimum", (p) => String(p.minScore)],
   ["Risiko maksimum", (p) => String(p.maxRisk)],
   ["Freeze authority", (p) => (p.requireFreezeOff ? "Wajib mati" : "Opsional")],
@@ -93,6 +101,13 @@ export default function RulesView({ preset, onPreset }) {
               </div>
             ))}
           </div>
+          <p className="fx-panel-note">
+            “Auzhinta-like” menyalin rig yang dia posting terbuka: bin step 80–125, base fee 2–3%,
+            pool baru, dan fee/TVL yang masih deras. Batas momentumnya sengaja negatif — range
+            bid-ask selebar itu tetap memanen fee saat harga turun, jadi yang wajib benar adalah
+            pool-nya masih membayar, bukan arah harganya. Ini rekonstruksi dari cuitan publik, bukan
+            strategi milik orang tersebut, dan gate-nya jauh lebih longgar soal risiko.
+          </p>
         </section>
 
         <section className="fx-panel">

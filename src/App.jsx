@@ -33,7 +33,7 @@ import {
   VolumeX,
   X,
 } from "lucide-react";
-import { PRESETS } from "../shared/scoring.js";
+import { PRESETS, poolTier, resolvePresetId } from "../shared/scoring.js";
 import { collectSignalEntries } from "../shared/signalTransitions.js";
 import { usePools } from "./hooks/usePools.js";
 import { useSignalHistory } from "./hooks/useSignalHistory.js";
@@ -42,7 +42,8 @@ import {
   NOTIFICATION_SOUNDS,
   NOTIFICATION_SOUND_OFF,
   NOTIFICATION_SOUND_OPTIONS,
-  resolveNotificationSoundChoice,
+  resolveNotificationSoundMap,
+  soundForPreset,
 } from "./lib/notificationSounds.js";
 import { playSignalSound as playSelectedSignalSound } from "./lib/signalSound.js";
 import { Sparkline } from "./components/Sparkline.jsx";
@@ -382,7 +383,7 @@ function Sidebar({ open, activeView, onNavigate }) {
 
 function MetricStrip({ meta, pools, preset }) {
   const qualified = pools.filter((pool) => pool.qualifies[preset].passed);
-  const hot = qualified.filter((pool) => pool.score >= 80);
+  const hot = qualified.filter((pool) => poolTier(pool.score, preset) === "hot");
   let medianRisk = 0;
   if (pools.length) {
     const risks = pools.map((pool) => pool.risk).toSorted((a, b) => a - b);
@@ -498,7 +499,7 @@ function SortIcon({ active, direction }) {
   return direction === "asc" ? <ArrowUp /> : <ArrowDown />;
 }
 
-function PoolTable({ rows, selected, onSelect, loading, sort, onSort }) {
+function PoolTable({ rows, preset, selected, onSelect, loading, sort, onSort }) {
   const bodyRef = useRef(null);
   const [openShieldAddress, setOpenShieldAddress] = useState(null);
   const rowKey = rows.map((row) => row.address).join(":");
@@ -563,7 +564,7 @@ function PoolTable({ rows, selected, onSelect, loading, sort, onSort }) {
                   <div className="pool-name"><span className="sol-token">S</span><PoolIcon symbol={pool.baseSymbol} /><strong>{pool.pair}</strong></div>
                   <small>MC {formatUsd(pool.marketCap)}</small>
                 </td>
-                <td className="sticky-score"><span className="score-cell">{pool.score}</span><span className={`signal-label ${pool.status}`}>{STATUS_LABEL[pool.status]}</span></td>
+                <td className="sticky-score"><span className="score-cell">{pool.score}</span><span className={`signal-label ${poolTier(pool.score, preset)}`}>{STATUS_LABEL[poolTier(pool.score, preset)]}</span></td>
                 <td className={pool.priceChange1h >= 0 ? "positive" : "negative"}>{formatPercent(pool.priceChange1h)}</td>
                 <td>{formatUsd(pool.tvl)}</td>
                 <td>{formatOptionalNumber(pool.totalLps)}</td>
@@ -642,7 +643,7 @@ function Inspector({ pool, preset, onAlert, alertState }) {
       </div>
       <div className="score-summary">
         <ScoreRing score={pool.score} />
-        <div><span className={`signal-label ${pool.status}`}>{STATUS_LABEL[pool.status].toUpperCase()} SIGNAL</span><small>Risk score {pool.risk}/100</small></div>
+        <div><span className={`signal-label ${poolTier(pool.score, preset)}`}>{STATUS_LABEL[poolTier(pool.score, preset)].toUpperCase()} SIGNAL</span><small>Risk score {pool.risk}/100</small></div>
       </div>
       <div className="score-breakdown">
         {breakdown.map(([label, value, total]) => (
@@ -755,7 +756,7 @@ function SettingsSheet({ runtimeStatus, onClose, onToast }) {
           <Bot /><div><strong>{runtimeStatus?.telegramConfigured ? "Telegram tersambung" : "Telegram belum tersambung"}</strong><span>{runtimeStatus?.autoAlertsEnabled ? "Alert otomatis aktif" : "Alert otomatis nonaktif"}</span></div>
         </div>
         <div className="runtime-facts">
-          <div><span>Preset server</span><strong>{PRESETS[runtimeStatus?.preset || "safer"].label}</strong></div>
+          <div><span>Preset server</span><strong>{PRESETS[resolvePresetId(runtimeStatus?.preset)].label}</strong></div>
           <div><span>Riwayat</span><strong>{runtimeStatus?.historyPersistent ? "Persisten" : "Sementara"}</strong></div>
           <div><span>Interval</span><strong>{runtimeStatus?.scanIntervalSeconds || 30}s</strong></div>
         </div>
@@ -838,7 +839,7 @@ export default function App() {
   });
   const { pools, meta, status, loading, refreshing, error, refresh } = usePools(scanInterval);
   const signalHistory = useSignalHistory(scanInterval);
-  const [preset, setPreset] = useState(() => localStorage.getItem("signalforge:preset") || "safer");
+  const [preset, setPreset] = useState(() => resolvePresetId(localStorage.getItem("signalforge:preset")));
   const [activeView, setActiveView] = useState("pool-scanner");
   const [activeTab, setActiveTab] = useState("all");
   const [filters, setFilters] = useState(() => defaultFilters(PRESETS[preset]));
@@ -852,11 +853,15 @@ export default function App() {
   const [navOpen, setNavOpen] = useState(false);
   const [toast, setToast] = useState(null);
   const [alertState, setAlertState] = useState("idle");
-  const [soundChoice, setSoundChoice] = useState(() => resolveNotificationSoundChoice(
+  // Shares storage with the Forge interface: one sound per preset, so switching
+  // preset in either frontend switches the alarm in both.
+  const [soundByPreset, setSoundByPreset] = useState(() => resolveNotificationSoundMap(
+    localStorage.getItem("signalforge:notificationSoundByPreset"),
     localStorage.getItem("signalforge:notificationSoundChoice"),
     localStorage.getItem("signalforge:notificationSound"),
     localStorage.getItem("signalforge:signalSound"),
   ));
+  const soundChoice = soundForPreset(soundByPreset, preset);
   const soundEnabled = soundChoice !== NOTIFICATION_SOUND_OFF;
   const [notificationPermission, setNotificationPermission] = useState(() =>
     typeof window.Notification === "undefined" ? "unsupported" : window.Notification.permission);
@@ -918,17 +923,17 @@ export default function App() {
   const changeNotificationSound = useCallback(async (nextChoice) => {
     if (nextChoice !== NOTIFICATION_SOUND_OFF && !NOTIFICATION_SOUNDS[nextChoice]) return;
     const nextEnabled = nextChoice !== NOTIFICATION_SOUND_OFF;
-    setSoundChoice(nextChoice);
-    localStorage.setItem("signalforge:notificationSoundChoice", nextChoice);
-    localStorage.setItem("signalforge:notificationSound", String(nextEnabled));
+    const next = { ...soundByPreset, [preset]: nextChoice };
+    setSoundByPreset(next);
+    localStorage.setItem("signalforge:notificationSoundByPreset", JSON.stringify(next));
     if (!nextEnabled) {
       notificationAudioRef.current?.audio.pause();
-      showToast("Bunyi notifikasi dimatikan.");
+      showToast(`Bunyi notifikasi ${PRESETS[preset].label} dimatikan.`);
       return;
     }
     await playNotificationSound(nextChoice);
-    showToast(`${NOTIFICATION_SOUNDS[nextChoice].label} dipilih untuk notifikasi.`, "success");
-  }, [playNotificationSound, showToast]);
+    showToast(`${NOTIFICATION_SOUNDS[nextChoice].label} dipilih untuk ${PRESETS[preset].label}.`, "success");
+  }, [playNotificationSound, preset, showToast, soundByPreset]);
 
   useGSAP(() => {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
@@ -1026,8 +1031,8 @@ export default function App() {
     const qualified = (pool) => pool.qualifies[preset].passed;
     return {
       all: filtered,
-      hot: filtered.filter((pool) => qualified(pool) && pool.score >= 80),
-      watch: filtered.filter((pool) => qualified(pool) && pool.score >= 65 && pool.score < 80),
+      hot: filtered.filter((pool) => qualified(pool) && poolTier(pool.score, preset) === "hot"),
+      watch: filtered.filter((pool) => qualified(pool) && poolTier(pool.score, preset) === "watch"),
       skipped: pools.filter((pool) => textMatches(pool) && !qualified(pool)),
     };
   }, [pools, deferredSearch, filters, preset]);
@@ -1123,7 +1128,7 @@ export default function App() {
             {error ? <div className="error-banner"><TriangleAlert /><span><strong>Data live belum tersedia.</strong> {error}</span><button type="button" onClick={refresh}>Coba lagi</button></div> : null}
             <MetricStrip meta={meta} pools={pools} preset={preset} />
             <Controls preset={preset} onPreset={selectPreset} activeTab={activeTab} onTab={setActiveTab} counts={counts} filters={filters} onFilters={setFilters} onReset={resetAll} advancedOpen={advancedOpen} />
-            <PoolTable rows={visiblePools} selected={selected} onSelect={(pool) => setSelectedAddress(pool.address)} loading={loading} sort={sort} onSort={changeSort} />
+            <PoolTable rows={visiblePools} preset={preset} selected={selected} onSelect={(pool) => setSelectedAddress(pool.address)} loading={loading} sort={sort} onSort={changeSort} />
           </>
         ) : null}
         {activeView === "overview" ? <OverviewView meta={meta} pools={pools} preset={preset} onOpenScanner={openScanner} /> : null}

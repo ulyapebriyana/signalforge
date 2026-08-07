@@ -3,7 +3,8 @@ import express from "express";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { normalizePool, PRESETS } from "../shared/scoring.js";
+import { appendSample, pruneStore, summarizeVelocity } from "../shared/feeVelocity.js";
+import { normalizePool, PRESETS, resolvePresetId } from "../shared/scoring.js";
 import { collectSignalEntries } from "../shared/signalTransitions.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -11,7 +12,7 @@ const projectRoot = path.resolve(__dirname, "..");
 const app = express();
 const port = Number(process.env.PORT || 4173);
 const scanIntervalSeconds = Math.max(20, Number(process.env.SCAN_INTERVAL_SECONDS || 30));
-const scannerPresetName = PRESETS[process.env.SCANNER_PRESET] ? process.env.SCANNER_PRESET : "safer";
+const scannerPresetName = resolvePresetId(process.env.SCANNER_PRESET);
 const dataApi = "https://dlmm.datapi.meteora.ag";
 const poolDiscoveryApi = "https://pool-discovery-api.datapi.meteora.ag";
 const rugCheckApi = "https://api.rugcheck.xyz";
@@ -33,6 +34,20 @@ let detectionInitialized = false;
 const historyFile = path.join(projectRoot, "data", "signal-history.json");
 let historyWriteQueue = Promise.resolve();
 
+// Fee/TVL readings per pool, one per scan. Held here rather than in the pool
+// cache because the whole point is to outlive a single scan — and persisted so
+// a restart does not reset every position's decay history to zero.
+const feeVelocityStore = new Map();
+const feeVelocityFile = path.join(projectRoot, "data", "fee-velocity.json");
+let feeVelocityWriteQueue = Promise.resolve();
+
+const writeJsonAtomic = async (file, snapshot) => {
+  await mkdir(path.dirname(file), { recursive: true });
+  const temporaryFile = `${file}.tmp`;
+  await writeFile(temporaryFile, snapshot, "utf8");
+  await rename(temporaryFile, file);
+};
+
 const hydrateHistory = async () => {
   try {
     const parsed = JSON.parse(await readFile(historyFile, "utf8"));
@@ -45,13 +60,45 @@ const hydrateHistory = async () => {
 const persistHistory = () => {
   const snapshot = JSON.stringify(signalHistory, null, 2);
   historyWriteQueue = historyWriteQueue
-    .then(async () => {
-      await mkdir(path.dirname(historyFile), { recursive: true });
-      const temporaryFile = `${historyFile}.tmp`;
-      await writeFile(temporaryFile, snapshot, "utf8");
-      await rename(temporaryFile, historyFile);
-    })
+    .then(() => writeJsonAtomic(historyFile, snapshot))
     .catch(() => console.warn("Signal history could not be saved."));
+};
+
+const hydrateFeeVelocity = async () => {
+  try {
+    const parsed = JSON.parse(await readFile(feeVelocityFile, "utf8"));
+    for (const [address, samples] of Object.entries(parsed || {})) {
+      if (Array.isArray(samples)) feeVelocityStore.set(address, samples);
+    }
+  } catch (error) {
+    if (error?.code !== "ENOENT") console.warn("Fee velocity history could not be loaded.");
+  }
+};
+
+const persistFeeVelocity = () => {
+  // Written compactly: this runs once per scan and holds a sample per pool per
+  // scan, so indentation would triple the file for no reader's benefit.
+  const snapshot = JSON.stringify(Object.fromEntries(feeVelocityStore));
+  feeVelocityWriteQueue = feeVelocityWriteQueue
+    .then(() => writeJsonAtomic(feeVelocityFile, snapshot))
+    .catch(() => console.warn("Fee velocity history could not be saved."));
+};
+
+/**
+ * Record this scan's fee/TVL for every pool and hand back the decay summary.
+ * Mutates the store, so it runs once per scan inside loadPools.
+ */
+const trackFeeVelocity = (pools, sampledAt) => {
+  for (const pool of pools) {
+    feeVelocityStore.set(pool.address, appendSample(feeVelocityStore.get(pool.address), pool.feeTvl1h, sampledAt));
+  }
+  pruneStore(feeVelocityStore, pools.map((pool) => pool.address), sampledAt);
+  persistFeeVelocity();
+
+  return pools.map((pool) => ({
+    ...pool,
+    feeVelocity: summarizeVelocity(feeVelocityStore.get(pool.address), sampledAt),
+  }));
 };
 
 const fetchJson = async (url, options = {}) => {
@@ -173,15 +220,19 @@ const loadPools = async ({ force = false } = {}) => {
       fetchRugCheckSummaries(candidates.map(({ normalized }) => normalized.baseAddress)),
     ]);
     const momentumMap = new Map(momentumByPool);
-    const enriched = candidates.map(({ raw, normalized }) => normalizePool(
-      raw,
-      momentumMap.get(raw.address),
-      analyticsByPool.get(raw.address),
-      rugCheckByMint.get(normalized.baseAddress),
-    ));
+    const scoredAt = Date.now();
+    const enriched = trackFeeVelocity(
+      candidates.map(({ raw, normalized }) => normalizePool(
+        raw,
+        momentumMap.get(raw.address),
+        analyticsByPool.get(raw.address),
+        rugCheckByMint.get(normalized.baseAddress),
+      )),
+      scoredAt,
+    );
 
     enriched.sort((a, b) => b.score - a.score || b.volume1h - a.volume1h);
-    const now = new Date().toISOString();
+    const now = new Date(scoredAt).toISOString();
     poolCache = {
       data: enriched,
       meta: {
@@ -375,7 +426,7 @@ const runAlertScan = async () => {
 };
 
 let vite;
-await hydrateHistory();
+await Promise.all([hydrateHistory(), hydrateFeeVelocity()]);
 
 if (process.env.NODE_ENV === "production") {
   app.use(express.static(path.join(projectRoot, "dist")));

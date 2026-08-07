@@ -16,12 +16,13 @@ import {
   TriangleAlert,
   X,
 } from "lucide-react";
-import { PRESETS } from "../../../../shared/scoring.js";
+import { PRESETS, poolTier } from "../../../../shared/scoring.js";
 import { formatAge, formatPercent, formatUsd } from "../../../lib/format.js";
 import { heatVars, riskBand, riskLabel } from "../../lib/heat.js";
 import { Spark } from "../components/charts.jsx";
 import {
   ConcentrationValue,
+  FeeVelocityCell,
   EmptyState,
   HeatBadge,
   JupShieldChip,
@@ -40,6 +41,7 @@ export const COLUMNS = [
   { key: "volumeTvl1h", label: "Vol/TVL" },
   { key: "totalFees1h", label: "Fee 1j" },
   { key: "feeTvl1h", label: "Fee/TVL" },
+  { key: "feeVelocity", label: "Fee tren", sortable: false },
   { key: "risk", label: "Risiko" },
   { key: "top10HoldersPct", label: "Top-10" },
   { key: "devBalancePct", label: "Dev" },
@@ -60,6 +62,7 @@ const DEFAULT_COLUMNS = [
   "volumeTvl1h",
   "totalFees1h",
   "feeTvl1h",
+  "feeVelocity",
   "risk",
   "top10HoldersPct",
   "jupShieldRank",
@@ -192,6 +195,8 @@ function cellFor(key, pool) {
       );
     case "feeTvl1h":
       return <span className="f-num">{pool.feeTvl1h.toFixed(2)}%</span>;
+    case "feeVelocity":
+      return <FeeVelocityCell velocity={pool.feeVelocity} />;
     case "risk":
       return (
         <span className={`fx-risk fx-risk--${riskBand(pool.risk)}`}>
@@ -222,7 +227,7 @@ function cellFor(key, pool) {
   }
 }
 
-function PoolCard({ pool, selected, watched, onOpen, onToggleWatch }) {
+function PoolCard({ pool, preset, selected, watched, onOpen, onToggleWatch }) {
   return (
     <article
       className={`fx-card ${selected ? "is-selected" : ""}`}
@@ -258,7 +263,7 @@ function PoolCard({ pool, selected, watched, onOpen, onToggleWatch }) {
         </button>
       </header>
       <div className="fx-card-score">
-        <HeatBadge score={pool.score} status={pool.status} size="lg" />
+        <HeatBadge score={pool.score} status={poolTier(pool.score, preset)} size="lg" />
         <Spark values={pool.sparkline} score={pool.score} width={96} height={32} />
       </div>
       <dl className="fx-card-stats">
@@ -480,6 +485,7 @@ export default function ScannerView({
                 <PoolCard
                   key={pool.address}
                   pool={pool}
+                  preset={preset}
                   selected={pool.address === selectedAddress}
                   watched={watchlist.has(pool.address)}
                   onOpen={onOpenPool}
@@ -569,7 +575,7 @@ export default function ScannerView({
                           </div>
                         </td>
                         <td className="fx-col-score">
-                          <HeatBadge score={pool.score} status={pool.status} />
+                          <HeatBadge score={pool.score} status={poolTier(pool.score, preset)} />
                         </td>
                         {visibleColumns.map((column) => (
                           <td key={column.key}>{cellFor(column.key, pool)}</td>

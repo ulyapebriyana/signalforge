@@ -1,8 +1,11 @@
+import { poolTier } from "./scoring.js";
+
 const SIGNAL_RANK = Object.freeze({ none: 0, watch: 1, hot: 2 });
 
 export function getPoolSignalStatus(pool, presetName) {
-  if (!pool?.qualifies?.[presetName]?.passed || pool.score < 65) return "none";
-  return pool.score >= 80 ? "hot" : "watch";
+  if (!pool?.qualifies?.[presetName]?.passed) return "none";
+  const tier = poolTier(pool.score, presetName);
+  return tier === "hot" || tier === "watch" ? tier : "none";
 }
 
 export function collectSignalEntries(pools, presetName, previousStatuses = new Map()) {

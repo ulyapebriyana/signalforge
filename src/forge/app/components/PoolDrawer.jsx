@@ -9,7 +9,8 @@ import {
   TriangleAlert,
   X,
 } from "lucide-react";
-import { PRESETS } from "../../../../shared/scoring.js";
+import { VELOCITY_LABEL } from "../../../../shared/feeVelocity.js";
+import { PRESETS, poolTier } from "../../../../shared/scoring.js";
 import { formatAge, formatPercent, formatUsd } from "../../../lib/format.js";
 import { heatVars, riskLabel, STATUS_META } from "../../lib/heat.js";
 import { RiskDial, ScoreRadar, Spark } from "./charts.jsx";
@@ -22,6 +23,51 @@ import {
   OrganicChip,
   RugCheckChip,
 } from "./bits.jsx";
+
+/** What each trend means for a position that is already open. */
+const VELOCITY_ADVICE = {
+  rising: "Fee makin deras. Tidak ada alasan keluar dari sisi volume.",
+  steady: "Fee stabil di sekitar puncaknya. Mesin masih jalan.",
+  decaying: "Fee melambat. Siapkan exit — cek bar volume sebelum menambah posisi.",
+  stalled: "Fee jauh di bawah puncak. Ini kondisi yang memicu cut loss by volume.",
+  unknown: "Belum cukup scan untuk mengukur tren. Butuh minimal 3 pemindaian.",
+};
+
+function FeeVelocityPanel({ velocity }) {
+  const trend = velocity?.trend ?? "unknown";
+  const tone = { rising: "healthy", steady: "healthy", decaying: "warning", stalled: "danger" }[trend] || "muted";
+  const share = Number.isFinite(velocity?.ratioToPeak) ? Math.round(velocity.ratioToPeak * 100) : null;
+
+  return (
+    <div className={`fx-velocity-panel fx-velocity-panel--${tone}`}>
+      <div className="fx-velocity-headline">
+        <strong>{VELOCITY_LABEL[trend]}</strong>
+        {share === null ? null : <span className="f-num">{share}% dari puncak</span>}
+      </div>
+      <dl className="fx-metric-grid">
+        <div>
+          <dt>Fee/TVL sekarang</dt>
+          <dd className="f-num">{Number.isFinite(velocity?.current) ? `${velocity.current.toFixed(2)}%` : "—"}</dd>
+        </div>
+        <div>
+          <dt>Puncak dalam jendela</dt>
+          <dd className="f-num">{Number.isFinite(velocity?.peak) ? `${velocity.peak.toFixed(2)}%` : "—"}</dd>
+        </div>
+        <div>
+          <dt>Perubahan antar-paruh</dt>
+          <dd className="f-num">
+            {Number.isFinite(velocity?.changePct) ? `${velocity.changePct > 0 ? "+" : ""}${velocity.changePct.toFixed(0)}%` : "—"}
+          </dd>
+        </div>
+        <div>
+          <dt>Terpantau</dt>
+          <dd className="f-num">{velocity?.minutesTracked ? `${velocity.minutesTracked} menit` : "—"}</dd>
+        </div>
+      </dl>
+      <p className="fx-velocity-advice">{VELOCITY_ADVICE[trend]}</p>
+    </div>
+  );
+}
 
 const METRICS = [
   ["TVL", (pool) => formatUsd(pool.tvl)],
@@ -67,6 +113,8 @@ export default function PoolDrawer({
   if (!pool) return null;
 
   const gate = pool.qualifies?.[preset] || { passed: false, misses: [] };
+  const tier = poolTier(pool.score, preset);
+
   const copyMint = async () => {
     try {
       await navigator.clipboard.writeText(pool.baseAddress || pool.address);
@@ -90,7 +138,7 @@ export default function PoolDrawer({
         <header className="fx-drawer-head">
           <div>
             <span className="fx-drawer-status">
-              {STATUS_META[pool.status]?.label ?? pool.status} · {STATUS_META[pool.status]?.blurb}
+              {STATUS_META[tier]?.label ?? tier} · {STATUS_META[tier]?.blurb}
             </span>
             <h2>{pool.pair}</h2>
           </div>
@@ -228,6 +276,11 @@ export default function PoolDrawer({
           </section>
 
           <section className="fx-drawer-section">
+            <h3>Kecepatan fee</h3>
+            <FeeVelocityPanel velocity={pool.feeVelocity} />
+          </section>
+
+          <section className="fx-drawer-section">
             <h3>Rincian fee 1 jam</h3>
             <dl className="fx-metric-grid">
               <div>
@@ -241,6 +294,10 @@ export default function PoolDrawer({
               <div>
                 <dt>Fee protokol</dt>
                 <dd className="f-num">{formatUsd(pool.protocolFees1h)}</dd>
+              </div>
+              <div>
+                <dt>Bin step</dt>
+                <dd className="f-num">{pool.binStep || "—"}</dd>
               </div>
               <div>
                 <dt>Base fee</dt>

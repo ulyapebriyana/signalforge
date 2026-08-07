@@ -1,4 +1,5 @@
-import { Check, ExternalLink, Minus, TriangleAlert } from "lucide-react";
+import { Check, Equal, ExternalLink, Minus, TrendingDown, TrendingUp, TriangleAlert } from "lucide-react";
+import { VELOCITY_LABEL } from "../../../../shared/feeVelocity.js";
 import { formatNumber } from "../../../lib/format.js";
 import { heatColor, heatVars, STATUS_META } from "../../lib/heat.js";
 
@@ -132,6 +133,36 @@ export function ConcentrationValue({ value, warningAt, dangerAt }) {
   }
   const tone = value >= dangerAt ? "danger" : value >= warningAt ? "warning" : "healthy";
   return <span className={`fx-conc fx-conc--${tone} f-num`}>{value.toFixed(1)}%</span>;
+}
+
+/**
+ * Fee velocity reads as a direction, not a magnitude: the number that matters
+ * is how far the pool has fallen off its own peak, which is the closest the
+ * screener gets to "the fee stopped flowing".
+ */
+export function FeeVelocityCell({ velocity }) {
+  const trend = velocity?.trend ?? "unknown";
+  if (trend === "unknown") {
+    return (
+      <span className="fx-na" title={`Baru ${velocity?.samples ?? 0} sampel — butuh minimal 3 scan`}>
+        <Minus />
+      </span>
+    );
+  }
+
+  const tone = { rising: "healthy", steady: "healthy", decaying: "warning", stalled: "danger" }[trend];
+  const Icon = { rising: TrendingUp, steady: Equal, decaying: TrendingDown, stalled: TrendingDown }[trend];
+  const share = Number.isFinite(velocity.ratioToPeak) ? Math.round(velocity.ratioToPeak * 100) : null;
+
+  return (
+    <span
+      className={`fx-velocity fx-velocity--${tone}`}
+      title={`${VELOCITY_LABEL[trend]} · ${share}% dari puncak · ${velocity.minutesTracked} menit terpantau`}
+    >
+      <Icon />
+      <span className="f-num">{share === null ? "—" : `${share}%`}</span>
+    </span>
+  );
 }
 
 export function StatusDot({ status }) {

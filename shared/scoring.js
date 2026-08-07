@@ -1,20 +1,4 @@
 export const PRESETS = Object.freeze({
-  safer: {
-    id: "safer",
-    label: "Safer",
-    marketCapMin: 100_000,
-    marketCapMax: 5_000_000,
-    tvlMin: 10_000,
-    momentumMin: 10,
-    momentumMax: 40,
-    volume1hMin: 10_000,
-    volumeTvlMin: 1,
-    feeTvlMin: 1,
-    requireFreezeOff: true,
-    maxRisk: 55,
-    minScore: 65,
-    cooldownMinutes: 30,
-  },
   yanman: {
     id: "yanman",
     label: "Yanman-like",
@@ -29,9 +13,90 @@ export const PRESETS = Object.freeze({
     requireFreezeOff: true,
     maxRisk: 72,
     minScore: 65,
+    hotScore: 80,
+    watchScore: 65,
+    earlyScore: 50,
     cooldownMinutes: 15,
   },
+  // Modelled on the publicly posted Meteora DLMM routine of @auzhinta: enter a
+  // fresh memecoin pool at or just after its top with a one-sided bid-ask range
+  // pushed 70–80% below entry, then harvest fees until the volume dies. Three
+  // things follow from that and make this preset unlike the other one.
+  //
+  //  1. The rig is specific and screenable. Bin step 80/100/125 with a 2–3%
+  //     base fee is the setup behind every position they have posted, so it is
+  //     a hard gate rather than a preference.
+  //  2. Direction barely matters. A bid-ask range that wide earns on the way
+  //     down — their own MOGDOG-SOL position closed +10.89% while the token
+  //     fell ~70% — so momentumMin is negative on purpose. What has to be true
+  //     is that the pool is *paying*, which is why feeTvlMin is the strictest
+  //     number here.
+  //  3. The exit is a volume rule, not a price rule. A screener cannot watch
+  //     fee velocity decay, so the closest standing equivalent is refusing to
+  //     surface a pool that is not already earning at ≥1% fee/TVL per hour.
+  auzhinta: {
+    id: "auzhinta",
+    label: "Auzhinta-like",
+    marketCapMin: 150_000,
+    marketCapMax: 15_000_000,
+    // "TVL at least di minimal 35k an, at least kalo dump gak keberatan nahan
+    // IL" — and no ceiling: deeper pools are safer, just less lucrative.
+    tvlMin: 35_000,
+    momentumMin: -35,
+    momentumMax: 400,
+    volume1hMin: 10_000,
+    volumeTvlMin: 0.3,
+    feeTvlMin: 1,
+    binStepMin: 80,
+    binStepMax: 125,
+    baseFeeMin: 2,
+    // Stand-in for the 30-second Bubblemaps check they run before every entry.
+    // The token they walked through and rejected had a connected cluster
+    // holding 47.95% of supply; dev balance is the sharper of the two signals.
+    top10HoldersMax: 45,
+    devBalanceMax: 5,
+    ageHoursMax: 72,
+    requireFreezeOff: true,
+    maxRisk: 78,
+    // The 100-point model is built for pools this preset never trades. An
+    // unverified memecoin forfeits the verification points outright and rarely
+    // sustains the 2x volume/TVL that tops out volume quality, so a strong
+    // candidate lands in the fifties: the two pools that inspired this preset
+    // scored 53 and 45 while they were being farmed. Reusing the 65/80 ladder
+    // would gate every alert off and leave the preset inert.
+    minScore: 48,
+    hotScore: 60,
+    watchScore: 48,
+    earlyScore: 38,
+    cooldownMinutes: 10,
+  },
 });
+
+export const DEFAULT_PRESET = "yanman";
+
+/**
+ * Resolve a preset id that may come from localStorage, an env var, or an API
+ * payload. Anything unknown — including the retired "safer" id still sitting in
+ * browsers that used an earlier build — collapses to the default rather than
+ * indexing PRESETS to undefined.
+ */
+export const resolvePresetId = (value) => (PRESETS[value] ? value : DEFAULT_PRESET);
+
+/**
+ * Where a score sits on the active preset's ladder. The ladder is per-preset
+ * because the 100-point model does not score every kind of pool over the same
+ * range — see the note on PRESETS.auzhinta. This is the single source for the
+ * row badge, the Hot/Watch tabs, and the alert transitions, so the three can
+ * never disagree about what a pool is.
+ */
+export function poolTier(score, presetInput) {
+  const preset = typeof presetInput === "string" ? PRESETS[resolvePresetId(presetInput)] : presetInput;
+  if (!Number.isFinite(score)) return "skip";
+  if (score >= preset.hotScore) return "hot";
+  if (score >= preset.watchScore) return "watch";
+  if (score >= preset.earlyScore) return "early";
+  return "skip";
+}
 
 const QUOTE_SYMBOLS = new Set(["SOL", "WSOL", "USDC", "USDT"]);
 
@@ -203,6 +268,38 @@ export function evaluatePreset(pool, presetInput) {
     [!preset.requireFreezeOff || pool.freezeAuthorityDisabled, "Freeze authority off"],
   ];
 
+  // Optional gates: a preset only pays for the checks it declares, so presets
+  // written before these fields existed keep their exact behaviour. Each one
+  // fails closed when the upstream value is missing — an unknown holder split
+  // is a reason not to enter, not a reason to wave the pool through.
+  if (Number.isFinite(preset.binStepMin)) {
+    checks.push([pool.binStep >= preset.binStepMin, `Bin step ≥ ${preset.binStepMin}`]);
+  }
+  if (Number.isFinite(preset.binStepMax)) {
+    checks.push([pool.binStep <= preset.binStepMax, `Bin step ≤ ${preset.binStepMax}`]);
+  }
+  if (Number.isFinite(preset.baseFeeMin)) {
+    checks.push([pool.baseFeePct >= preset.baseFeeMin, `Base fee ≥ ${preset.baseFeeMin}%`]);
+  }
+  if (Number.isFinite(preset.top10HoldersMax)) {
+    checks.push([
+      Number.isFinite(pool.top10HoldersPct) && pool.top10HoldersPct <= preset.top10HoldersMax,
+      `Top-10 holder ≤ ${preset.top10HoldersMax}%`,
+    ]);
+  }
+  if (Number.isFinite(preset.devBalanceMax)) {
+    checks.push([
+      Number.isFinite(pool.devBalancePct) && pool.devBalancePct <= preset.devBalanceMax,
+      `Saldo dev ≤ ${preset.devBalanceMax}%`,
+    ]);
+  }
+  if (Number.isFinite(preset.ageHoursMax)) {
+    checks.push([
+      Number.isFinite(pool.ageHours) && pool.ageHours <= preset.ageHoursMax,
+      `Umur pool ≤ ${preset.ageHoursMax} jam`,
+    ]);
+  }
+
   const misses = checks.filter(([passed]) => !passed).map(([, label]) => label);
   return { passed: misses.length === 0, misses };
 }
@@ -261,6 +358,7 @@ export function normalizePool(raw, momentum = {}, analytics = {}, rugCheck = nul
     totalFees1h: lpFees1h + protocolFees1h,
     feeTvl1h: number(raw.fee_tvl_ratio?.["1h"]),
     volumeTvl1h: tvl > 0 ? volume1h / tvl : 0,
+    binStep: number(raw.pool_config?.bin_step),
     baseFeePct: number(raw.pool_config?.base_fee_pct),
     dynamicFeePct: number(raw.dynamic_fee_pct),
     totalLps: optionalNumber(analytics.total_lps),
@@ -287,7 +385,9 @@ export function normalizePool(raw, momentum = {}, analytics = {}, rugCheck = nul
 
   const score = calculateScore(normalized);
   const risk = calculateRisk(normalized);
-  const status = score.total >= 80 ? "hot" : score.total >= 65 ? "watch" : score.total >= 50 ? "early" : "skip";
+  // Payload-level default only. Anything rendering against a chosen preset
+  // should call poolTier with that preset rather than read this field.
+  const status = poolTier(score.total, PRESETS[DEFAULT_PRESET]);
 
   return {
     ...normalized,
@@ -297,8 +397,8 @@ export function normalizePool(raw, momentum = {}, analytics = {}, rugCheck = nul
     riskFlags: risk.flags,
     status,
     qualifies: {
-      safer: evaluatePreset(normalized, PRESETS.safer),
       yanman: evaluatePreset(normalized, PRESETS.yanman),
+      auzhinta: evaluatePreset(normalized, PRESETS.auzhinta),
     },
   };
 }

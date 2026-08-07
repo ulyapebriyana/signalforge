@@ -26,7 +26,7 @@ import {
   Telescope,
   X,
 } from "lucide-react";
-import { PRESETS } from "../../../shared/scoring.js";
+import { PRESETS, poolTier, resolvePresetId } from "../../../shared/scoring.js";
 import { collectSignalEntries } from "../../../shared/signalTransitions.js";
 import { usePools } from "../../hooks/usePools.js";
 import { useSignalHistory } from "../../hooks/useSignalHistory.js";
@@ -34,7 +34,8 @@ import { formatWibTime } from "../../lib/format.js";
 import {
   NOTIFICATION_SOUND_OFF,
   NOTIFICATION_SOUNDS,
-  resolveNotificationSoundChoice,
+  resolveNotificationSoundMap,
+  soundForPreset,
 } from "../../lib/notificationSounds.js";
 import { playSignalSound, primeSignalSound, stopSignalSound } from "../../lib/signalSound.js";
 import { heatVars } from "../lib/heat.js";
@@ -61,6 +62,8 @@ const NAV = [
 ];
 
 const SCAN_INTERVALS = [30, 60, 120];
+
+const PRESET_IDS = Object.keys(PRESETS);
 
 const defaultFilters = (preset) => ({
   minScore: 0,
@@ -214,8 +217,8 @@ export default function ForgeApp({ path }) {
   const { pools, meta, status, loading, refreshing, error, refresh } = usePools(scanInterval);
   const signalHistory = useSignalHistory(scanInterval);
 
-  const [preset, setPreset] = useState(() => localStorage.getItem("signalforge:preset") || "safer");
-  const [scanner, setScanner] = useState(() => initialScannerState(PRESETS[preset] || PRESETS.safer));
+  const [preset, setPreset] = useState(() => resolvePresetId(localStorage.getItem("signalforge:preset")));
+  const [scanner, setScanner] = useState(() => initialScannerState(PRESETS[preset]));
   const [selectedAddress, setSelectedAddress] = useState(
     () => new URLSearchParams(window.location.search).get("pool") || null,
   );
@@ -223,12 +226,15 @@ export default function ForgeApp({ path }) {
   const [notifyOpen, setNotifyOpen] = useState(false);
   const [alertState, setAlertState] = useState("idle");
 
-  const [soundChoice, setSoundChoice] = useState(() =>
-    resolveNotificationSoundChoice(
+  // One sound per preset, so the alarm alone says which gate fired.
+  const [soundByPreset, setSoundByPreset] = useState(() =>
+    resolveNotificationSoundMap(
+      localStorage.getItem("signalforge:notificationSoundByPreset"),
       localStorage.getItem("signalforge:notificationSoundChoice"),
       localStorage.getItem("signalforge:notificationSound"),
     ),
   );
+  const soundChoice = soundForPreset(soundByPreset, preset);
   const soundEnabled = soundChoice !== NOTIFICATION_SOUND_OFF;
   const [notificationPermission, setNotificationPermission] = useState(() =>
     typeof window.Notification === "undefined" ? "unsupported" : window.Notification.permission,
@@ -269,20 +275,25 @@ export default function ForgeApp({ path }) {
   useEffect(() => stopSignalSound, []);
 
   const changeSound = useCallback(
-    async (choice) => {
+    async (targetPreset, choice) => {
+      if (!PRESETS[targetPreset]) return;
       if (choice !== NOTIFICATION_SOUND_OFF && !NOTIFICATION_SOUNDS[choice]) return;
-      setSoundChoice(choice);
-      localStorage.setItem("signalforge:notificationSoundChoice", choice);
-      localStorage.setItem("signalforge:notificationSound", String(choice !== NOTIFICATION_SOUND_OFF));
+
+      const next = { ...soundByPreset, [targetPreset]: choice };
+      setSoundByPreset(next);
+      localStorage.setItem("signalforge:notificationSoundByPreset", JSON.stringify(next));
+
+      const presetLabel = PRESETS[targetPreset].label;
       if (choice === NOTIFICATION_SOUND_OFF) {
         stopSignalSound();
-        push("Bunyi sinyal dimatikan.");
+        push(`Bunyi ${presetLabel} dimatikan.`);
         return;
       }
+      // Preview whichever sound was just picked, even for the inactive preset.
       await playSound(choice);
-      push(`${NOTIFICATION_SOUNDS[choice].label} dipakai untuk sinyal baru.`, "success");
+      push(`${NOTIFICATION_SOUNDS[choice].label} dipakai untuk sinyal ${presetLabel}.`, "success");
     },
-    [playSound, push],
+    [playSound, push, soundByPreset],
   );
 
   const requestDesktopNotifications = useCallback(async () => {
@@ -406,8 +417,8 @@ export default function ForgeApp({ path }) {
     return {
       all: filtered,
       qualified: filtered.filter(qualified),
-      hot: filtered.filter((pool) => pool.score >= 80),
-      watch: filtered.filter((pool) => pool.score >= 65 && pool.score < 80),
+      hot: filtered.filter((pool) => poolTier(pool.score, preset) === "hot"),
+      watch: filtered.filter((pool) => poolTier(pool.score, preset) === "watch"),
       skipped: pools.filter((pool) => textMatch(pool) && !qualified(pool)),
       watchlist: pools.filter((pool) => textMatch(pool) && watchlist.addresses.includes(pool.address)),
     };
@@ -500,6 +511,10 @@ export default function ForgeApp({ path }) {
 
   /* --- keyboard ---------------------------------------------------------- */
 
+  // The palette offers one "switch preset" entry that walks the list, so a
+  // third preset would need no change here.
+  const nextPreset = PRESET_IDS[(PRESET_IDS.indexOf(preset) + 1) % PRESET_IDS.length];
+
   const commands = useMemo(
     () => [
       ...NAV.map((item) => ({
@@ -511,9 +526,9 @@ export default function ForgeApp({ path }) {
       { id: "refresh", label: "Muat ulang scan sekarang", icon: RefreshCw, run: refresh },
       {
         id: "preset",
-        label: `Ganti preset ke ${PRESETS[preset === "safer" ? "yanman" : "safer"].label}`,
+        label: `Ganti preset ke ${PRESETS[nextPreset].label}`,
         icon: ShieldCheck,
-        run: () => selectPreset(preset === "safer" ? "yanman" : "safer"),
+        run: () => selectPreset(nextPreset),
       },
       { id: "theme", label: "Ganti tema", icon: resolved === "light" ? Sun : Moon, run: cycleTheme },
       {
@@ -536,7 +551,7 @@ export default function ForgeApp({ path }) {
       },
       { id: "landing", label: "Kembali ke beranda", icon: Home, run: () => navigate("/") },
     ],
-    [cycleTheme, preset, refresh, resolved, selectPreset],
+    [cycleTheme, nextPreset, refresh, resolved, selectPreset],
   );
 
   useEffect(() => {
@@ -694,7 +709,8 @@ export default function ForgeApp({ path }) {
             status={status}
             scanInterval={scanInterval}
             onScanInterval={changeInterval}
-            soundChoice={soundChoice}
+            preset={preset}
+            soundByPreset={soundByPreset}
             onSoundChange={changeSound}
             notificationPermission={notificationPermission}
             onRequestPermission={requestDesktopNotifications}

@@ -1,5 +1,5 @@
 import { ArrowRight, Flame, History, Radar, ShieldCheck, TrendingDown, TrendingUp } from "lucide-react";
-import { PRESETS } from "../../../../shared/scoring.js";
+import { PRESETS, poolTier } from "../../../../shared/scoring.js";
 import { formatPercent, formatUsd, formatWibTime } from "../../../lib/format.js";
 import { heatVars, riskBand } from "../../lib/heat.js";
 import { Distribution, Spark } from "../components/charts.jsx";
@@ -144,7 +144,7 @@ export default function OverviewView({ summary, meta, preset, loading, history, 
               >
                 <span className="fx-signal-heat" aria-hidden="true" />
                 <span className="fx-signal-pair">{pool.pair}</span>
-                <HeatBadge score={pool.score} status={pool.status} size="sm" />
+                <HeatBadge score={pool.score} status={poolTier(pool.score, preset)} size="sm" />
               </button>
             ))}
             {!loading && summary.qualified.length === 0 ? (

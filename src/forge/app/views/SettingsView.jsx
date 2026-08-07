@@ -13,10 +13,11 @@ import {
   Volume2,
   VolumeX,
 } from "lucide-react";
-import { PRESETS } from "../../../../shared/scoring.js";
+import { PRESETS, resolvePresetId } from "../../../../shared/scoring.js";
 import {
   NOTIFICATION_SOUND_OFF,
   NOTIFICATION_SOUND_OPTIONS,
+  soundForPreset,
 } from "../../../lib/notificationSounds.js";
 
 const SCAN_INTERVALS = [30, 60, 120];
@@ -42,7 +43,8 @@ export default function SettingsView({
   status,
   scanInterval,
   onScanInterval,
-  soundChoice,
+  preset,
+  soundByPreset,
   onSoundChange,
   notificationPermission,
   onRequestPermission,
@@ -53,7 +55,6 @@ export default function SettingsView({
   onToast,
 }) {
   const [testing, setTesting] = useState(false);
-  const soundOn = soundChoice !== NOTIFICATION_SOUND_OFF;
 
   const desktopLabel =
     notificationPermission === "granted"
@@ -110,7 +111,7 @@ export default function SettingsView({
           <dl className="fx-fact-list">
             <div>
               <dt>Preset server</dt>
-              <dd>{PRESETS[status?.preset || "safer"].label}</dd>
+              <dd>{PRESETS[resolvePresetId(status?.preset)].label}</dd>
             </div>
             <div>
               <dt>Interval scan server</dt>
@@ -143,22 +144,36 @@ export default function SettingsView({
             </div>
             <Bell />
           </header>
-          <Row title="Bunyi sinyal" description="Dimainkan saat pool masuk Watch atau naik ke Hot.">
-            <label className={`fx-select ${soundOn ? "is-on" : ""}`}>
-              {soundOn ? <Volume2 /> : <VolumeX />}
-              <select
-                value={soundChoice}
-                onChange={(event) => onSoundChange(event.target.value)}
-                aria-label="Pilih bunyi notifikasi"
+          {Object.values(PRESETS).map((item) => {
+            const choice = soundForPreset(soundByPreset, item.id);
+            const on = choice !== NOTIFICATION_SOUND_OFF;
+            return (
+              <Row
+                key={item.id}
+                title={`Bunyi sinyal · ${item.label}`}
+                description={
+                  item.id === preset
+                    ? "Preset aktif. Dimainkan saat pool masuk Watch atau naik ke Hot."
+                    : "Dipakai saat preset ini yang aktif."
+                }
               >
-                {NOTIFICATION_SOUND_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </Row>
+                <label className={`fx-select ${on ? "is-on" : ""}`}>
+                  {on ? <Volume2 /> : <VolumeX />}
+                  <select
+                    value={choice}
+                    onChange={(event) => onSoundChange(item.id, event.target.value)}
+                    aria-label={`Pilih bunyi notifikasi untuk preset ${item.label}`}
+                  >
+                    {NOTIFICATION_SOUND_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </Row>
+            );
+          })}
           <Row title="Notifikasi desktop" description="Muncul walau tab sedang tidak dilihat.">
             <button
               className="f-btn"

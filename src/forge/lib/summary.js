@@ -1,4 +1,4 @@
-import { PRESETS } from "../../../shared/scoring.js";
+import { DEFAULT_PRESET, poolTier, resolvePresetId } from "../../../shared/scoring.js";
 
 const median = (values) => {
   if (!values.length) return 0;
@@ -14,11 +14,11 @@ export const SCORE_BUCKETS = [
   { floor: 80, ceil: 101, label: "80+" },
 ];
 
-export function summarize(pools = [], presetId = "safer") {
-  const preset = PRESETS[presetId] ? presetId : "safer";
+export function summarize(pools = [], presetId = DEFAULT_PRESET) {
+  const preset = resolvePresetId(presetId);
   const qualified = pools.filter((pool) => pool.qualifies?.[preset]?.passed);
-  const hot = qualified.filter((pool) => pool.score >= 80);
-  const watch = qualified.filter((pool) => pool.score >= 65 && pool.score < 80);
+  const hot = qualified.filter((pool) => poolTier(pool.score, preset) === "hot");
+  const watch = qualified.filter((pool) => poolTier(pool.score, preset) === "watch");
   const scores = pools.map((pool) => pool.score).filter(Number.isFinite);
   const risks = pools.map((pool) => pool.risk).filter(Number.isFinite);
 

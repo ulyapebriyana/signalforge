@@ -1,5 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
-import { calculateRisk, calculateScore, evaluatePreset, normalizePool, PRESETS } from "./scoring.js";
+import {
+  calculateRisk,
+  calculateScore,
+  DEFAULT_PRESET,
+  evaluatePreset,
+  normalizePool,
+  poolTier,
+  PRESETS,
+  resolvePresetId,
+} from "./scoring.js";
 
 const healthyPool = {
   marketCap: 900_000,
@@ -13,6 +22,26 @@ const healthyPool = {
   freezeAuthorityDisabled: true,
   isBlacklisted: false,
   ageHours: 36,
+};
+
+// Field-for-field copy of BUTTHOLE-SOL as the Meteora APIs served it — a pool
+// the strategy behind the Auzhinta-like preset was publicly posted as running.
+const auzhintaPool = {
+  marketCap: 2_240_331,
+  tvl: 172_838,
+  priceChange1h: 16,
+  volume1h: 62_158,
+  volumeTvl1h: 0.36,
+  feeTvl1h: 1.13,
+  binStep: 100,
+  baseFeePct: 2,
+  top10HoldersPct: 21.4,
+  devBalancePct: 0,
+  holders: 2_481,
+  isVerified: false,
+  freezeAuthorityDisabled: true,
+  isBlacklisted: false,
+  ageHours: 33.4,
 };
 
 describe("SignalForge scoring", () => {
@@ -34,10 +63,67 @@ describe("SignalForge scoring", () => {
     expect(distributed.flags.some((flag) => flag.label.includes("belum tersedia"))).toBe(false);
   });
 
-  it("keeps Safer and Yanman-like filters distinct", () => {
-    const aggressiveOnly = { ...healthyPool, tvl: 7_000, priceChange1h: 26, volumeTvl1h: 0.8, feeTvl1h: 0.7 };
-    expect(evaluatePreset(aggressiveOnly, PRESETS.safer).passed).toBe(false);
-    expect(evaluatePreset(aggressiveOnly, PRESETS.yanman).passed).toBe(true);
+  it("keeps Yanman-like and Auzhinta-like filters distinct", () => {
+    const thinAndLoose = { ...healthyPool, tvl: 7_000, priceChange1h: 26, volumeTvl1h: 0.8, feeTvl1h: 0.7 };
+    expect(evaluatePreset(thinAndLoose, PRESETS.yanman).passed).toBe(true);
+    expect(evaluatePreset(thinAndLoose, PRESETS.auzhinta).passed).toBe(false);
+  });
+
+  it("passes the Auzhinta-like rig through its own gate", () => {
+    expect(evaluatePreset(auzhintaPool, PRESETS.auzhinta).passed).toBe(true);
+  });
+
+  it("accepts a dumping pool that is still paying fees", () => {
+    // The defining trait of the preset: a wide one-sided bid-ask range earns on
+    // the way down, so a deep drawdown is not disqualifying while volume holds.
+    const dumping = { ...auzhintaPool, priceChange1h: -28 };
+    expect(evaluatePreset(dumping, PRESETS.auzhinta).passed).toBe(true);
+    expect(evaluatePreset(dumping, PRESETS.yanman).passed).toBe(false);
+  });
+
+  it("rejects the rig when the pool has stopped paying", () => {
+    const stalled = { ...auzhintaPool, feeTvl1h: 0.2, volumeTvl1h: 0.05, volume1h: 4_000 };
+    const { passed, misses } = evaluatePreset(stalled, PRESETS.auzhinta);
+    expect(passed).toBe(false);
+    expect(misses).toContain("Fee/TVL ≥ 1%");
+  });
+
+  it("rejects the wrong rig even when the pool is paying well", () => {
+    const wrongRig = { ...auzhintaPool, binStep: 20, baseFeePct: 0.2 };
+    const { misses } = evaluatePreset(wrongRig, PRESETS.auzhinta);
+    expect(misses).toEqual(expect.arrayContaining(["Bin step ≥ 80", "Base fee ≥ 2%"]));
+  });
+
+  it("fails the concentration gate closed when holder data is missing", () => {
+    const unknown = { ...auzhintaPool, top10HoldersPct: null, devBalancePct: null };
+    const { misses } = evaluatePreset(unknown, PRESETS.auzhinta);
+    expect(misses).toEqual(expect.arrayContaining(["Top-10 holder ≤ 45%", "Saldo dev ≤ 5%"]));
+  });
+
+  it("reads the Hot/Watch ladder off the active preset", () => {
+    // 53 is what the pool behind the Auzhinta-like preset actually scored: a
+    // Watch there, nothing at all on the ladder built for verified pools.
+    expect(poolTier(53, "auzhinta")).toBe("watch");
+    expect(poolTier(53, "yanman")).toBe("early");
+    expect(poolTier(62, "auzhinta")).toBe("hot");
+    expect(poolTier(62, "yanman")).toBe("early");
+  });
+
+  it("keeps the Yanman-like ladder on its original thresholds", () => {
+    expect(poolTier(80, "yanman")).toBe("hot");
+    expect(poolTier(65, "yanman")).toBe("watch");
+    expect(poolTier(50, "yanman")).toBe("early");
+    expect(poolTier(49, "yanman")).toBe("skip");
+  });
+
+  it("falls back to the default ladder for an unknown preset id", () => {
+    expect(poolTier(70, "safer")).toBe(poolTier(70, DEFAULT_PRESET));
+    expect(resolvePresetId("safer")).toBe(DEFAULT_PRESET);
+  });
+
+  it("leaves Yanman-like untouched by the optional gates", () => {
+    // No bin step, base fee, holder split, or age on the fixture at all.
+    expect(evaluatePreset(healthyPool, PRESETS.yanman).passed).toBe(true);
   });
 
   it("normalizes the non-SOL token as the base asset", () => {

@@ -1442,6 +1442,87 @@
   color: var(--f-scorch);
 }
 
+/* Fee velocity: direction first, magnitude second. */
+.fx-velocity {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.fx-velocity svg {
+  width: 13px;
+  height: 13px;
+}
+
+.fx-velocity--healthy {
+  color: var(--f-quench);
+}
+
+.fx-velocity--warning {
+  color: var(--f-caution);
+}
+
+.fx-velocity--danger {
+  color: var(--f-scorch);
+}
+
+.fx-velocity-panel {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--f-line);
+  border-left-width: 2px;
+  border-radius: 6px;
+  background: var(--f-raised);
+}
+
+.fx-velocity-panel--healthy {
+  border-left-color: var(--f-quench);
+}
+
+.fx-velocity-panel--warning {
+  border-left-color: var(--f-caution);
+}
+
+.fx-velocity-panel--danger {
+  border-left-color: var(--f-scorch);
+}
+
+.fx-velocity-panel--muted {
+  border-left-color: var(--f-faint);
+}
+
+.fx-velocity-headline {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.fx-velocity-headline strong {
+  font-size: 14px;
+  letter-spacing: -0.01em;
+}
+
+.fx-velocity-headline span {
+  color: var(--f-slag);
+  font-size: 12px;
+}
+
+/* Four readings, so a fixed 2x2 rather than auto-fit leaving one alone. */
+.fx-velocity-panel .fx-metric-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.fx-velocity-advice {
+  margin: 0;
+  color: var(--f-ash);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .fx-na {
   color: var(--f-faint);
   display: inline-flex;

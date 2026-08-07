@@ -11,7 +11,7 @@ import {
   Telescope,
   Thermometer,
 } from "lucide-react";
-import { PRESETS } from "../../../shared/scoring.js";
+import { DEFAULT_PRESET, PRESETS } from "../../../shared/scoring.js";
 import { usePools } from "../../hooks/usePools.js";
 import { formatPercent, formatUsd, formatWibTime } from "../../lib/format.js";
 import { heatColor, heatVars } from "../lib/heat.js";
@@ -282,6 +282,9 @@ const PRESET_ROWS = [
   ["Volume 1 jam minimum", (p) => formatUsd(p.volume1hMin)],
   ["Vol/TVL minimum", (p) => `${p.volumeTvlMin}x`],
   ["Fee/TVL minimum", (p) => `${p.feeTvlMin}%`],
+  ["Bin step", (p) => (p.binStepMin ? `${p.binStepMin} – ${p.binStepMax}` : "—")],
+  ["Base fee minimum", (p) => (p.baseFeeMin ? `${p.baseFeeMin}%` : "—")],
+  ["Umur pool maksimum", (p) => (p.ageHoursMax ? `${p.ageHoursMax} jam` : "—")],
   ["Risk maksimum", (p) => String(p.maxRisk)],
   ["Freeze authority", (p) => (p.requireFreezeOff ? "Wajib mati" : "Opsional")],
   ["Cooldown alert", (p) => `${p.cooldownMinutes} menit`],
@@ -317,9 +320,11 @@ function Presets() {
         ))}
       </div>
       <p className="lp-preset-caveat" data-reveal>
-        “Yanman-like” meniru filter publik yang pernah dianalisis — bukan klaim bahwa ini strategi
-        milik orang tersebut. Aturannya jauh lebih longgar dan bisa memasukkan pool dengan likuiditas
-        sangat tipis.
+        Keduanya rekonstruksi dari filter yang pernah dibagikan terbuka — bukan klaim bahwa ini
+        strategi milik orang tersebut. “Yanman-like” longgar dan bisa memasukkan pool dengan
+        likuiditas sangat tipis. “Auzhinta-like” menuntut likuiditas jauh lebih tebal dan rig yang
+        spesifik, tapi sengaja menerima momentum negatif: range bid-ask lebar memang dipakai untuk
+        memanen fee saat harga turun, dan itu menanggung risiko penurunan yang nyata.
       </p>
     </section>
   );
@@ -464,7 +469,7 @@ function Footer() {
 export default function Landing() {
   const { theme, cycleTheme } = useTheme();
   const { pools, meta, loading, error } = usePools(60);
-  const summary = useMemo(() => summarize(pools, "safer"), [pools]);
+  const summary = useMemo(() => summarize(pools, DEFAULT_PRESET), [pools]);
   const revealRef = useReveal([loading, pools.length]);
 
   return (
