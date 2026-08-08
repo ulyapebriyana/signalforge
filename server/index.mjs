@@ -29,6 +29,7 @@ let signalHistory = [];
 const alertCooldowns = new Map();
 const detectionCooldowns = new Map();
 const rugCheckCache = new Map();
+const rugCheckClusterCache = new Map();
 let detectionStatuses = new Map();
 let detectionInitialized = false;
 const historyFile = path.join(projectRoot, "data", "signal-history.json");
@@ -85,6 +86,37 @@ const persistFeeVelocity = () => {
 };
 
 /**
+ * Mark pools that are not the best venue for their own token.
+ *
+ * "Kalau ada beberapa pool pilihan di token yang sama, pilih yang volume dan
+ * fees generated-nya paling gede — bukan yang fee rate-nya paling tinggi."
+ * Meteora routinely lists the same token across several bin steps, and the
+ * scanner shows them as separate rows, so this says which row is the one to
+ * take. Reported rather than gated: the weaker pool is a worse choice, not an
+ * unsafe one, and the caller may still want it on screen.
+ */
+const markBestPoolPerToken = (pools) => {
+  const bestByToken = new Map();
+  for (const pool of pools) {
+    if (!pool.baseAddress) continue;
+    const incumbent = bestByToken.get(pool.baseAddress);
+    if (!incumbent || pool.totalFees1h > incumbent.totalFees1h) bestByToken.set(pool.baseAddress, pool);
+  }
+
+  return pools.map((pool) => {
+    const best = pool.baseAddress ? bestByToken.get(pool.baseAddress) : null;
+    const outranked = Boolean(best) && best.address !== pool.address;
+    return {
+      ...pool,
+      isBestPoolForToken: !outranked,
+      richerSiblingPool: outranked
+        ? { address: best.address, binStep: best.binStep, totalFees1h: best.totalFees1h, tvl: best.tvl }
+        : null,
+    };
+  });
+};
+
+/**
  * Record this scan's fee/TVL for every pool and hand back the decay summary.
  * Mutates the store, so it runs once per scan inside loadPools.
  */
@@ -114,19 +146,62 @@ const fetchJson = async (url, options = {}) => {
   }
 };
 
+/**
+ * RugCheck rate-limits hard, and it was already costing us data: a burst of 39
+ * mints at concurrency 6 — what the summary call did on its own — lost about a
+ * third of its responses to 429 and cached them as "no data". Every request to
+ * that host now queues behind one lane with a minimum gap, and retries once
+ * when told to slow down. A full refresh takes ~15s, which the 15-minute cache
+ * makes a non-issue.
+ */
+const RUGCHECK_SPACING_MS = 180;
+let rugCheckQueue = Promise.resolve();
+
+const rugCheckFetch = async (url, timeoutMs) => {
+  const attempt = async () => {
+    await new Promise((resolve) => setTimeout(resolve, RUGCHECK_SPACING_MS));
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const response = await fetch(url, { signal: controller.signal });
+      if (response.status === 429) return { retry: true };
+      if (!response.ok) throw new Error(`Upstream ${response.status}`);
+      return { payload: await response.json() };
+    } finally {
+      clearTimeout(timeout);
+    }
+  };
+
+  const run = rugCheckQueue.then(async () => {
+    const first = await attempt();
+    if (!first.retry) return first.payload;
+    // One backoff, then give up: the cache keeps the miss short-lived.
+    await new Promise((resolve) => setTimeout(resolve, 1_200));
+    const second = await attempt();
+    if (second.retry) throw new Error("Upstream 429");
+    return second.payload;
+  });
+
+  rugCheckQueue = run.then(() => undefined, () => undefined);
+  return run;
+};
+
+/** Spread expiries so a whole scan's worth of mints never refreshes at once. */
+const jitteredTtl = (base) => base * (0.8 + Math.random() * 0.4);
+
 const fetchRugCheckSummary = async (mint) => {
   const cached = rugCheckCache.get(mint);
   if (cached && cached.expiresAt > Date.now()) return cached.data;
 
   try {
-    const payload = await fetchJson(`${rugCheckApi}/v1/tokens/${mint}/report/summary`, { timeoutMs: 5_000 });
+    const payload = await rugCheckFetch(`${rugCheckApi}/v1/tokens/${mint}/report/summary`, 8_000);
     const data = {
       score: payload.score,
       score_normalised: payload.score_normalised,
       risks: Array.isArray(payload.risks) ? payload.risks : [],
       lpLockedPct: payload.lpLockedPct,
     };
-    rugCheckCache.set(mint, { data, expiresAt: Date.now() + rugCheckCacheTtlMs });
+    rugCheckCache.set(mint, { data, expiresAt: Date.now() + jitteredTtl(rugCheckCacheTtlMs) });
     return data;
   } catch {
     rugCheckCache.set(mint, { data: null, expiresAt: Date.now() + rugCheckFailureTtlMs });
@@ -134,9 +209,67 @@ const fetchRugCheckSummary = async (mint) => {
   }
 };
 
+/**
+ * Connected wallet clusters, the machine-readable form of the Bubblemaps check.
+ *
+ * RugCheck's full report carries `insiderNetworks`: groups of wallets it linked
+ * by transfers between them — the same thing as Bubblemaps' thick connecting
+ * lines. The share of supply the biggest group holds is the number the strategy
+ * actually acts on ("kalau ada satu cluster gede yang pegang 40%+ supply,
+ * bahaya").
+ *
+ * Kept separate from the summary call on purpose: the summary reports a
+ * liquidity-weighted lpLockedPct across every market, which the full report
+ * only exposes per market. Deriving it here would quietly change a number the
+ * UI already shows, so the cheap summary stays the source for that.
+ *
+ * An empty network list is a real answer (no clusters found) and reports 0. A
+ * failed call reports null, which the preset gate treats as a reason not to
+ * enter — an unread Bubblemaps is not a clean one.
+ */
+const fetchRugCheckClusters = async (mint) => {
+  const cached = rugCheckClusterCache.get(mint);
+  if (cached && cached.expiresAt > Date.now()) return cached.data;
+
+  try {
+    const payload = await rugCheckFetch(`${rugCheckApi}/v1/tokens/${mint}/report`, 10_000);
+    const supply = Number(payload?.token?.supply);
+    const networks = Array.isArray(payload?.insiderNetworks) ? payload.insiderNetworks : [];
+    const shares = supply > 0
+      ? networks.map((network) => (Number(network?.tokenAmount) / supply) * 100).filter(Number.isFinite)
+      : [];
+    const largest = networks.length && shares.length
+      ? networks[shares.indexOf(Math.max(...shares))]
+      : null;
+
+    const data = {
+      largestPct: shares.length ? Math.max(...shares) : 0,
+      largestWallets: largest ? Number(largest.size) || 0 : 0,
+      count: networks.length,
+      clusteredPct: shares.reduce((sum, share) => sum + share, 0),
+      graphInsiders: Number(payload?.graphInsidersDetected) || 0,
+    };
+    rugCheckClusterCache.set(mint, { data, expiresAt: Date.now() + jitteredTtl(rugCheckCacheTtlMs) });
+    return data;
+  } catch {
+    rugCheckClusterCache.set(mint, { data: null, expiresAt: Date.now() + rugCheckFailureTtlMs });
+    return null;
+  }
+};
+
 const fetchRugCheckSummaries = async (mints) => {
   const uniqueMints = [...new Set(mints.filter(Boolean))];
-  const entries = await mapConcurrent(uniqueMints, 6, async (mint) => [mint, await fetchRugCheckSummary(mint)]);
+  const entries = await mapConcurrent(uniqueMints, 4, async (mint) => {
+    // The two calls fail independently: a token can have a readable cluster
+    // graph and an unreadable summary, or the reverse. Both queue on the same
+    // lane, so the concurrency here only governs how fast work is handed to it.
+    const [summary, clusters] = await Promise.all([
+      fetchRugCheckSummary(mint),
+      fetchRugCheckClusters(mint),
+    ]);
+    if (!summary && !clusters) return [mint, null];
+    return [mint, { ...(summary || {}), clusters }];
+  });
   return new Map(entries);
 };
 
@@ -222,12 +355,12 @@ const loadPools = async ({ force = false } = {}) => {
     const momentumMap = new Map(momentumByPool);
     const scoredAt = Date.now();
     const enriched = trackFeeVelocity(
-      candidates.map(({ raw, normalized }) => normalizePool(
+      markBestPoolPerToken(candidates.map(({ raw, normalized }) => normalizePool(
         raw,
         momentumMap.get(raw.address),
         analyticsByPool.get(raw.address),
         rugCheckByMint.get(normalized.baseAddress),
-      )),
+      ))),
       scoredAt,
     );
 

@@ -24,6 +24,9 @@ import {
   RugCheckChip,
 } from "./bits.jsx";
 
+/** Cluster share reads against the article's 40% reject line, not the heat ramp. */
+const clusterTone = (pct) => (pct >= 40 ? "danger" : pct >= 20 ? "warning" : "healthy");
+
 /** What each trend means for a position that is already open. */
 const VELOCITY_ADVICE = {
   rising: "Fee makin deras. Tidak ada alasan keluar dari sisi volume.",
@@ -235,6 +238,28 @@ export default function PoolDrawer({
                   {Number.isFinite(pool.rugCheckLpLockedPct) ? `${pool.rugCheckLpLockedPct.toFixed(0)}%` : "—"}
                 </span>
               </div>
+              <div>
+                <span
+                  title="Wallet yang saling terhubung lewat transfer — bentuk terukur dari cek Bubblemaps"
+                >
+                  Cluster terbesar
+                </span>
+                {Number.isFinite(pool.clusterLargestPct) ? (
+                  <span
+                    className={`fx-conc fx-conc--${clusterTone(pool.clusterLargestPct)} f-num`}
+                    title={
+                      pool.clusterCount
+                        ? `${pool.clusterCount} cluster terdeteksi · terbesar ${pool.clusterLargestWallets} wallet · total ${pool.clusteredSupplyPct?.toFixed(1)}% supply`
+                        : "Tidak ada cluster wallet terhubung yang terdeteksi"
+                    }
+                  >
+                    {pool.clusterLargestPct.toFixed(1)}%
+                    {pool.clusterLargestWallets ? <em> · {pool.clusterLargestWallets}w</em> : null}
+                  </span>
+                ) : (
+                  <span className="fx-na" title="Graf cluster tidak terbaca">—</span>
+                )}
+              </div>
             </div>
             {pool.jupShieldWarnings?.length ? (
               <ul className="fx-warning-list">
@@ -275,6 +300,30 @@ export default function PoolDrawer({
             </dl>
           </section>
 
+          {pool.richerSiblingPool ? (
+            <section className="fx-drawer-section">
+              <div className="fx-sibling-warning">
+                <TriangleAlert />
+                <div>
+                  <strong>Ada pool lain untuk token ini yang lebih produktif</strong>
+                  <p>
+                    Bin step {pool.richerSiblingPool.binStep} mencetak{" "}
+                    {formatUsd(pool.richerSiblingPool.totalFees1h)} fee dalam 1 jam versus{" "}
+                    {formatUsd(pool.totalFees1h)} di sini. Pilih pool dengan fee terbesar, bukan
+                    fee rate tertinggi.
+                  </p>
+                  <a
+                    href={`https://www.meteora.ag/dlmm/${pool.richerSiblingPool.address}`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Buka pool itu <ExternalLink />
+                  </a>
+                </div>
+              </div>
+            </section>
+          ) : null}
+
           <section className="fx-drawer-section">
             <h3>Kecepatan fee</h3>
             <FeeVelocityPanel velocity={pool.feeVelocity} />
@@ -298,6 +347,32 @@ export default function PoolDrawer({
               <div>
                 <dt>Bin step</dt>
                 <dd className="f-num">{pool.binStep || "—"}</dd>
+              </div>
+              <div>
+                <dt>Mode fee</dt>
+                <dd>
+                  {pool.feesInBothTokens === null
+                    ? "—"
+                    : pool.feesInBothTokens
+                      ? "Base + quote"
+                      : "Quote saja"}
+                </dd>
+              </div>
+              <div>
+                <dt>Mint authority</dt>
+                <dd>
+                  {pool.mintAuthorityDisabled === null
+                    ? "—"
+                    : pool.mintAuthorityDisabled
+                      ? "Mati"
+                      : "Masih aktif"}
+                </dd>
+              </div>
+              <div>
+                <dt>Swap per trader</dt>
+                <dd className="f-num">
+                  {Number.isFinite(pool.swapsPerTrader) ? `${pool.swapsPerTrader.toFixed(2)}x` : "—"}
+                </dd>
               </div>
               <div>
                 <dt>Base fee</dt>

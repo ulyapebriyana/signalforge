@@ -35,9 +35,13 @@ const auzhintaPool = {
   feeTvl1h: 1.13,
   binStep: 100,
   baseFeePct: 2,
+  feesInBothTokens: true,
   top10HoldersPct: 21.4,
   devBalancePct: 0,
   holders: 2_481,
+  clusterLargestPct: 1.64,
+  mintAuthorityDisabled: true,
+  swapsPerTrader: 2.05,
   isVerified: false,
   freezeAuthorityDisabled: true,
   isBlacklisted: false,
@@ -73,12 +77,73 @@ describe("SignalForge scoring", () => {
     expect(evaluatePreset(auzhintaPool, PRESETS.auzhinta).passed).toBe(true);
   });
 
-  it("accepts a dumping pool that is still paying fees", () => {
-    // The defining trait of the preset: a wide one-sided bid-ask range earns on
-    // the way down, so a deep drawdown is not disqualifying while volume holds.
-    const dumping = { ...auzhintaPool, priceChange1h: -28 };
-    expect(evaluatePreset(dumping, PRESETS.auzhinta).passed).toBe(true);
-    expect(evaluatePreset(dumping, PRESETS.yanman).passed).toBe(false);
+  it("refuses a pool that has already rolled over", () => {
+    // "kalau udah ATH lama terus turun panjang, momentumnya udah lewat" — the
+    // wide range is for what happens after entry, not a reason to enter a pool
+    // that is already bleeding.
+    const rolledOver = { ...auzhintaPool, priceChange1h: -12 };
+    expect(evaluatePreset(rolledOver, PRESETS.auzhinta).misses).toContain("1h ≥ 0%");
+  });
+
+  it("accepts every bin step rig the article names", () => {
+    for (const binStep of [50, 80, 100, 125, 400]) {
+      expect(evaluatePreset({ ...auzhintaPool, binStep }, PRESETS.auzhinta).passed).toBe(true);
+    }
+    expect(evaluatePreset({ ...auzhintaPool, binStep: 20 }, PRESETS.auzhinta).passed).toBe(false);
+  });
+
+  it("rejects a pool whose fees accrue in the quote token only", () => {
+    const quoteOnly = { ...auzhintaPool, feesInBothTokens: false };
+    expect(evaluatePreset(quoteOnly, PRESETS.auzhinta).misses).toContain("Fee base + quote");
+  });
+
+  it("rejects a live mint authority and an unknown one alike", () => {
+    expect(evaluatePreset({ ...auzhintaPool, mintAuthorityDisabled: false }, PRESETS.auzhinta).misses)
+      .toContain("Mint authority off");
+    expect(evaluatePreset({ ...auzhintaPool, mintAuthorityDisabled: null }, PRESETS.auzhinta).misses)
+      .toContain("Mint authority off");
+  });
+
+  it("applies the article's stated holder, cluster, and dev thresholds", () => {
+    expect(evaluatePreset({ ...auzhintaPool, marketCap: 399_000 }, PRESETS.auzhinta).misses)
+      .toContain("MC ≥ $400000");
+    expect(evaluatePreset({ ...auzhintaPool, holders: 480 }, PRESETS.auzhinta).misses)
+      .toContain("Holder ≥ 500");
+    expect(evaluatePreset({ ...auzhintaPool, top10HoldersPct: 41 }, PRESETS.auzhinta).misses)
+      .toContain("Top-10 holder ≤ 40%");
+    expect(evaluatePreset({ ...auzhintaPool, devBalancePct: 3.1 }, PRESETS.auzhinta).misses)
+      .toContain("Saldo dev ≤ 1%");
+  });
+
+  it("rejects the coordinated-cluster shape the article walks through", () => {
+    // The rejected example: one cluster of 371 wallets holding 47.95%.
+    const clustered = { ...auzhintaPool, clusterLargestPct: 47.95 };
+    expect(evaluatePreset(clustered, PRESETS.auzhinta).misses).toContain("Cluster terbesar ≤ 40%");
+  });
+
+  it("treats a token with no clusters as clean, not unknown", () => {
+    // An empty network list is a real answer and must not fail the gate.
+    expect(evaluatePreset({ ...auzhintaPool, clusterLargestPct: 0 }, PRESETS.auzhinta).passed).toBe(true);
+  });
+
+  it("fails the cluster gate closed when the graph could not be read", () => {
+    expect(evaluatePreset({ ...auzhintaPool, clusterLargestPct: null }, PRESETS.auzhinta).misses)
+      .toContain("Cluster terbesar ≤ 40%");
+  });
+
+  it("catches a cluster that hides behind a healthy top-10", () => {
+    // The whole reason the cluster gate exists: many small linked wallets read
+    // as harmless one by one, so top-10 concentration never sees them.
+    const hidden = { ...auzhintaPool, top10HoldersPct: 12, clusterLargestPct: 44 };
+    const { passed, misses } = evaluatePreset(hidden, PRESETS.auzhinta);
+    expect(passed).toBe(false);
+    expect(misses).toEqual(["Cluster terbesar ≤ 40%"]);
+  });
+
+  it("flags the wash-trade shape without punishing normal flow", () => {
+    expect(evaluatePreset({ ...auzhintaPool, swapsPerTrader: 1.7 }, PRESETS.auzhinta).passed).toBe(true);
+    expect(evaluatePreset({ ...auzhintaPool, swapsPerTrader: 14 }, PRESETS.auzhinta).misses)
+      .toContain("Swap per trader ≤ 6");
   });
 
   it("rejects the rig when the pool has stopped paying", () => {
@@ -91,13 +156,13 @@ describe("SignalForge scoring", () => {
   it("rejects the wrong rig even when the pool is paying well", () => {
     const wrongRig = { ...auzhintaPool, binStep: 20, baseFeePct: 0.2 };
     const { misses } = evaluatePreset(wrongRig, PRESETS.auzhinta);
-    expect(misses).toEqual(expect.arrayContaining(["Bin step ≥ 80", "Base fee ≥ 2%"]));
+    expect(misses).toEqual(expect.arrayContaining(["Bin step ≥ 50", "Base fee ≥ 2%"]));
   });
 
   it("fails the concentration gate closed when holder data is missing", () => {
     const unknown = { ...auzhintaPool, top10HoldersPct: null, devBalancePct: null };
     const { misses } = evaluatePreset(unknown, PRESETS.auzhinta);
-    expect(misses).toEqual(expect.arrayContaining(["Top-10 holder ≤ 45%", "Saldo dev ≤ 5%"]));
+    expect(misses).toEqual(expect.arrayContaining(["Top-10 holder ≤ 40%", "Saldo dev ≤ 1%"]));
   });
 
   it("reads the Hot/Watch ladder off the active preset", () => {

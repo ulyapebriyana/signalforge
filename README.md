@@ -69,16 +69,21 @@ Token Telegram hanya dibaca oleh server. Browser tidak pernah menerima nilainya.
 
 | Aturan | Yanman-like | Auzhinta-like |
 | --- | ---: | ---: |
-| Market cap | $100K–$10M | $150K–$15M |
+| Market cap | $100K–$10M | $400K–$15M |
 | TVL minimum | $500 | $35K |
-| Momentum 1h | 20–200% | −35–400% |
+| Momentum 1h | 20–200% | 0–400% |
 | Volume 1h minimum | $5K | $10K |
 | Vol/TVL minimum | 0.5x | 0.3x |
 | Fee/TVL minimum | 0.5% | 1.0% |
-| Bin step | — | 80–125 |
+| Bin step | — | 50–400 |
 | Base fee minimum | — | 2% |
-| Top-10 holder maksimum | — | 45% |
-| Saldo dev maksimum | — | 5% |
+| Mode fee | — | Base + quote |
+| Cluster terbesar maksimum | — | 40% |
+| Top-10 holder maksimum | — | 40% |
+| Saldo dev maksimum | — | 1% |
+| Holder minimum | — | 500 |
+| Mint authority | — | Wajib off |
+| Swap per trader maksimum | — | 6x |
 | Umur pool maksimum | — | 72 jam |
 | Ambang Hot / Watch | 80 / 65 | 60 / 48 |
 | Freeze authority | Wajib off | Wajib off |
@@ -89,21 +94,60 @@ persis milik orang tersebut.
 
 **Yanman-like** agresif dan dapat memasukkan pool dengan likuiditas sangat tipis.
 
-**Auzhinta-like** menyalin rig yang dipakai berulang di posisi-posisi yang dia posting: bin step
-80–125, base fee 2–3%, pool yang baru lahir, dan TVL minimal $35K supaya IL saat dump masih
-tertahan. Dua hal membuatnya berbeda dari preset lain:
+**Auzhinta-like** menyalin checklist yang ditulis terbuka di artikel “Cara Gue LP di Meteora”.
+Sebagian besar angkanya disebut langsung di sana, bukan hasil terkaan: MCAP ≥ $400K, holder ≥ 500,
+cluster Bubblemaps 40%+ ditolak, dev wallet idealnya 0%, NoMint wajib, base fee 2–3%, dan range
+min price −70% s/d −80%.
 
-- **Batas momentumnya negatif.** Range bid-ask satu sisi yang lebar justru memanen fee saat harga
-  turun — posisi MOGDOG-SOL yang dia posting tutup di +10.89% sementara tokennya jatuh ~70%. Jadi
-  yang wajib benar adalah pool-nya masih membayar (`Fee/TVL ≥ 1%`), bukan arah harganya.
+Tiga hal yang membuatnya berbeda dari preset lain:
+
+- **Fee harus base + quote, bukan quote saja.** Alasannya di artikel: “karna kita cari rebound pas
+  dia turun jadi pas rebound pnl kedorong sama fee kita yang belum di claim”. Pool quote-only
+  kehilangan dorongan itu. Terbaca dari `pool_config.collect_fee_mode`.
+- **Bin step menentukan kedalaman, bukan diterima/ditolak.** Artikel memberi empat rig: BS 50 →
+  −50/−60%, BS 80 → −60/−70%, BS 100 → −70/−80% (“paling umum dipake buat meme coin”), BS 400+ →
+  −80% ke atas. Gate-nya karena itu 50–400, bukan satu angka.
 - **Ambang Hot/Watch-nya sendiri.** Model 100 poin dibangun untuk pool yang tidak pernah dia
   sentuh: memecoin tanpa verifikasi kehilangan poin verifikasi dan jarang menahan volume/TVL 2x,
   jadi kandidat kuat pun mendarat di kisaran 50-an. Memakai tangga 65/80 akan mematikan semua
   alert-nya.
 
-Gate yang lebih longgar soal risiko ini menanggung penurunan harga yang nyata. Batas top-10 holder
-dan saldo dev adalah pengganti kasar untuk pengecekan Bubblemaps manual, dan keduanya gagal-tertutup
-saat data holder tidak tersedia.
+`Swap per trader` adalah proksi kasar untuk langkah cek wash trade; median live-nya sekitar 1,7x,
+jadi batas 6x hanya menjaring kasus ekstrem.
+
+### Cluster wallet (pengecekan Bubblemaps)
+
+Artikel memberi porsi terbesar ke langkah ini, lengkap dengan contoh kategori aman (cluster terbesar
+3,63%) dan berbahaya (satu cluster 371 wallet memegang 47,95%). API publik Bubblemaps sendiri sudah
+mati — endpoint legacy-nya mengembalikan 404/500 untuk semua token, termasuk BONK dan WIF — jadi
+datanya diambil dari `insiderNetworks` di report penuh RugCheck: kelompok wallet yang terhubung satu
+sama lain lewat transfer, konsep yang sama dengan garis koneksi di Bubblemaps.
+
+Yang dihitung: `clusterLargestPct` (porsi supply di cluster terbesar), `clusterLargestWallets`,
+`clusterCount`, dan `clusteredSupplyPct`. Gate-nya memakai angka artikel: cluster terbesar ≤ 40%.
+
+**Ini menangkap yang tidak bisa dilihat top-10.** Contoh dari data live: Chonketha punya top-10
+22,3% dan dev balance 0% — dua-duanya hijau — tapi satu cluster 12 wallet memegang **69,6%** supply.
+SPCX serupa: cluster 75,9% dengan top-10 hanya 35,7%. Keduanya lolos gate top-10 dan hanya tertahan
+oleh gate cluster. Batas top-10 tetap dipertahankan karena kebalikannya juga terjadi: whale besar
+yang tidak saling terhubung tidak akan muncul sebagai cluster.
+
+Graf yang tidak terbaca dilaporkan `null` dan menggagalkan gate — Bubblemaps yang tidak dibuka bukan
+berarti bersih. Daftar cluster kosong adalah jawaban sungguhan dan bernilai 0, bukan null.
+
+Yang **tidak** dijadikan gate meski disebut di artikel: LP burnt 100%, karena pool yang benar-benar
+dia garap (BUTTHOLE) tercatat LP terkunci 0% — “idealnya” di artikel jelas aspirasi, bukan syarat.
+Snipers, insiders, bundler, dan Dex Paid juga tidak ada di API mana pun yang dipakai proyek ini.
+Jalur “Top Performance / Trending” untuk token yang lebih established sengaja tidak dicakup: semua
+posisi yang pernah dia posting berumur di bawah 48 jam.
+
+### Pool terbaik per token
+
+Artikel menyuruh memilih “yang volume dan fees generated-nya paling gede — bukan yang fee rate-nya
+paling tinggi” kalau satu token punya beberapa pool. Meteora rutin melisting token yang sama di
+beberapa bin step, dan scanner menampilkannya sebagai baris terpisah. Server menandai baris yang
+kalah lewat `richerSiblingPool`, dan panel detail menunjukkan pool mana yang seharusnya diambil.
+Ini dilaporkan, bukan digate — pool yang lebih lemah itu pilihan yang lebih buruk, bukan berbahaya.
 
 ## Kecepatan fee
 
@@ -139,6 +183,7 @@ peluruhannya.
 ## Catatan risiko
 
 - Data Top-10 holders, dev balance, JupShield, dan Organic Score berasal dari Pool Discovery API Meteora. RugCheck disimpan dalam cache agar pemindaian tidak membebani layanan eksternal.
+- RugCheck membatasi laju permintaan cukup ketat: burst 39 mint tanpa jeda kehilangan sekitar sepertiga respons ke HTTP 429, dan kegagalan itu tersimpan sebagai “data tidak ada”. Semua permintaan ke host itu kini mengantre di satu jalur dengan jeda minimum dan satu kali retry, sehingga cakupannya penuh. Pemindaian dingin karena itu memakan ~16 detik sekali, lalu tersebar oleh jitter pada masa kedaluwarsa cache.
 - Tidak ada score yang menjamin profit. Slippage, perubahan liquidity bin, smart-contract risk, dan pergerakan harga setelah alert tetap dapat menghasilkan kerugian.
 - Backtest historis penuh belum termasuk MVP; endpoint `/api/history` merekam alert selama proses server masih hidup untuk paper review.
 - Kecepatan fee dihitung dari snapshot 1 jam yang dikirim Meteora tiap scan, bukan dari fee posisi kamu sendiri. Dia menggambarkan pool, bukan PnL-mu.

@@ -1,6 +1,6 @@
 import { CircleGauge, ShieldCheck } from "lucide-react";
 import { PRESETS } from "../../../../shared/scoring.js";
-import { formatUsd } from "../../../lib/format.js";
+import { formatNumber, formatUsd } from "../../../lib/format.js";
 import { heatVars } from "../../lib/heat.js";
 
 /** Em dash for a gate a preset does not declare, so the columns stay aligned. */
@@ -15,8 +15,13 @@ const GATE_ROWS = [
   ["Fee/TVL minimum", (p) => `${p.feeTvlMin}%`],
   ["Bin step", (p) => (p.binStepMin ? `${p.binStepMin} – ${p.binStepMax}` : NONE)],
   ["Base fee minimum", (p) => (p.baseFeeMin ? `${p.baseFeeMin}%` : NONE)],
+  ["Mode fee", (p) => (p.requireBothTokenFees ? "Base + quote" : NONE)],
+  ["Cluster terbesar maksimum", (p) => (p.maxClusterPct ? `${p.maxClusterPct}%` : NONE)],
   ["Top-10 holder maksimum", (p) => (p.top10HoldersMax ? `${p.top10HoldersMax}%` : NONE)],
   ["Saldo dev maksimum", (p) => (p.devBalanceMax ? `${p.devBalanceMax}%` : NONE)],
+  ["Holder minimum", (p) => (p.holdersMin ? formatNumber(p.holdersMin) : NONE)],
+  ["Mint authority", (p) => (p.requireMintOff ? "Wajib mati" : NONE)],
+  ["Swap per trader maksimum", (p) => (p.maxSwapsPerTrader ? `${p.maxSwapsPerTrader}x` : NONE)],
   ["Umur pool maksimum", (p) => (p.ageHoursMax ? `${p.ageHoursMax} jam` : NONE)],
   ["Skor minimum", (p) => String(p.minScore)],
   ["Risiko maksimum", (p) => String(p.maxRisk)],

@@ -1442,6 +1442,50 @@
   color: var(--f-scorch);
 }
 
+.fx-sibling-warning {
+  display: flex;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--f-line);
+  border-left: 2px solid var(--f-caution);
+  border-radius: 6px;
+  background: var(--f-raised);
+}
+
+.fx-sibling-warning > svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  color: var(--f-caution);
+}
+
+.fx-sibling-warning strong {
+  display: block;
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+
+.fx-sibling-warning p {
+  margin: 0 0 8px;
+  color: var(--f-ash);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.fx-sibling-warning a {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--f-ember);
+  font-size: 12px;
+}
+
+.fx-sibling-warning a svg {
+  width: 12px;
+  height: 12px;
+}
+
 /* Fee velocity: direction first, magnitude second. */
 .fx-velocity {
   display: inline-flex;

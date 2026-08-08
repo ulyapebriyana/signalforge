@@ -37,24 +37,51 @@ export const PRESETS = Object.freeze({
   auzhinta: {
     id: "auzhinta",
     label: "Auzhinta-like",
-    marketCapMin: 150_000,
+    // Numbers below are stated outright in the step-by-step article, not
+    // inferred: MCAP ≥ $400K ("di bawah itu terlalu kecil dan rentan
+    // manipulasi"), holders ≥ 500, a Bubblemaps cluster of 40%+ is a reject,
+    // dev wallet ideally 0%, NoMint mandatory, base fee 2–3%.
+    marketCapMin: 400_000,
     marketCapMax: 15_000_000,
     // "TVL at least di minimal 35k an, at least kalo dump gak keberatan nahan
-    // IL" — and no ceiling: deeper pools are safer, just less lucrative.
+    // IL" — and no ceiling: the article sorts by highest TVL on purpose,
+    // treating a crowded pool as other people's research already done.
     tvlMin: 35_000,
-    momentumMin: -35,
+    // Entry wants the move intact — "cari yang baru ATH atau masih dalam fase
+    // naik", "kalau udah ATH lama terus turun panjang, momentumnya udah lewat".
+    // The wide range below is for what happens *after* entry, not a licence to
+    // enter something already bleeding.
+    momentumMin: 0,
     momentumMax: 400,
     volume1hMin: 10_000,
     volumeTvlMin: 0.3,
     feeTvlMin: 1,
-    binStepMin: 80,
-    binStepMax: 125,
+    // The article gives four rigs, each with its own depth: BS 50 → −50/−60%,
+    // BS 80 → −60/−70%, BS 100 → −70/−80% ("paling umum dipake buat meme
+    // coin"), BS 400+ → −80% and beyond. All four are in play.
+    binStepMin: 50,
+    binStepMax: 400,
     baseFeeMin: 2,
-    // Stand-in for the 30-second Bubblemaps check they run before every entry.
-    // The token they walked through and rejected had a connected cluster
-    // holding 47.95% of supply; dev balance is the sharper of the two signals.
-    top10HoldersMax: 45,
-    devBalanceMax: 5,
+    // Fees must accrue in base + quote, not quote only: "karna kita cari
+    // rebound pas dia turun jadi pas rebound pnl kedorong sama fee kita yang
+    // belum di claim". Quote-only fees forfeit that push.
+    requireBothTokenFees: true,
+    // The Bubblemaps check itself: RugCheck's transfer-linked wallet groups,
+    // measured against the article's own threshold — "kalau ada satu cluster
+    // gede yang pegang 40%+ supply, bahaya". The dangerous example walked
+    // through there was a single cluster of 371 wallets holding 47.95%.
+    maxClusterPct: 40,
+    // Top-10 concentration is a different, coarser cut of the same worry, kept
+    // because a cluster graph can miss supply parked in unlinked whales.
+    top10HoldersMax: 40,
+    devBalanceMax: 1,
+    holdersMin: 500,
+    requireMintOff: true,
+    // Crude wash-trade guard. The article checks whether the buyers and
+    // sellers are the same handful of wallets; swaps per unique trader is the
+    // only shape of that visible from the API. Live median sits near 1.7, so
+    // this only catches the pathological end.
+    maxSwapsPerTrader: 6,
     ageHoursMax: 72,
     requireFreezeOff: true,
     maxRisk: 78,
@@ -281,6 +308,12 @@ export function evaluatePreset(pool, presetInput) {
   if (Number.isFinite(preset.baseFeeMin)) {
     checks.push([pool.baseFeePct >= preset.baseFeeMin, `Base fee ≥ ${preset.baseFeeMin}%`]);
   }
+  if (Number.isFinite(preset.maxClusterPct)) {
+    checks.push([
+      Number.isFinite(pool.clusterLargestPct) && pool.clusterLargestPct <= preset.maxClusterPct,
+      `Cluster terbesar ≤ ${preset.maxClusterPct}%`,
+    ]);
+  }
   if (Number.isFinite(preset.top10HoldersMax)) {
     checks.push([
       Number.isFinite(pool.top10HoldersPct) && pool.top10HoldersPct <= preset.top10HoldersMax,
@@ -297,6 +330,21 @@ export function evaluatePreset(pool, presetInput) {
     checks.push([
       Number.isFinite(pool.ageHours) && pool.ageHours <= preset.ageHoursMax,
       `Umur pool ≤ ${preset.ageHoursMax} jam`,
+    ]);
+  }
+  if (Number.isFinite(preset.holdersMin)) {
+    checks.push([pool.holders >= preset.holdersMin, `Holder ≥ ${preset.holdersMin}`]);
+  }
+  if (preset.requireMintOff) {
+    checks.push([pool.mintAuthorityDisabled === true, "Mint authority off"]);
+  }
+  if (preset.requireBothTokenFees) {
+    checks.push([pool.feesInBothTokens === true, "Fee base + quote"]);
+  }
+  if (Number.isFinite(preset.maxSwapsPerTrader)) {
+    checks.push([
+      Number.isFinite(pool.swapsPerTrader) && pool.swapsPerTrader <= preset.maxSwapsPerTrader,
+      `Swap per trader ≤ ${preset.maxSwapsPerTrader}`,
     ]);
   }
 
@@ -334,6 +382,10 @@ export function normalizePool(raw, momentum = {}, analytics = {}, rugCheck = nul
     }))
     : null;
 
+  // Meteora collect_fee_mode: 0 accrues fees in both tokens, 1 in the quote
+  // only. Null when the pool config did not carry the field at all.
+  const collectFeeMode = optionalNumber(raw.pool_config?.collect_fee_mode);
+
   const normalized = {
     address: raw.address,
     name: raw.name,
@@ -361,9 +413,21 @@ export function normalizePool(raw, momentum = {}, analytics = {}, rugCheck = nul
     binStep: number(raw.pool_config?.bin_step),
     baseFeePct: number(raw.pool_config?.base_fee_pct),
     dynamicFeePct: number(raw.dynamic_fee_pct),
+    collectFeeMode,
+    feesInBothTokens: collectFeeMode === null ? null : collectFeeMode === 0,
+    // Only the discovery API reports mint authority, so this stays null when
+    // that call failed — a preset that requires it will fail closed.
+    mintAuthorityDisabled: typeof analyticsBaseToken?.has_mint_authority === "boolean"
+      ? !analyticsBaseToken.has_mint_authority
+      : null,
     totalLps: optionalNumber(analytics.total_lps),
     swaps1h: optionalNumber(analytics.swap_count),
     traders1h: optionalNumber(analytics.unique_traders),
+    // Wash-trade shape: real flow spreads across many wallets, a faked one
+    // bounces between a few. Null unless both counts arrived and are non-zero.
+    swapsPerTrader: number(analytics.swap_count) > 0 && number(analytics.unique_traders) > 0
+      ? number(analytics.swap_count) / number(analytics.unique_traders)
+      : null,
     top10HoldersPct: optionalNumber(analyticsBaseToken?.top_holders_pct),
     devBalancePct: optionalNumber(analyticsBaseToken?.dev_balance_pct),
     jupShieldWarnings,
@@ -378,6 +442,13 @@ export function normalizePool(raw, momentum = {}, analytics = {}, rugCheck = nul
     rugCheckRiskCount: rugCheckRisks?.length ?? null,
     rugCheckStatus: securityStatus(rugCheckRisks),
     rugCheckLpLockedPct: optionalNumber(rugCheck?.lpLockedPct),
+    // Connected wallet clusters — the Bubblemaps check in numbers. Null means
+    // the graph could not be read at all, which is different from a token that
+    // was read and has no clusters (0).
+    clusterLargestPct: optionalNumber(rugCheck?.clusters?.largestPct),
+    clusterLargestWallets: optionalNumber(rugCheck?.clusters?.largestWallets),
+    clusterCount: optionalNumber(rugCheck?.clusters?.count),
+    clusteredSupplyPct: optionalNumber(rugCheck?.clusters?.clusteredPct),
     currentPrice: number(raw.current_price),
     priceChange1h,
     sparkline: Array.isArray(momentum.sparkline) ? momentum.sparkline : [],
