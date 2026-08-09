@@ -2485,7 +2485,9 @@
 .fx-compare-head,
 .fx-compare-row {
   display: grid;
-  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, 1fr);
+  /* One label column plus one per preset — set by RulesView so adding a preset
+     never needs a CSS edit. */
+  grid-template-columns: minmax(0, 1.5fr) repeat(var(--fx-preset-count, 2), minmax(0, 1fr));
   gap: 1rem;
   padding: 0.5rem 0.75rem;
   align-items: center;

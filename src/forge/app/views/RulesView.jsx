@@ -86,7 +86,7 @@ export default function RulesView({ preset, onPreset }) {
             </div>
             <ShieldCheck />
           </header>
-          <div className="fx-compare">
+          <div className="fx-compare" style={{ "--fx-preset-count": Object.keys(PRESETS).length }}>
             <div className="fx-compare-head">
               <span>Aturan</span>
               {Object.values(PRESETS).map((item) => (
