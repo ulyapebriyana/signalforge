@@ -6,7 +6,8 @@ import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { appendSample, pruneStore, summarizeVelocity } from "../shared/feeVelocity.js";
 import { gmgnAuthQuery, normalizeGmgnToken } from "../shared/gmgn.js";
-import { normalizePool, PRESETS, resolvePresetId } from "../shared/scoring.js";
+import { normalizePool, poolTier, PRESETS, resolvePresetId } from "../shared/scoring.js";
+import { alertPresetsFor, cooldownKey, presetsCleared } from "../shared/alertRouting.js";
 import { collectSignalEntries } from "../shared/signalTransitions.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -479,16 +480,28 @@ const sendTelegram = async (text) => {
   return response.json();
 };
 
-const alertMessage = (pool, source = "manual") => [
-  `<b>SignalForge · ${escapeHtml(pool.status.toUpperCase())}</b>`,
-  `<b>${escapeHtml(pool.pair)}</b> · Score ${pool.score}/100 · Risk ${pool.risk}/100`,
-  `1h: <b>${pool.priceChange1h?.toFixed(1) ?? "—"}%</b>`,
-  `TVL: ${usd(pool.tvl)} · Vol 1h: ${usd(pool.volume1h)}`,
-  `Vol/TVL: ${pool.volumeTvl1h.toFixed(2)}x · Fee/TVL: ${pool.feeTvl1h.toFixed(2)}%`,
-  `MC: ${usd(pool.marketCap)} · Holder: ${pool.holders.toLocaleString("en-US")}`,
-  `<a href="https://www.meteora.ag/dlmm/${pool.address}">Buka pool di Meteora</a>`,
-  `<i>${source === "auto" ? "Alert otomatis" : "Dikirim manual"}; ini bukan rekomendasi finansial.</i>`,
-].join("\n");
+/**
+ * `presets` is the list a pool cleared. The tier in the header is read off the
+ * first of them rather than pool.status, because that field is computed on the
+ * default preset's ladder and would mislabel an alert fired by another.
+ */
+const alertMessage = (pool, source = "manual", presets = []) => {
+  const named = presets.length ? presets : [PRESETS[scannerPresetName]];
+  const tier = poolTier(pool.score, named[0]);
+  const labels = named.map((preset) => escapeHtml(preset.label)).join(" + ");
+
+  return [
+    `<b>SignalForge · ${escapeHtml(tier.toUpperCase())}</b>`,
+    `Preset: <b>${labels}</b>`,
+    `<b>${escapeHtml(pool.pair)}</b> · Score ${pool.score}/100 · Risk ${pool.risk}/100`,
+    `1h: <b>${pool.priceChange1h?.toFixed(1) ?? "—"}%</b>`,
+    `TVL: ${usd(pool.tvl)} · Vol 1h: ${usd(pool.volume1h)}`,
+    `Vol/TVL: ${pool.volumeTvl1h.toFixed(2)}x · Fee/TVL: ${pool.feeTvl1h.toFixed(2)}%`,
+    `MC: ${usd(pool.marketCap)} · Holder: ${pool.holders.toLocaleString("en-US")}`,
+    `<a href="https://www.meteora.ag/dlmm/${pool.address}">Buka pool di Meteora</a>`,
+    `<i>${source === "auto" ? "Alert otomatis" : "Dikirim manual"}; ini bukan rekomendasi finansial.</i>`,
+  ].join("\n");
+};
 
 const recordSignal = (pool, source, delivered, details = {}) => {
   signalHistory = [{
@@ -520,9 +533,9 @@ const recordDetectedSignals = (pools) => {
   }
 
   for (const { pool, status, previousStatus } of entries) {
-    const cooldownKey = `${pool.address}:${status}`;
-    if (Date.now() - (detectionCooldowns.get(cooldownKey) || 0) < cooldownMs) continue;
-    detectionCooldowns.set(cooldownKey, Date.now());
+    const detectionKey = `${pool.address}:${status}`;
+    if (Date.now() - (detectionCooldowns.get(detectionKey) || 0) < cooldownMs) continue;
+    detectionCooldowns.set(detectionKey, Date.now());
     recordSignal(pool, "scanner", null, { eventType: "status-entry", previousStatus });
   }
 
@@ -585,8 +598,9 @@ app.post("/api/telegram/alert", async (request, response) => {
     const address = String(request.body?.address || "");
     const pool = await findPool(address);
     if (!pool) return response.status(404).json({ error: "Pool tidak ditemukan di hasil scan terbaru" });
-    await sendTelegram(alertMessage(pool));
-    recordSignal(pool, "manual", true);
+    const cleared = presetsCleared(pool);
+    await sendTelegram(alertMessage(pool, "manual", cleared));
+    recordSignal(pool, "manual", true, { presets: cleared.map((preset) => preset.id) });
     return response.json({ ok: true });
   } catch (error) {
     return response.status(400).json({ error: error instanceof Error ? error.message : "Alert gagal" });
@@ -597,27 +611,39 @@ const runAlertScan = async () => {
   if (process.env.ENABLE_ALERTS !== "true" || !telegramConfigured()) return;
   try {
     const payload = await loadPools({ force: true });
-    const presetName = scannerPresetName;
-    const preset = PRESETS[presetName];
-    const minScore = Number(process.env.ALERT_MIN_SCORE || preset.minScore);
-    const maxRisk = Number(process.env.ALERT_MAX_RISK || preset.maxRisk);
-    const cooldownMs = Number(process.env.ALERT_COOLDOWN_MINUTES || preset.cooldownMinutes) * 60_000;
+    const now = Date.now();
 
     for (const pool of payload.data) {
-      if (!pool.qualifies[presetName].passed || pool.score < minScore || pool.risk > maxRisk) continue;
-      if (Date.now() - (alertCooldowns.get(pool.address) || 0) < cooldownMs) continue;
+      // A pool that clears several screens gets one message naming all of them,
+      // not one message per preset — the same alert twice reads as a bug.
+      const presets = alertPresetsFor(pool, alertCooldowns, now);
+      if (!presets.length) continue;
+
+      const ids = presets.map((preset) => preset.id);
       try {
-        await sendTelegram(alertMessage(pool, "auto"));
-        alertCooldowns.set(pool.address, Date.now());
-        recordSignal(pool, "auto", true);
+        await sendTelegram(alertMessage(pool, "auto", presets));
+        for (const preset of presets) alertCooldowns.set(cooldownKey(pool.address, preset.id), now);
+        recordSignal(pool, "auto", true, { presets: ids });
       } catch {
-        recordSignal(pool, "auto", false);
+        recordSignal(pool, "auto", false, { presets: ids });
       }
     }
   } catch {
     // The dashboard status communicates upstream failures; the loop retries next interval.
   }
 };
+
+// These were a single-preset knob. Alerts are now per preset, each with its own
+// calibrated floor, so a shared override would silence whole presets instead of
+// tuning them — ALERT_MIN_SCORE=65 alone would mute Auzhinta-like entirely.
+const LEGACY_ALERT_VARS = ["ALERT_MIN_SCORE", "ALERT_MAX_RISK", "ALERT_COOLDOWN_MINUTES"];
+const strandedAlertVars = LEGACY_ALERT_VARS.filter((name) => process.env[name]);
+if (strandedAlertVars.length) {
+  console.warn(
+    `Ignoring ${strandedAlertVars.join(", ")}: alert thresholds now come from each preset. ` +
+    "Remove them from .env to silence this warning.",
+  );
+}
 
 let vite;
 await Promise.all([hydrateHistory(), hydrateFeeVelocity()]);

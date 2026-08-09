@@ -60,8 +60,18 @@ npm start
 1. Salin `.env.example` menjadi `.env`.
 2. Isi `TELEGRAM_BOT_TOKEN` dan `TELEGRAM_CHAT_ID`.
 3. Untuk alert otomatis, ubah `ENABLE_ALERTS=true`.
-4. Pilih `SCANNER_PRESET=yanman`, `auzhinta`, atau `swanny`.
-5. Restart aplikasi dan klik **Telegram → Kirim pesan tes**.
+4. Restart aplikasi dan klik **Telegram → Kirim pesan tes**.
+
+Alert Telegram berjalan untuk **semua preset sekaligus**, masing-masing dengan ambang skor,
+batas risiko, dan cooldown-nya sendiri. Setiap pesan menyebut preset mana yang meloloskannya;
+kalau satu pool lolos beberapa preset, dikirim satu pesan yang menyebut semuanya, bukan pesan
+berulang.
+
+`SCANNER_PRESET` kini hanya menentukan preset untuk deteksi status di UI (bunyi dan lonceng),
+bukan alert. `ALERT_MIN_SCORE`, `ALERT_MAX_RISK`, dan `ALERT_COOLDOWN_MINUTES` sudah tidak
+dipakai — satu ambang global akan membungkam preset yang ladder-nya lebih rendah, misalnya
+`ALERT_MIN_SCORE=65` yang mematikan Auzhinta-like sepenuhnya. Server memperingatkan di log kalau
+ketiganya masih ada di `.env`.
 
 Token Telegram hanya dibaca oleh server. Browser tidak pernah menerima nilainya.
 
