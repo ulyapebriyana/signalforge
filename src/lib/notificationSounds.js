@@ -19,6 +19,7 @@ export const NOTIFICATION_SOUND_OPTIONS = [
 export const PRESET_DEFAULT_SOUND = Object.freeze({
   yanman: "fight",
   auzhinta: "jokowi",
+  swanny: "profit",
 });
 
 const isPlayable = (choice) => choice === NOTIFICATION_SOUND_OFF || Boolean(NOTIFICATION_SOUNDS[choice]);

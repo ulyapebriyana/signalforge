@@ -3,7 +3,9 @@ import express from "express";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { randomUUID } from "node:crypto";
 import { appendSample, pruneStore, summarizeVelocity } from "../shared/feeVelocity.js";
+import { gmgnAuthQuery, normalizeGmgnToken } from "../shared/gmgn.js";
 import { normalizePool, PRESETS, resolvePresetId } from "../shared/scoring.js";
 import { collectSignalEntries } from "../shared/signalTransitions.js";
 
@@ -16,6 +18,8 @@ const scannerPresetName = resolvePresetId(process.env.SCANNER_PRESET);
 const dataApi = "https://dlmm.datapi.meteora.ag";
 const poolDiscoveryApi = "https://pool-discovery-api.datapi.meteora.ag";
 const rugCheckApi = "https://api.rugcheck.xyz";
+const gmgnApi = "https://openapi.gmgn.ai";
+const gmgnCacheTtlMs = Math.max(5, Number(process.env.GMGN_CACHE_MINUTES || 10)) * 60_000;
 const rugCheckCacheTtlMs = Math.max(5, Number(process.env.RUGCHECK_CACHE_MINUTES || 15)) * 60_000;
 const rugCheckFailureTtlMs = 2 * 60_000;
 
@@ -30,6 +34,7 @@ const alertCooldowns = new Map();
 const detectionCooldowns = new Map();
 const rugCheckCache = new Map();
 const rugCheckClusterCache = new Map();
+const gmgnCache = new Map();
 let detectionStatuses = new Map();
 let detectionInitialized = false;
 const historyFile = path.join(projectRoot, "data", "signal-history.json");
@@ -257,6 +262,59 @@ const fetchRugCheckClusters = async (mint) => {
   }
 };
 
+/**
+ * GMGN token intel — snipers, bundlers, insiders, phishing share.
+ *
+ * These are the rows the Swanny-like rubric screens on that no other source we
+ * call reports. Auth is an X-APIKEY header plus a timestamp and a per-request
+ * UUID in the query; the server allows ±5s of clock drift and rejects replays
+ * within 7s. Signing with the private key is only required for swap routes,
+ * which this project never touches — the key is created read-only.
+ *
+ * Optional by design: with no GMGN_API_KEY the fields come back null and the
+ * Swanny-like preset simply fails its GMGN rows, which is the same fail-closed
+ * behaviour every other unreadable metric already has.
+ */
+const gmgnConfigured = () => Boolean(process.env.GMGN_API_KEY);
+
+const GMGN_SPACING_MS = 120;
+let gmgnQueue = Promise.resolve();
+
+const fetchGmgnToken = async (mint) => {
+  if (!gmgnConfigured()) return null;
+  const cached = gmgnCache.get(mint);
+  if (cached && cached.expiresAt > Date.now()) return cached.data;
+
+  const run = gmgnQueue.then(async () => {
+    await new Promise((resolve) => setTimeout(resolve, GMGN_SPACING_MS));
+    const query = new URLSearchParams({
+      address: mint,
+      chain: "sol",
+      ...gmgnAuthQuery(randomUUID),
+    });
+    return fetchJson(`${gmgnApi}/v1/token/info?${query}`, {
+      timeoutMs: 8_000,
+      headers: { "X-APIKEY": process.env.GMGN_API_KEY },
+    });
+  });
+  gmgnQueue = run.then(() => undefined, () => undefined);
+
+  try {
+    const data = normalizeGmgnToken(await run);
+    gmgnCache.set(mint, { data, expiresAt: Date.now() + jitteredTtl(gmgnCacheTtlMs) });
+    return data;
+  } catch {
+    gmgnCache.set(mint, { data: null, expiresAt: Date.now() + rugCheckFailureTtlMs });
+    return null;
+  }
+};
+
+const fetchGmgnTokens = async (mints) => {
+  const uniqueMints = [...new Set(mints.filter(Boolean))];
+  const entries = await mapConcurrent(uniqueMints, 4, async (mint) => [mint, await fetchGmgnToken(mint)]);
+  return new Map(entries);
+};
+
 const fetchRugCheckSummaries = async (mints) => {
   const uniqueMints = [...new Set(mints.filter(Boolean))];
   const entries = await mapConcurrent(uniqueMints, 4, async (mint) => {
@@ -347,10 +405,11 @@ const loadPools = async ({ force = false } = {}) => {
       )
       .slice(0, 48);
 
-    const [momentumByPool, analyticsByPool, rugCheckByMint] = await Promise.all([
+    const [momentumByPool, analyticsByPool, rugCheckByMint, gmgnByMint] = await Promise.all([
       mapConcurrent(candidates, 6, async ({ raw }) => [raw.address, await fetchMomentum(raw.address)]),
       fetchPoolAnalytics(candidates.map(({ raw }) => raw.address)),
       fetchRugCheckSummaries(candidates.map(({ normalized }) => normalized.baseAddress)),
+      fetchGmgnTokens(candidates.map(({ normalized }) => normalized.baseAddress)),
     ]);
     const momentumMap = new Map(momentumByPool);
     const scoredAt = Date.now();
@@ -360,6 +419,7 @@ const loadPools = async ({ force = false } = {}) => {
         momentumMap.get(raw.address),
         analyticsByPool.get(raw.address),
         rugCheckByMint.get(normalized.baseAddress),
+        gmgnByMint.get(normalized.baseAddress),
       ))),
       scoredAt,
     );
@@ -493,6 +553,7 @@ app.get("/api/status", (_request, response) => {
     autoAlertsEnabled: process.env.ENABLE_ALERTS === "true",
     scanIntervalSeconds,
     preset: scannerPresetName,
+    gmgnConfigured: gmgnConfigured(),
     historyPersistent: true,
   });
 });

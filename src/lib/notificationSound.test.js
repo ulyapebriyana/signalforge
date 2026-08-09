@@ -43,6 +43,7 @@ describe("per-preset notification sound", () => {
     expect(resolveNotificationSoundMap(null, null, null, null)).toEqual({
       yanman: "fight",
       auzhinta: "jokowi",
+      swanny: "profit",
     });
   });
 
@@ -51,6 +52,7 @@ describe("per-preset notification sound", () => {
     expect(resolveNotificationSoundMap(saved, null, null, null)).toEqual({
       yanman: "profit",
       auzhinta: NOTIFICATION_SOUND_OFF,
+      swanny: "profit",
     });
   });
 
@@ -60,6 +62,7 @@ describe("per-preset notification sound", () => {
     expect(resolveNotificationSoundMap(null, "profit", "true", null)).toEqual({
       yanman: "profit",
       auzhinta: "jokowi",
+      swanny: "profit",
     });
   });
 
@@ -67,6 +70,7 @@ describe("per-preset notification sound", () => {
     expect(resolveNotificationSoundMap(null, null, "false", null)).toEqual({
       yanman: NOTIFICATION_SOUND_OFF,
       auzhinta: NOTIFICATION_SOUND_OFF,
+      swanny: NOTIFICATION_SOUND_OFF,
     });
   });
 
@@ -75,6 +79,7 @@ describe("per-preset notification sound", () => {
     expect(resolveNotificationSoundMap(saved, null, null, null)).toEqual({
       yanman: "jokowi",
       auzhinta: "fight",
+      swanny: "profit",
     });
   });
 
@@ -82,10 +87,12 @@ describe("per-preset notification sound", () => {
     expect(resolveNotificationSoundMap("{not json", null, null, null)).toEqual({
       yanman: "fight",
       auzhinta: "jokowi",
+      swanny: "profit",
     });
     expect(resolveNotificationSoundMap(JSON.stringify({ yanman: "bogus" }), null, null, null)).toEqual({
       yanman: "fight",
       auzhinta: "jokowi",
+      swanny: "profit",
     });
   });
 

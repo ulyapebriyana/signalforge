@@ -23,6 +23,7 @@ const GATE_ROWS = [
   ["Mint authority", (p) => (p.requireMintOff ? "Wajib mati" : NONE)],
   ["Swap per trader maksimum", (p) => (p.maxSwapsPerTrader ? `${p.maxSwapsPerTrader}x` : NONE)],
   ["Umur pool maksimum", (p) => (p.ageHoursMax ? `${p.ageHoursMax} jam` : NONE)],
+  ["Rubrik screening", (p) => (p.rubric ? `${p.rubric.length} metrik, tolak merah` : NONE)],
   ["Skor minimum", (p) => String(p.minScore)],
   ["Risiko maksimum", (p) => String(p.maxRisk)],
   ["Freeze authority", (p) => (p.requireFreezeOff ? "Wajib mati" : "Opsional")],
@@ -81,7 +82,7 @@ export default function RulesView({ preset, onPreset }) {
           <header className="fx-panel-head">
             <div>
               <span className="f-eyebrow">Perbandingan gate</span>
-              <h2>Dua preset berdampingan</h2>
+              <h2>Tiga preset berdampingan</h2>
             </div>
             <ShieldCheck />
           </header>
@@ -107,11 +108,11 @@ export default function RulesView({ preset, onPreset }) {
             ))}
           </div>
           <p className="fx-panel-note">
-            “Auzhinta-like” menyalin rig yang dia posting terbuka: bin step 80–125, base fee 2–3%,
-            pool baru, dan fee/TVL yang masih deras. Batas momentumnya sengaja negatif — range
-            bid-ask selebar itu tetap memanen fee saat harga turun, jadi yang wajib benar adalah
-            pool-nya masih membayar, bukan arah harganya. Ini rekonstruksi dari cuitan publik, bukan
-            strategi milik orang tersebut, dan gate-nya jauh lebih longgar soal risiko.
+            Ketiganya rekonstruksi dari materi yang dibagikan terbuka, bukan strategi milik orang
+            tersebut. “Auzhinta-like” menyalin satu rig dan menuntut pool-nya masih membayar.
+            “Swanny-like” bukan cara membuka posisi sama sekali — itu pre-filter yang menjawab apakah
+            sebuah token layak diriset, dan menilai umur token terbalik dari Auzhinta-like: makin tua
+            makin aman. Gate rubriknya menolak merah dan menerima kuning.
           </p>
         </section>
 

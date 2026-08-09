@@ -26,7 +26,7 @@ Pemilihan bundel terjadi di `src/main.jsx` sebelum salah satu stylesheet dimuat,
 
 - Scan 250 pool dari API resmi Meteora setiap 30 detik.
 - Ambil candle 1 jam untuk maksimal 48 kandidat secara paralel.
-- Preset **Yanman-like** dan **Auzhinta-like** dengan aturan yang transparan.
+- Preset **Yanman-like**, **Auzhinta-like**, dan **Swanny-like** dengan aturan yang transparan.
 - Score 0–100: momentum 25, fee efficiency 25, volume quality 20, security 20, freshness 10.
 - **Kecepatan fee**: fee/TVL direkam tiap scan, lalu dibandingkan dengan puncaknya dalam jendela 45 menit.
 - Notifikasi berbunyi **berbeda per preset**, jadi bunyinya sendiri sudah memberi tahu gate mana yang lolos.
@@ -60,36 +60,36 @@ npm start
 1. Salin `.env.example` menjadi `.env`.
 2. Isi `TELEGRAM_BOT_TOKEN` dan `TELEGRAM_CHAT_ID`.
 3. Untuk alert otomatis, ubah `ENABLE_ALERTS=true`.
-4. Pilih `SCANNER_PRESET=yanman` atau `SCANNER_PRESET=auzhinta`.
+4. Pilih `SCANNER_PRESET=yanman`, `auzhinta`, atau `swanny`.
 5. Restart aplikasi dan klik **Telegram → Kirim pesan tes**.
 
 Token Telegram hanya dibaca oleh server. Browser tidak pernah menerima nilainya.
 
 ## Arti preset
 
-| Aturan | Yanman-like | Auzhinta-like |
-| --- | ---: | ---: |
-| Market cap | $100K–$10M | $400K–$15M |
-| TVL minimum | $500 | $35K |
-| Momentum 1h | 20–200% | 0–400% |
-| Volume 1h minimum | $5K | $10K |
-| Vol/TVL minimum | 0.5x | 0.3x |
-| Fee/TVL minimum | 0.5% | 1.0% |
-| Bin step | — | 50–400 |
-| Base fee minimum | — | 2% |
-| Mode fee | — | Base + quote |
-| Cluster terbesar maksimum | — | 40% |
-| Top-10 holder maksimum | — | 40% |
-| Saldo dev maksimum | — | 1% |
-| Holder minimum | — | 500 |
-| Mint authority | — | Wajib off |
-| Swap per trader maksimum | — | 6x |
-| Umur pool maksimum | — | 72 jam |
-| Ambang Hot / Watch | 80 / 65 | 60 / 48 |
-| Freeze authority | Wajib off | Wajib off |
-| Cooldown alert | 15 menit | 10 menit |
+| Aturan | Yanman-like | Auzhinta-like | Swanny-like |
+| --- | ---: | ---: | ---: |
+| Market cap | $100K–$10M | $400K–$15M | $100K–$15M |
+| TVL minimum | $500 | $35K | $500 |
+| Momentum 1h | 20–200% | 0–400% | bebas |
+| Volume 1h minimum | $5K | $10K | $1K |
+| Fee/TVL minimum | 0.5% | 1.0% | — |
+| Bin step | — | 50–400 | — |
+| Base fee minimum | — | 2% | — |
+| Mode fee | — | Base + quote | — |
+| Cluster terbesar maksimum | — | 40% | — |
+| Top-10 holder maksimum | — | 40% | rubrik |
+| Saldo dev maksimum | — | 1% | rubrik |
+| Holder minimum | — | 500 | — |
+| Mint authority | — | Wajib off | Wajib off |
+| Umur pool maksimum | — | 72 jam | — |
+| Umur **token** minimum | — | — | rubrik (≥24 jam) |
+| Rubrik screening | — | — | 12 metrik, tolak merah |
+| Ambang Hot / Watch | 80 / 65 | 60 / 48 | 80 / 65 |
+| Freeze authority | Wajib off | Wajib off | Wajib off |
+| Cooldown alert | 15 menit | 10 menit | 20 menit |
 
-Keduanya rekonstruksi dari filter yang pernah dibagikan terbuka, bukan klaim bahwa ini strategi
+Ketiganya rekonstruksi dari materi yang pernah dibagikan terbuka, bukan klaim bahwa ini strategi
 persis milik orang tersebut.
 
 **Yanman-like** agresif dan dapat memasukkan pool dengan likuiditas sangat tipis.
@@ -137,9 +137,12 @@ berarti bersih. Daftar cluster kosong adalah jawaban sungguhan dan bernilai 0, b
 
 Yang **tidak** dijadikan gate meski disebut di artikel: LP burnt 100%, karena pool yang benar-benar
 dia garap (BUTTHOLE) tercatat LP terkunci 0% — “idealnya” di artikel jelas aspirasi, bukan syarat.
-Snipers, insiders, bundler, dan Dex Paid juga tidak ada di API mana pun yang dipakai proyek ini.
-Jalur “Top Performance / Trending” untuk token yang lebih established sengaja tidak dicakup: semua
-posisi yang pernah dia posting berumur di bawah 48 jam.
+Jalur “Top Performance / Trending” untuk token yang lebih established juga sengaja tidak dicakup:
+semua posisi yang pernah dia posting berumur di bawah 48 jam.
+
+Snipers, insiders, bundler, dan Dex Paid dari checklist artikel itu kini **tersedia** lewat GMGN dan
+dipakai oleh preset Swanny-like di bawah, tapi sengaja tidak ditambahkan ke Auzhinta-like: artikelnya
+menyebut angka-angka itu sebagai pengecekan manual di GMGN, tanpa ambang yang bisa dikutip.
 
 ### Pool terbaik per token
 
@@ -179,6 +182,57 @@ dan alasan kedua angka itu ditampilkan berdampingan.
 
 Riwayatnya bertahan melewati restart, jadi posisi yang sedang berjalan tidak kehilangan jejak
 peluruhannya.
+
+## Swanny-like — pre-filter, bukan cara membuka posisi
+
+Dua preset lain menjelaskan **cara masuk pool**. Yang ini hanya menjawab satu pertanyaan:
+apakah token ini layak diriset sama sekali. Sumbernya rubrik ambang di DLMM Checker
+(`dlmmchecker.vercel.app`), tool yang penulisnya pakai sebelum meneliti token apa pun.
+
+Rubriknya mewarnai 12 metrik hijau / kuning / merah, bukan lolos / gagal. Bentuk itu
+dipertahankan: **gate menolak merah dan menerima kuning**, sesuai cara tool-nya dibaca.
+Warnanya tampil di panel “Rubrik screening” pada detail pool untuk **semua** preset, karena
+pertanyaan “layak diriset atau tidak” tidak bergantung pada play yang kamu jalankan.
+
+| Metrik | 🟢 | 🟡 | Sumber |
+| --- | ---: | ---: | --- |
+| RugCheck score | ≤ 14 | ≤ 25 | RugCheck |
+| Organic score | ≥ 80 | ≥ 50 | Jupiter |
+| Market cap | ≥ $500K | ≥ $100K | Meteora |
+| Umur token | ≥ 168 jam | ≥ 24 jam | Meteora discovery |
+| Top-10 holder | ≤ 15% | ≤ 30% | Meteora discovery |
+| Saldo dev | ≤ 5% | ≤ 15% | Meteora discovery |
+| Sniper % | ≤ 2% | ≤ 5% | GMGN |
+| Jumlah sniper | ≤ 5 | ≤ 15 | GMGN |
+| Insider | ≤ 5% | ≤ 12% | GMGN |
+| Bundler | ≤ 5% | ≤ 12% | GMGN |
+| Phishing | ≤ 2% | ≤ 8% | GMGN |
+| Total fee | ≥ 100 SOL | ≥ 20 SOL | GMGN |
+
+**Umur token dinilai terbalik dari Auzhinta-like.** Di sini makin tua makin aman (≥7 hari
+hijau); di sana pool makin segar makin baik (≤72 jam). Dua metrik berbeda — umur *token* vs
+umur *pool* — dan keduanya memang berlawanan arah. `tokenAgeHours` ditambahkan berdampingan
+dengan `ageHours`, bukan menggantikannya.
+
+Dua baris dari tool aslinya sengaja tidak dipakai: “GMGN Top 10 Holders” menduplikasi
+“Top Holders” dari sumber kedua, dan “GMGN Total Fees” ambangnya (1 / 0.2) tidak cocok dengan
+satuan yang dikembalikan API.
+
+Presetnya **ketat**. Pada populasi 48 pool teratas by volume, median phishing 37,5% dan median
+bundler 38,8% — jauh di atas batas merah 8% dan 12%. Nol pool lolos itu jawaban yang wajar,
+bukan tanda rusak: pemiliknya sendiri bilang sebagian hari berarti nol posisi.
+
+### GMGN
+
+Enam baris di atas butuh `GMGN_API_KEY`. Tanpa key, baris itu bernilai null, ditandai abu-abu di
+panel rubrik, dan gagal-tertutup di gate — jadi Swanny-like praktis tidak akan meloloskan apa pun.
+Preset lain tidak terpengaruh sama sekali.
+
+Key didapat di <https://gmgn.ai/ai>: buat key pair Ed25519 lokal, upload **public**-nya, aktifkan
+**Reading** saja. Trading butuh 2FA plus tanda tangan private key dan tidak pernah dipakai proyek
+ini. Autentikasinya header `X-APIKEY` plus `timestamp` dan `client_id` di query; server GMGN
+menoleransi selisih jam ±5 detik. Batas lajunya longgar (~3 panggilan/detik terukur), tapi
+permintaan tetap diantre satu jalur seperti RugCheck.
 
 ## Catatan risiko
 

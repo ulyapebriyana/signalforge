@@ -1442,6 +1442,110 @@
   color: var(--f-scorch);
 }
 
+/* Swanny rubric: twelve metrics painted, not just the failures. */
+.fx-rubric {
+  display: grid;
+  gap: 10px;
+}
+
+.fx-rubric-tally {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--f-mono);
+  font-size: 12px;
+  color: var(--f-ash);
+}
+
+.fx-rubric-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-left: 8px;
+}
+
+.fx-rubric-dot:first-child {
+  margin-left: 0;
+}
+
+.fx-rubric-dot--green {
+  background: var(--f-quench);
+}
+
+.fx-rubric-dot--yellow {
+  background: var(--f-caution);
+}
+
+.fx-rubric-dot--red {
+  background: var(--f-scorch);
+}
+
+.fx-rubric-dot--unknown {
+  background: var(--f-faint);
+}
+
+.fx-rubric-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  background: var(--f-line);
+  border: 1px solid var(--f-line);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.fx-rubric-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 9px;
+  background: var(--f-raised);
+  border-left: 2px solid transparent;
+  font-size: 12px;
+}
+
+.fx-rubric-row > span {
+  color: var(--f-slag);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fx-rubric-row--green {
+  border-left-color: var(--f-quench);
+}
+
+.fx-rubric-row--green strong {
+  color: var(--f-quench);
+}
+
+.fx-rubric-row--yellow {
+  border-left-color: var(--f-caution);
+}
+
+.fx-rubric-row--yellow strong {
+  color: var(--f-caution);
+}
+
+.fx-rubric-row--red {
+  border-left-color: var(--f-scorch);
+}
+
+.fx-rubric-row--red strong {
+  color: var(--f-scorch);
+}
+
+.fx-rubric-row--unknown strong {
+  color: var(--f-faint);
+}
+
+@media (max-width: 520px) {
+  .fx-rubric-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .fx-sibling-warning {
   display: flex;
   gap: 10px;

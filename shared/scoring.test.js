@@ -48,6 +48,30 @@ const auzhintaPool = {
   ageHours: 33.4,
 };
 
+// A token that clears every row of the Swanny-like rubric.
+const swannyPool = {
+  marketCap: 900_000,
+  tvl: 40_000,
+  priceChange1h: 4,
+  volume1h: 20_000,
+  volumeTvl1h: 0.5,
+  feeTvl1h: 0.8,
+  isBlacklisted: false,
+  freezeAuthorityDisabled: true,
+  mintAuthorityDisabled: true,
+  rugCheckScore: 8,
+  organicScore: 88,
+  tokenAgeHours: 400,
+  top10HoldersPct: 12,
+  devBalancePct: 0,
+  gmgnSniperPct: 0.5,
+  gmgnSniperWallets: 3,
+  gmgnInsidersPct: 0.2,
+  gmgnBundlerPct: 2.1,
+  gmgnPhishingPct: 1.4,
+  gmgnTotalFeesSol: 250,
+};
+
 describe("SignalForge scoring", () => {
   it("scores a healthy momentum pool above the watch threshold", () => {
     expect(calculateScore(healthyPool).total).toBeGreaterThanOrEqual(65);
@@ -163,6 +187,60 @@ describe("SignalForge scoring", () => {
     const unknown = { ...auzhintaPool, top10HoldersPct: null, devBalancePct: null };
     const { misses } = evaluatePreset(unknown, PRESETS.auzhinta);
     expect(misses).toEqual(expect.arrayContaining(["Top-10 holder ≤ 40%", "Saldo dev ≤ 1%"]));
+  });
+
+  it("passes a clean token through the Swanny-like screen", () => {
+    expect(evaluatePreset(swannyPool, PRESETS.swanny).passed).toBe(true);
+  });
+
+  it("tolerates yellow but rejects red", () => {
+    // Top-10 at 22% is yellow in the rubric and must not fail the screen.
+    expect(evaluatePreset({ ...swannyPool, top10HoldersPct: 22 }, PRESETS.swanny).passed).toBe(true);
+    // 31% crosses into red.
+    expect(evaluatePreset({ ...swannyPool, top10HoldersPct: 31 }, PRESETS.swanny).misses)
+      .toContain("Top-10 holder tidak merah");
+  });
+
+  it("fails every GMGN row when no key is configured", () => {
+    // emptyGmgnFields leaves them null, and unknown is not clean.
+    const noKey = { ...swannyPool, gmgnSniperWallets: null, gmgnSniperPct: null, gmgnInsidersPct: null,
+      gmgnBundlerPct: null, gmgnPhishingPct: null, gmgnTotalFeesSol: null };
+    const { misses } = evaluatePreset(noKey, PRESETS.swanny);
+    expect(misses).toEqual(expect.arrayContaining([
+      "Sniper tidak merah", "Jumlah sniper tidak merah", "Insider tidak merah",
+      "Bundler tidak merah", "Phishing tidak merah", "Total fee tidak merah",
+    ]));
+  });
+
+  it("catches the sniper and phishing shapes the rubric exists for", () => {
+    expect(evaluatePreset({ ...swannyPool, gmgnSniperWallets: 22 }, PRESETS.swanny).misses)
+      .toContain("Jumlah sniper tidak merah");
+    expect(evaluatePreset({ ...swannyPool, gmgnPhishingPct: 65.1 }, PRESETS.swanny).misses)
+      .toContain("Phishing tidak merah");
+  });
+
+  it("judges token age opposite to how Auzhinta-like judges pool age", () => {
+    // A six-hour-old token is red for Swanny-like and irrelevant to the other,
+    // which cares about the pool being fresh instead.
+    const brandNew = { ...swannyPool, tokenAgeHours: 6 };
+    expect(evaluatePreset(brandNew, PRESETS.swanny).misses).toContain("Umur token tidak merah");
+    expect(evaluatePreset({ ...auzhintaPool, ageHours: 6 }, PRESETS.auzhinta).passed).toBe(true);
+  });
+
+  it("reports a gate result for every preset that exists", () => {
+    const normalized = normalizePool({
+      address: "pool",
+      token_x: { address: "token", symbol: "TOKEN" },
+      token_y: { address: "sol", symbol: "SOL" },
+      volume: {}, fees: {}, protocol_fees: {}, fee_tvl_ratio: {}, pool_config: {},
+    });
+    expect(Object.keys(normalized.qualifies).sort()).toEqual(Object.keys(PRESETS).sort());
+  });
+
+  it("leaves the other presets untouched by the rubric gate", () => {
+    expect(PRESETS.yanman.rubric).toBeUndefined();
+    expect(PRESETS.auzhinta.rubric).toBeUndefined();
+    expect(evaluatePreset(healthyPool, PRESETS.yanman).passed).toBe(true);
   });
 
   it("reads the Hot/Watch ladder off the active preset", () => {

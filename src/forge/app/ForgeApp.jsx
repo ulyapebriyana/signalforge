@@ -727,6 +727,7 @@ export default function ForgeApp({ path }) {
       </main>
 
       <PoolDrawer
+        gmgnConfigured={Boolean(status?.gmgnConfigured)}
         pool={selected}
         preset={preset}
         onClose={() => setSelectedAddress(null)}

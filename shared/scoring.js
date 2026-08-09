@@ -1,3 +1,6 @@
+import { emptyGmgnFields } from "./gmgn.js";
+import { bandOf, SWANNY_RUBRIC } from "./swannyRubric.js";
+
 export const PRESETS = Object.freeze({
   yanman: {
     id: "yanman",
@@ -96,6 +99,44 @@ export const PRESETS = Object.freeze({
     watchScore: 48,
     earlyScore: 38,
     cooldownMinutes: 10,
+  },
+  // Modelled on @SwannyDeFi's DLMM Checker, the pre-filter every token is put
+  // through before it earns any research time. It is a screen, not a play:
+  // where the other two presets describe a way to open a position, this one
+  // only answers whether a token is worth looking at at all.
+  //
+  // That difference shows in the shape. The rubric it comes from paints twelve
+  // metrics green / yellow / red rather than passing or failing them, so the
+  // gate here rejects red and tolerates yellow — the way the tool is actually
+  // read. The pool-level checks below are deliberately loose: the rubric says
+  // nothing about bin step, fee tier, or volume, and inventing limits it never
+  // states would misrepresent it.
+  swanny: {
+    id: "swanny",
+    label: "Swanny-like",
+    // Mirrors the rubric's own red line for market cap rather than adding a
+    // second, different one.
+    marketCapMin: 100_000,
+    marketCapMax: 15_000_000,
+    tvlMin: 500,
+    momentumMin: -95,
+    momentumMax: 2_000,
+    volume1hMin: 1_000,
+    volumeTvlMin: 0,
+    feeTvlMin: 0,
+    requireFreezeOff: true,
+    requireMintOff: true,
+    // The twelve-row rubric, evaluated as bands. See shared/swannyRubric.js.
+    rubric: SWANNY_RUBRIC,
+    maxRisk: 100,
+    // Screening quality and confidence score are different questions, and this
+    // preset only answers the first. The ladder therefore stays on the shared
+    // default rather than pretending the rubric produces a score.
+    minScore: 50,
+    hotScore: 80,
+    watchScore: 65,
+    earlyScore: 50,
+    cooldownMinutes: 20,
   },
 });
 
@@ -341,6 +382,14 @@ export function evaluatePreset(pool, presetInput) {
   if (preset.requireBothTokenFees) {
     checks.push([pool.feesInBothTokens === true, "Fee base + quote"]);
   }
+  if (Array.isArray(preset.rubric)) {
+    // Reject red, tolerate yellow — how the source tool is read in practice.
+    // Unknown counts as red: an unread metric is not a clean one.
+    for (const spec of preset.rubric) {
+      const tier = bandOf(pool[spec.key], spec);
+      checks.push([tier === "green" || tier === "yellow", `${spec.label} tidak merah`]);
+    }
+  }
   if (Number.isFinite(preset.maxSwapsPerTrader)) {
     checks.push([
       Number.isFinite(pool.swapsPerTrader) && pool.swapsPerTrader <= preset.maxSwapsPerTrader,
@@ -352,7 +401,7 @@ export function evaluatePreset(pool, presetInput) {
   return { passed: misses.length === 0, misses };
 }
 
-export function normalizePool(raw, momentum = {}, analytics = {}, rugCheck = null) {
+export function normalizePool(raw, momentum = {}, analytics = {}, rugCheck = null, gmgn = null) {
   const { base, quote } = chooseTokens(raw.token_x, raw.token_y);
   const analyticsBaseToken = [analytics.token_x, analytics.token_y]
     .find((token) => token?.address === base.address);
@@ -449,6 +498,12 @@ export function normalizePool(raw, momentum = {}, analytics = {}, rugCheck = nul
     clusterLargestWallets: optionalNumber(rugCheck?.clusters?.largestWallets),
     clusterCount: optionalNumber(rugCheck?.clusters?.count),
     clusteredSupplyPct: optionalNumber(rugCheck?.clusters?.clusteredPct),
+    // Age of the token itself, distinct from ageHours which is the pool's. A
+    // fresh pool on a year-old token is routine, and the two presets disagree
+    // about which one matters, so both are carried.
+    tokenAgeHours: ageHoursFrom(analyticsBaseToken?.created_at),
+    ...emptyGmgnFields(),
+    ...(gmgn || {}),
     currentPrice: number(raw.current_price),
     priceChange1h,
     sparkline: Array.isArray(momentum.sparkline) ? momentum.sparkline : [],
@@ -467,9 +522,10 @@ export function normalizePool(raw, momentum = {}, analytics = {}, rugCheck = nul
     risk: risk.value,
     riskFlags: risk.flags,
     status,
-    qualifies: {
-      yanman: evaluatePreset(normalized, PRESETS.yanman),
-      auzhinta: evaluatePreset(normalized, PRESETS.auzhinta),
-    },
+    // Derived from PRESETS rather than listed, so a preset added later cannot
+    // be missing here — which is exactly the bug this replaced.
+    qualifies: Object.fromEntries(
+      Object.values(PRESETS).map((preset) => [preset.id, evaluatePreset(normalized, preset)]),
+    ),
   };
 }

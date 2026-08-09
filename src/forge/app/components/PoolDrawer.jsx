@@ -10,6 +10,7 @@ import {
   X,
 } from "lucide-react";
 import { VELOCITY_LABEL } from "../../../../shared/feeVelocity.js";
+import { rubricReport, rubricTally, SWANNY_GMGN_KEYS } from "../../../../shared/swannyRubric.js";
 import { PRESETS, poolTier } from "../../../../shared/scoring.js";
 import { formatAge, formatPercent, formatUsd } from "../../../lib/format.js";
 import { heatVars, riskLabel, STATUS_META } from "../../lib/heat.js";
@@ -23,6 +24,62 @@ import {
   OrganicChip,
   RugCheckChip,
 } from "./bits.jsx";
+
+const RUBRIC_FORMAT = {
+  usd: (value) => formatUsd(value),
+  pct: (value) => `${value.toFixed(2)}%`,
+  hours: (value) => formatAge(value),
+  sol: (value) => `${value.toFixed(1)} SOL`,
+};
+
+const formatRubricValue = (row) => {
+  if (row.value === null) return "—";
+  const format = RUBRIC_FORMAT[row.unit];
+  return format ? format(row.value) : String(Math.round(row.value * 100) / 100);
+};
+
+const bandLimit = (row) =>
+  row.higherIsBetter ? `hijau ≥ ${row.green} · kuning ≥ ${row.yellow}` : `hijau ≤ ${row.green} · kuning ≤ ${row.yellow}`;
+
+/**
+ * The Swanny-like rubric as the source tool shows it: every metric painted, not
+ * just the ones that fail. Rendered for any preset, because the colours answer
+ * "is this token worth researching" regardless of which play you are running.
+ */
+function RubricPanel({ pool, gmgnConfigured }) {
+  const rows = rubricReport(pool);
+  const tally = rubricTally(pool);
+  const missingGmgn = rows.filter((row) => row.band === "unknown" && SWANNY_GMGN_KEYS.includes(row.key)).length;
+
+  return (
+    <div className="fx-rubric">
+      <div className="fx-rubric-tally">
+        <span className="fx-rubric-dot fx-rubric-dot--green" /> {tally.green}
+        <span className="fx-rubric-dot fx-rubric-dot--yellow" /> {tally.yellow}
+        <span className="fx-rubric-dot fx-rubric-dot--red" /> {tally.red}
+        {tally.unknown ? (
+          <>
+            <span className="fx-rubric-dot fx-rubric-dot--unknown" /> {tally.unknown}
+          </>
+        ) : null}
+      </div>
+      <ul className="fx-rubric-list">
+        {rows.map((row) => (
+          <li key={row.key} className={`fx-rubric-row fx-rubric-row--${row.band}`} title={bandLimit(row)}>
+            <span>{row.label}</span>
+            <strong className="f-num">{formatRubricValue(row)}</strong>
+          </li>
+        ))}
+      </ul>
+      {!gmgnConfigured && missingGmgn ? (
+        <p className="fx-panel-note">
+          {missingGmgn} baris butuh GMGN dan tidak terbaca. Isi <code>GMGN_API_KEY</code> di server
+          agar sniper, bundler, insider, dan phishing terisi.
+        </p>
+      ) : null}
+    </div>
+  );
+}
 
 /** Cluster share reads against the article's 40% reject line, not the heat ramp. */
 const clusterTone = (pct) => (pct >= 40 ? "danger" : pct >= 20 ? "warning" : "healthy");
@@ -90,6 +147,7 @@ const METRICS = [
 export default function PoolDrawer({
   pool,
   preset,
+  gmgnConfigured,
   onClose,
   onSendAlert,
   alertState,
@@ -323,6 +381,11 @@ export default function PoolDrawer({
               </div>
             </section>
           ) : null}
+
+          <section className="fx-drawer-section">
+            <h3>Rubrik screening</h3>
+            <RubricPanel pool={pool} gmgnConfigured={gmgnConfigured} />
+          </section>
 
           <section className="fx-drawer-section">
             <h3>Kecepatan fee</h3>
