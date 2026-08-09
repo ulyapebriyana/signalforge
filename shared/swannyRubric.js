@@ -50,6 +50,22 @@ export function bandOf(value, spec) {
   return value <= spec.yellow ? "yellow" : "red";
 }
 
+const UNIT_SUFFIX = { pct: "%", hours: " jam", sol: " SOL", usd: "" };
+
+const gateThreshold = (spec) =>
+  spec.unit === "usd" ? `$${spec.yellow.toLocaleString("en-US")}` : `${spec.yellow}${UNIT_SUFFIX[spec.unit] ?? ""}`;
+
+/**
+ * How a failed rubric row is named in the gate list.
+ *
+ * States the requirement, matching every other gate ("TVL ≥ $35000"). An earlier
+ * version phrased it as "Bundler tidak merah", which the UI then prefixed with a
+ * cross — leaving readers to unpick a double negative to learn that bundler was,
+ * in fact, red.
+ */
+export const gateLabel = (spec) =>
+  `${spec.label} ${spec.higherIsBetter ? "≥" : "≤"} ${gateThreshold(spec)}`;
+
 /** Every band for a pool, in rubric order. Drives the drawer panel. */
 export function rubricReport(pool) {
   return SWANNY_RUBRIC.map((spec) => ({

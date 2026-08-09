@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bandOf, rubricReport, rubricTally, SWANNY_GMGN_KEYS, SWANNY_RUBRIC } from "./swannyRubric.js";
+import { bandOf, gateLabel, rubricReport, rubricTally, SWANNY_GMGN_KEYS, SWANNY_RUBRIC } from "./swannyRubric.js";
 
 const spec = (key) => SWANNY_RUBRIC.find((row) => row.key === key);
 
@@ -45,6 +45,23 @@ describe("Swanny rubric bands", () => {
       "gmgnPhishingPct",
       "gmgnTotalFeesSol",
     ]);
+  });
+
+  it("names a failed row by its requirement, not by a negation", () => {
+    // "Bundler tidak merah" prefixed with a cross made readers unpick a double
+    // negative to learn that bundler was red.
+    expect(gateLabel(spec("gmgnBundlerPct"))).toBe("Bundler ≤ 12%");
+    expect(gateLabel(spec("organicScore"))).toBe("Organic score ≥ 50");
+    expect(gateLabel(spec("tokenAgeHours"))).toBe("Umur token ≥ 24 jam");
+    expect(gateLabel(spec("gmgnTotalFeesSol"))).toBe("Total fee ≥ 20 SOL");
+    expect(gateLabel(spec("marketCap"))).toBe("Market cap ≥ $100,000");
+  });
+
+  it("keeps every gate label free of negations", () => {
+    for (const row of SWANNY_RUBRIC) {
+      expect(gateLabel(row)).not.toMatch(/tidak|bukan|non-/i);
+      expect(gateLabel(row)).toMatch(/[≥≤]/);
+    }
   });
 
   it("reports every row and tallies the bands", () => {

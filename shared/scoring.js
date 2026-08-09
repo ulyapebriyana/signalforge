@@ -1,5 +1,5 @@
 import { emptyGmgnFields } from "./gmgn.js";
-import { bandOf, SWANNY_RUBRIC } from "./swannyRubric.js";
+import { bandOf, gateLabel, SWANNY_RUBRIC } from "./swannyRubric.js";
 
 export const PRESETS = Object.freeze({
   yanman: {
@@ -387,7 +387,7 @@ export function evaluatePreset(pool, presetInput) {
     // Unknown counts as red: an unread metric is not a clean one.
     for (const spec of preset.rubric) {
       const tier = bandOf(pool[spec.key], spec);
-      checks.push([tier === "green" || tier === "yellow", `${spec.label} tidak merah`]);
+      checks.push([tier === "green" || tier === "yellow", gateLabel(spec)]);
     }
   }
   if (Number.isFinite(preset.maxSwapsPerTrader)) {

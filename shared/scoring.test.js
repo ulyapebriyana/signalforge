@@ -198,7 +198,7 @@ describe("SignalForge scoring", () => {
     expect(evaluatePreset({ ...swannyPool, top10HoldersPct: 22 }, PRESETS.swanny).passed).toBe(true);
     // 31% crosses into red.
     expect(evaluatePreset({ ...swannyPool, top10HoldersPct: 31 }, PRESETS.swanny).misses)
-      .toContain("Top-10 holder tidak merah");
+      .toContain("Top-10 holder ≤ 30%");
   });
 
   it("fails every GMGN row when no key is configured", () => {
@@ -207,23 +207,23 @@ describe("SignalForge scoring", () => {
       gmgnBundlerPct: null, gmgnPhishingPct: null, gmgnTotalFeesSol: null };
     const { misses } = evaluatePreset(noKey, PRESETS.swanny);
     expect(misses).toEqual(expect.arrayContaining([
-      "Sniper tidak merah", "Jumlah sniper tidak merah", "Insider tidak merah",
-      "Bundler tidak merah", "Phishing tidak merah", "Total fee tidak merah",
+      "Sniper ≤ 5%", "Jumlah sniper ≤ 15", "Insider ≤ 12%",
+      "Bundler ≤ 12%", "Phishing ≤ 8%", "Total fee ≥ 20 SOL",
     ]));
   });
 
   it("catches the sniper and phishing shapes the rubric exists for", () => {
     expect(evaluatePreset({ ...swannyPool, gmgnSniperWallets: 22 }, PRESETS.swanny).misses)
-      .toContain("Jumlah sniper tidak merah");
+      .toContain("Jumlah sniper ≤ 15");
     expect(evaluatePreset({ ...swannyPool, gmgnPhishingPct: 65.1 }, PRESETS.swanny).misses)
-      .toContain("Phishing tidak merah");
+      .toContain("Phishing ≤ 8%");
   });
 
   it("judges token age opposite to how Auzhinta-like judges pool age", () => {
     // A six-hour-old token is red for Swanny-like and irrelevant to the other,
     // which cares about the pool being fresh instead.
     const brandNew = { ...swannyPool, tokenAgeHours: 6 };
-    expect(evaluatePreset(brandNew, PRESETS.swanny).misses).toContain("Umur token tidak merah");
+    expect(evaluatePreset(brandNew, PRESETS.swanny).misses).toContain("Umur token ≥ 24 jam");
     expect(evaluatePreset({ ...auzhintaPool, ageHours: 6 }, PRESETS.auzhinta).passed).toBe(true);
   });
 
