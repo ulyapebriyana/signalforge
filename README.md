@@ -29,6 +29,7 @@ Pemilihan bundel terjadi di `src/main.jsx` sebelum salah satu stylesheet dimuat,
 - Preset **Yanman-like**, **Auzhinta-like**, dan **Swanny-like** dengan aturan yang transparan.
 - Score 0–100: momentum 25, fee efficiency 25, volume quality 20, security 20, freshness 10.
 - **Kecepatan fee**: fee/TVL direkam tiap scan, lalu dibandingkan dengan puncaknya dalam jendela 45 menit.
+- **Volume 5 menit** dari GMGN sebagai kolom scanner. Meteora berhenti di 1 jam, terlalu kasar untuk play berskala menit — di situ volume 5 menit adalah sinyal entry-nya sendiri, bukan pelengkap.
 - Notifikasi berbunyi **berbeda per preset**, jadi bunyinya sendiri sudah memberi tahu gate mana yang lolos.
 - Risk score 0–100 dengan flag freeze authority, blacklist, verifikasi, TVL tipis, usia pool, dan data holder yang belum tersedia.
 - Pencarian, filter angka, tab Hot/Watch/Skipped, panel inspeksi, tautan ke Meteora.

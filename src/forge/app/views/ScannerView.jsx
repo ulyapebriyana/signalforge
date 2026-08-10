@@ -38,6 +38,11 @@ export const COLUMNS = [
   { key: "trend", label: "Tren", sortable: false },
   { key: "tvl", label: "TVL" },
   { key: "volume1h", label: "Vol 1j" },
+  // Five-minute flow, from GMGN. Meteora stops at one hour, which is far too
+  // coarse for the minutes-scale plays — a runner's 5m volume is the entry
+  // signal itself, not a supporting detail.
+  { key: "gmgnVolume5m", label: "Vol 5m" },
+  { key: "gmgnSwaps5m", label: "Swap 5m" },
   { key: "volumeTvl1h", label: "Vol/TVL" },
   { key: "totalFees1h", label: "Fee 1j" },
   { key: "feeTvl1h", label: "Fee/TVL" },
@@ -59,6 +64,7 @@ const DEFAULT_COLUMNS = [
   "trend",
   "tvl",
   "volume1h",
+  "gmgnVolume5m",
   "volumeTvl1h",
   "totalFees1h",
   "feeTvl1h",
@@ -182,6 +188,12 @@ function cellFor(key, pool) {
       return <span className="f-num">{formatUsd(pool.tvl)}</span>;
     case "volume1h":
       return <span className="f-num">{formatUsd(pool.volume1h)}</span>;
+    case "gmgnVolume5m":
+      return Number.isFinite(pool.gmgnVolume5m)
+        ? <span className="f-num">{formatUsd(pool.gmgnVolume5m)}</span>
+        : <span className="fx-na" title="Butuh GMGN_API_KEY">—</span>;
+    case "gmgnSwaps5m":
+      return <span className="f-num">{optionalNumber(pool.gmgnSwaps5m)}</span>;
     case "volumeTvl1h":
       return <span className="f-num">{pool.volumeTvl1h.toFixed(2)}x</span>;
     case "totalFees1h":

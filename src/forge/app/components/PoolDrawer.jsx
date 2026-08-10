@@ -131,6 +131,8 @@ function FeeVelocityPanel({ velocity }) {
 
 const METRICS = [
   ["TVL", (pool) => formatUsd(pool.tvl)],
+  ["Volume 5m", (pool) => (Number.isFinite(pool.gmgnVolume5m) ? formatUsd(pool.gmgnVolume5m) : "—")],
+  ["Swap 5m", (pool) => optionalNumber(pool.gmgnSwaps5m)],
   ["Volume 1j", (pool) => formatUsd(pool.volume1h)],
   ["Volume 24j", (pool) => formatUsd(pool.volume24h)],
   ["Market cap", (pool) => formatUsd(pool.marketCap)],
