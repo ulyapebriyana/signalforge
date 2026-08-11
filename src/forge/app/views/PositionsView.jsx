@@ -1,8 +1,10 @@
 import { useState } from "react";
-import { ExternalLink, Loader2, RefreshCw, TriangleAlert, Wallet } from "lucide-react";
+import { ExternalLink, Loader2, LogOut, Plug, RefreshCw, TriangleAlert, Wallet } from "lucide-react";
 import { RANGE_LABEL } from "../../../../shared/lpPositions.js";
 import { formatUsd } from "../../../lib/format.js";
+import { useWallet } from "../lib/wallet.jsx";
 import { EmptyState, StatTile } from "../components/bits.jsx";
+import ZapOutSheet from "../components/ZapOutSheet.jsx";
 
 /** Range states in the order an LP cares about them, worst first. */
 const STATE_TONE = {
@@ -65,6 +67,14 @@ export default function PositionsView({
   configured,
 }) {
   const [draft, setDraft] = useState(wallet);
+  const [zapPosition, setZapPosition] = useState(null);
+  const walletApi = useWallet();
+
+  const connected = walletApi.connected ? walletApi.address : null;
+  // Signing requires the connected wallet to *be* the wallet being watched.
+  // Tracking someone else's address is a normal thing to do here, so this is a
+  // real state rather than an edge case, and zap out has to stay disabled in it.
+  const canSign = Boolean(connected && wallet && connected === wallet);
 
   return (
     <div className="fx-view fx-positions">
@@ -138,6 +148,57 @@ export default function PositionsView({
         </small>
       </form>
 
+      {wallet ? (
+        <div className="fx-connect-bar">
+          {connected ? (
+            <>
+              <span className={`f-chip f-chip--${canSign ? "clear" : "warning"}`}>
+                <Plug /> {walletApi.walletName || "Wallet"} · {connected.slice(0, 4)}…{connected.slice(-4)}
+              </span>
+              {canSign ? (
+                <span className="fx-connect-note">Zap out aktif untuk wallet ini.</span>
+              ) : (
+                <span className="fx-connect-note fx-connect-note--warn">
+                  Wallet tersambung bukan wallet yang dipantau, jadi zap out dimatikan.
+                </span>
+              )}
+              <button className="f-btn f-btn--ghost" type="button" onClick={() => walletApi.disconnect()}>
+                <LogOut /> Putuskan
+              </button>
+            </>
+          ) : (
+            <>
+              <span className="fx-connect-note">
+                Sambungkan wallet untuk menutup posisi dari sini. Membaca posisi tidak memerlukannya.
+              </span>
+              {walletApi.available.length ? (
+                walletApi.available.map((entry) => (
+                  <button
+                    key={entry.name}
+                    className="f-btn"
+                    type="button"
+                    disabled={walletApi.connecting}
+                    onClick={async () => {
+                      try {
+                        await walletApi.connect(entry);
+                      } catch {
+                        // Declining the prompt is a normal outcome, not an error.
+                      }
+                    }}
+                  >
+                    <Plug /> {entry.name}
+                  </button>
+                ))
+              ) : (
+                <span className="fx-connect-note fx-connect-note--warn">
+                  Tidak ada wallet Solana terdeteksi di browser ini.
+                </span>
+              )}
+            </>
+          )}
+        </div>
+      ) : null}
+
       {error ? (
         <div className="fx-banner fx-banner--error" role="alert">
           <TriangleAlert />
@@ -191,7 +252,7 @@ export default function PositionsView({
                 <th scope="col"><span>Nilai</span></th>
                 <th scope="col"><span>Fee belum klaim</span></th>
                 <th scope="col"><span>Fee/TVL 1j</span></th>
-                <th scope="col"><span className="f-visually-hidden">Tautan</span></th>
+                <th scope="col"><span className="f-visually-hidden">Tindakan</span></th>
               </tr>
             </thead>
             <tbody>
@@ -216,15 +277,30 @@ export default function PositionsView({
                     {Number.isFinite(position.poolFeeTvl1h) ? `${position.poolFeeTvl1h.toFixed(2)}%` : "—"}
                   </td>
                   <td>
-                    <a
-                      className="f-icon-btn"
-                      href={`https://www.meteora.ag/dlmm/${position.poolAddress}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      aria-label={`Buka ${position.pair || "pool"} di Meteora`}
-                    >
-                      <ExternalLink />
-                    </a>
+                    <div className="fx-row-actions">
+                      <button
+                        className="f-btn f-btn--ghost fx-zap-btn"
+                        type="button"
+                        disabled={!canSign}
+                        onClick={() => setZapPosition(position)}
+                        title={
+                          canSign
+                            ? `Tutup posisi ${position.pair} dan tukar ke satu token`
+                            : "Sambungkan wallet yang dipantau untuk mengaktifkan"
+                        }
+                      >
+                        Zap out
+                      </button>
+                      <a
+                        className="f-icon-btn"
+                        href={`https://www.meteora.ag/dlmm/${position.poolAddress}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        aria-label={`Buka ${position.pair || "pool"} di Meteora`}
+                      >
+                        <ExternalLink />
+                      </a>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -246,6 +322,16 @@ export default function PositionsView({
           icon={Wallet}
           title="Belum ada wallet dipantau"
           body="Tempel alamat wallet Solana di atas. Cukup alamat publik — bukan seed phrase, bukan private key."
+        />
+      ) : null}
+
+      {zapPosition ? (
+        <ZapOutSheet
+          position={zapPosition}
+          wallet={wallet}
+          walletApi={walletApi}
+          onClose={() => setZapPosition(null)}
+          onDone={onRefresh}
         />
       ) : null}
 

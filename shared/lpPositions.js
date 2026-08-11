@@ -156,6 +156,13 @@ export function summarizePosition(position, pool) {
     pair: pool?.name ?? null,
     symbolX: pool?.tokenX?.symbol ?? null,
     symbolY: pool?.tokenY?.symbol ?? null,
+    // Mints and decimals ride along because leaving a position needs them:
+    // the swap leg is priced in base units against a specific mint, and the
+    // target picker has to offer the pool's own two tokens by address.
+    mintX: pool?.tokenX?.address ?? null,
+    mintY: pool?.tokenY?.address ?? null,
+    decimalsX,
+    decimalsY,
     binStep,
 
     amountX,

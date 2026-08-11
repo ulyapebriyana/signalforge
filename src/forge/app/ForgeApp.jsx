@@ -1,4 +1,6 @@
 import {
+  Suspense,
+  lazy,
   useCallback,
   useDeferredValue,
   useEffect,
@@ -49,7 +51,6 @@ import CommandPalette from "./components/CommandPalette.jsx";
 import PoolDrawer from "./components/PoolDrawer.jsx";
 import { ToastStack, useToasts } from "./components/Toasts.jsx";
 import OverviewView from "./views/OverviewView.jsx";
-import PositionsView from "./views/PositionsView.jsx";
 import RulesView from "./views/RulesView.jsx";
 import ScannerView, { defaultColumnKeys } from "./views/ScannerView.jsx";
 import SettingsView from "./views/SettingsView.jsx";
@@ -64,6 +65,22 @@ const NAV = [
   { path: "/app/rules", label: "Aturan", icon: ShieldCheck },
   { path: "/app/settings", label: "Pengaturan", icon: Settings },
 ];
+
+/**
+ * Positions load on demand, and so does everything they drag in.
+ *
+ * Signing needs @solana/web3.js and the wallet adapter, which together are
+ * larger than the entire rest of this dashboard — importing them at the top
+ * level made the shared bundle roughly six times heavier for every scanner
+ * session that never opens this page. Behind a lazy import they land in their
+ * own chunk, fetched the first time someone actually goes to /app/positions.
+ *
+ * The provider sits inside that boundary rather than around the shell, which
+ * costs a reconnect when navigating away and back. That is the price of keeping
+ * the wallet code out of the main bundle, and it errs the safe way: nothing
+ * stays connected while the user is off looking at pools.
+ */
+const PositionsWorkspace = lazy(() => import("./views/PositionsWorkspace.jsx"));
 
 const SCAN_INTERVALS = [30, 60, 120];
 
@@ -696,18 +713,26 @@ export default function ForgeApp({ path }) {
           />
         ) : null}
         {view === "positions" ? (
-          <PositionsView
-            wallet={lp.wallet}
-            onWallet={lp.setWallet}
-            positions={lp.positions}
-            totals={lp.totals}
-            readAt={lp.readAt}
-            loading={lp.loading}
-            refreshing={lp.refreshing}
-            error={lp.error}
-            onRefresh={lp.refresh}
-            configured={status?.lpTrackingConfigured !== false}
-          />
+          <Suspense
+            fallback={
+              <p className="fx-notify-empty">
+                <Loader2 className="f-spin" /> Memuat modul wallet…
+              </p>
+            }
+          >
+            <PositionsWorkspace
+              wallet={lp.wallet}
+              onWallet={lp.setWallet}
+              positions={lp.positions}
+              totals={lp.totals}
+              readAt={lp.readAt}
+              loading={lp.loading}
+              refreshing={lp.refreshing}
+              error={lp.error}
+              onRefresh={lp.refresh}
+              configured={status?.lpTrackingConfigured !== false}
+            />
+          </Suspense>
         ) : null}
         {view === "signals" ? (
           <SignalsView

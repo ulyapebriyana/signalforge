@@ -1,6 +1,11 @@
 # SignalForge
 
-SignalForge adalah screener Meteora DLMM untuk mencari pool Solana dengan momentum, efisiensi fee, dan risiko yang dapat dibandingkan dalam satu layar. Aplikasi ini **bukan bot auto-trading** dan tidak pernah meminta seed phrase atau private key.
+SignalForge adalah screener Meteora DLMM untuk mencari pool Solana dengan momentum, efisiensi fee, dan risiko yang dapat dibandingkan dalam satu layar. Aplikasi ini **bukan bot auto-trading**: tidak ada satu pun transaksi yang berjalan sendiri, dan tidak pernah meminta seed phrase atau private key.
+
+Sejak fitur **zap out** ada, aplikasi ini bisa menyusun transaksi untuk menutup posisi LP Anda — tapi
+tidak pernah menandatanganinya. Server menyusun dan meneruskan, wallet Anda yang menandatangani,
+dan setiap transaksi butuh klik Anda sendiri. Tidak ada private key di server, dan itu bukan
+kebetulan: lihat [Menutup posisi](#menutup-posisi-zap-out).
 
 ## Dua antarmuka, satu server
 
@@ -112,6 +117,41 @@ alamat publik.
 Yang belum ada: PnL sebenarnya dan impermanent loss. Keduanya butuh jumlah deposit saat posisi
 dibuka, yang hanya ada di riwayat transaksi, bukan di state on-chain saat ini. Yang ditampilkan
 adalah nilai posisi sekarang, fee yang sudah diklaim, dan fee yang belum diklaim.
+
+## Menutup posisi (zap out)
+
+Tombol **Zap out** menarik seluruh likuiditas, mengklaim fee, menutup posisi, lalu menukar sisa
+token supaya Anda keluar sebagai satu aset saja.
+
+**Siapa menandatangani apa.** Server menyusun transaksi dan meneruskannya ke chain; wallet Anda di
+browser yang menandatangani. Server tidak pernah memegang private key — box ini punya URL publik,
+dan kunci di sana berarti hot wallet yang terekspos internet. Karena itu wallet connect baru
+diperlukan sekarang: **membaca** posisi tidak butuh tanda tangan, **memindahkan** dana butuh.
+
+Zap out hanya aktif kalau wallet yang tersambung sama persis dengan wallet yang sedang dipantau.
+Memantau alamat orang lain tetap boleh — tombolnya saja yang mati.
+
+**Dua transaksi, bukan satu.** Jumlah yang ditukar baru diketahui setelah penarikan mendarat, jadi
+penarikan dan swap tidak bisa digabung. Wallet akan meminta tanda tangan dua kali. Posisi dengan
+range lebar bahkan butuh beberapa transaksi untuk penarikannya saja.
+
+**Kalau gagal di tengah**, layarnya mengatakan itu apa adanya: berapa transaksi yang sudah mendarat,
+dan peringatan untuk **tidak langsung mengulang** — sebagian dana sudah berpindah, dan menjalankan
+lagi bisa menarik atau menukar dua kali.
+
+Pengaman yang berlaku sebelum wallet diminta menandatangani:
+
+- Setiap transaksi penarikan disimulasikan dulu; yang gagal simulasi tidak pernah sampai ke wallet.
+- Price impact di atas 10% ditolak, di atas 2% diberi peringatan. Rute yang price impact-nya tidak
+  terbaca **ditolak**, bukan dianggap aman.
+- Jumlah yang ditukar dibatasi saldo wallet yang sebenarnya, jadi penarikan yang cuma sebagian
+  tidak pernah menukar lebih banyak daripada yang benar-benar keluar.
+- Server membaca ulang posisi dari chain; angka kiriman browser tidak dipercaya.
+- Layar konfirmasi menonjolkan **minimum dijamin**, bukan estimasi — hanya angka itu yang punya
+  jaminan slippage di belakangnya.
+
+Token tujuan harus salah satu dari dua token pool itu sendiri, supaya swap-nya cukup satu leg.
+Rute swap memakai Jupiter.
 
 ## Arti preset
 

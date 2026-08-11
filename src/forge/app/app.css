@@ -2962,3 +2962,261 @@
   color: var(--f-faint);
   font-size: 12px;
 }
+
+/* --- zap out --------------------------------------------------------------- */
+
+.fx-connect-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border: 1px solid var(--f-line);
+  border-radius: var(--f-r-sm);
+  background: var(--f-raised);
+}
+
+.fx-connect-note {
+  color: var(--f-faint);
+  font-size: 12px;
+}
+
+.fx-connect-note--warn {
+  color: var(--f-caution);
+}
+
+/* The action column pins to the right edge. With this many numeric columns the
+   table scrolls sideways in a narrow pane, and the one control that closes a
+   position should never be the thing that scrolls out of reach. */
+.fx-table--positions thead th:last-child,
+.fx-table--positions tbody td:last-child {
+  position: sticky;
+  right: 0;
+  z-index: 2;
+  background: var(--f-iron-950);
+  /* The rule and shadow say this column is floating above the ones sliding
+     under it. Without them a half-covered number just looks broken. */
+  border-left: 1px solid var(--f-line);
+  box-shadow: -8px 0 12px -6px var(--f-shadow);
+}
+
+.fx-table--positions thead th:last-child {
+  z-index: 4;
+  background: var(--f-iron-900);
+}
+
+.fx-table--positions tbody tr:hover td:last-child {
+  background: var(--f-iron-900);
+}
+
+.fx-row-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.fx-zap-btn {
+  padding: 3px 9px;
+  font-size: 11px;
+}
+
+.fx-zap {
+  display: grid;
+  gap: 14px;
+  max-width: 520px;
+}
+
+.fx-zap-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.fx-zap-field {
+  display: grid;
+  gap: 6px;
+}
+
+.fx-zap-label {
+  color: var(--f-faint);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.fx-zap-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.fx-zap-choices button {
+  padding: 5px 12px;
+  border: 1px solid var(--f-line);
+  border-radius: var(--f-r-sm);
+  background: var(--f-iron-900);
+  color: var(--f-slag);
+  font-family: var(--f-mono);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.fx-zap-choices button.is-active {
+  border-color: var(--f-ember);
+  color: var(--f-ember);
+}
+
+.fx-zap-choices button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.fx-zap-plan {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--f-line);
+  border-radius: var(--f-r-sm);
+  background: var(--f-iron-900);
+}
+
+.fx-zap-plan > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.fx-zap-plan dt {
+  color: var(--f-faint);
+  font-size: 12px;
+}
+
+.fx-zap-plan dd {
+  margin: 0;
+  font-size: 12px;
+  text-align: right;
+}
+
+/* The guaranteed floor is the number a decision should rest on, so it is the
+   one that carries visual weight — the estimate above it can still move. */
+.fx-zap-plan-floor {
+  padding-top: 6px;
+  border-top: 1px solid var(--f-line);
+}
+
+.fx-zap-plan-floor dt,
+.fx-zap-plan-floor dd {
+  color: var(--f-bone);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.fx-zap-plan-floor em {
+  color: var(--f-faint);
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.fx-zap-warn,
+.fx-zap-note,
+.fx-zap-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0;
+  font-size: 12px;
+}
+
+.fx-zap-warn {
+  color: var(--f-caution);
+}
+
+.fx-zap-note,
+.fx-zap-status {
+  color: var(--f-faint);
+}
+
+.fx-zap-warn svg,
+.fx-zap-status svg {
+  flex: none;
+  width: 13px;
+  height: 13px;
+  margin-top: 1px;
+}
+
+.fx-zap-result {
+  display: flex;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--f-line);
+  border-left-width: 2px;
+  border-radius: var(--f-r-sm);
+  background: var(--f-iron-900);
+}
+
+.fx-zap-result svg {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+}
+
+.fx-zap-result p {
+  margin: 4px 0 0;
+  color: var(--f-slag);
+  font-size: 12px;
+}
+
+.fx-zap-result--done {
+  border-left-color: var(--f-quench);
+}
+
+.fx-zap-result--done svg {
+  color: var(--f-quench);
+}
+
+.fx-zap-result--partial {
+  border-left-color: var(--f-caution);
+}
+
+.fx-zap-result--partial svg {
+  color: var(--f-caution);
+}
+
+.fx-zap-result--failed {
+  border-left-color: var(--f-scorch);
+}
+
+.fx-zap-result--failed svg {
+  color: var(--f-scorch);
+}
+
+.fx-zap-error {
+  font-family: var(--f-mono);
+  font-size: 11px !important;
+  color: var(--f-faint) !important;
+}
+
+.fx-zap-sigs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.fx-zap-sigs a {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--f-ember);
+  font-family: var(--f-mono);
+  font-size: 11px;
+}
+
+.fx-zap-sigs svg {
+  width: 11px;
+  height: 11px;
+}

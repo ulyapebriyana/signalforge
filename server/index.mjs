@@ -11,6 +11,8 @@ import { alertPresetsFor, cooldownKey, presetsCleared } from "../shared/alertRou
 import { collectSignalEntries } from "../shared/signalTransitions.js";
 import { collectPositionAlerts, RANGE_LABEL } from "../shared/lpPositions.js";
 import { configuredWallets, isValidWallet, readWalletPositions, rpcConfigured } from "./lpPositions.mjs";
+import { planPositionZapOut, prepareSwap, prepareWithdraw, sendSignedTransaction } from "./zapOut.mjs";
+import { normalizeSlippageBps } from "../shared/zapOut.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, "..");
@@ -613,6 +615,136 @@ app.get("/api/lp/positions", async (request, response) => {
       error: "Gagal membaca posisi dari chain",
       detail: error instanceof Error ? error.message : "Unknown RPC error",
     });
+  }
+});
+
+/**
+ * Zap out — three prepare steps and one relay, none of which sign anything.
+ *
+ * Every one of these re-reads the position from chain rather than trusting the
+ * amounts the browser sends. A client that could name its own position size
+ * would be naming how much gets withdrawn and swapped, so the only figures
+ * these routes act on are ones the server fetched itself.
+ */
+const zapGuard = async (request, response) => {
+  if (!rpcConfigured()) {
+    response.status(503).json({ error: "SOLANA_RPC_URL belum diisi di file .env" });
+    return null;
+  }
+
+  const wallet = String(request.body?.wallet || "").trim();
+  const positionKey = String(request.body?.positionKey || "").trim();
+  const targetMint = String(request.body?.targetMint || "").trim();
+  const slippageBps = normalizeSlippageBps(request.body?.slippageBps);
+
+  if (!isValidWallet(wallet)) {
+    response.status(400).json({ error: "Alamat wallet tidak valid" });
+    return null;
+  }
+  if (slippageBps === null) {
+    response.status(400).json({ error: "Slippage di luar batas yang wajar" });
+    return null;
+  }
+
+  const { positions } = await readWalletPositions(wallet, { force: true });
+  const position = positions.find((item) => item.positionKey === positionKey);
+  if (!position) {
+    response.status(404).json({ error: "Posisi tidak ditemukan di wallet ini" });
+    return null;
+  }
+
+  const pool = {
+    name: position.pair,
+    tokenX: { symbol: position.symbolX, address: position.mintX, decimals: position.decimalsX },
+    tokenY: { symbol: position.symbolY, address: position.mintY, decimals: position.decimalsY },
+  };
+  return { wallet, position, pool, targetMint, slippageBps };
+};
+
+app.post("/api/lp/zap-out/plan", async (request, response) => {
+  try {
+    const context = await zapGuard(request, response);
+    if (!context) return undefined;
+    const plan = await planPositionZapOut(context);
+    // The raw Jupiter route is large and only the server needs it; the browser
+    // gets the numbers it must display and nothing it could tamper with.
+    const { quoteRaw, ...visible } = plan;
+    return response.json(visible);
+  } catch (error) {
+    return response.status(502).json({ error: error instanceof Error ? error.message : "Rencana gagal disusun" });
+  }
+});
+
+app.post("/api/lp/zap-out/withdraw", async (request, response) => {
+  try {
+    const context = await zapGuard(request, response);
+    if (!context) return undefined;
+    const { position, wallet } = context;
+    const prepared = await prepareWithdraw({
+      wallet,
+      positionKey: position.positionKey,
+      poolAddress: position.poolAddress,
+      lowerBinId: position.lowerBinId,
+      upperBinId: position.upperBinId,
+    });
+
+    // A transaction that already fails in simulation must never reach a wallet
+    // prompt — approving it would burn a fee to accomplish nothing.
+    const broken = prepared.transactions.find((item) => item.simulationError);
+    if (broken) {
+      return response.status(409).json({
+        error: "Simulasi penarikan gagal, transaksi tidak dikirim ke wallet",
+        detail: broken.simulationError,
+        logs: broken.logs,
+      });
+    }
+    return response.json(prepared);
+  } catch (error) {
+    return response.status(502).json({ error: error instanceof Error ? error.message : "Penarikan gagal disiapkan" });
+  }
+});
+
+app.post("/api/lp/zap-out/swap", async (request, response) => {
+  try {
+    const context = await zapGuard(request, response);
+    if (!context) return undefined;
+    const { wallet, position, pool, targetMint, slippageBps } = context;
+
+    const sourceIsX = targetMint === pool.tokenY.address;
+    const source = sourceIsX ? pool.tokenX : pool.tokenY;
+    const target = sourceIsX ? pool.tokenY : pool.tokenX;
+    if (!source?.address || !target?.address) {
+      return response.status(400).json({ error: "Token tujuan harus salah satu token pool ini" });
+    }
+
+    const prepared = await prepareSwap({
+      wallet,
+      inputMint: source.address,
+      outputMint: target.address,
+      amount: sourceIsX ? position.amountX : position.amountY,
+      decimalsIn: source.decimals,
+      decimalsOut: target.decimals,
+      slippageBps,
+    });
+    return response.json(prepared);
+  } catch (error) {
+    return response.status(502).json({ error: error instanceof Error ? error.message : "Swap gagal disiapkan" });
+  }
+});
+
+app.post("/api/lp/send", async (request, response) => {
+  if (!rpcConfigured()) return response.status(503).json({ error: "SOLANA_RPC_URL belum diisi di file .env" });
+  const signedTransaction = String(request.body?.signedTransaction || "");
+  if (!signedTransaction) return response.status(400).json({ error: "Transaksi kosong" });
+
+  try {
+    const result = await sendSignedTransaction({
+      signedTransaction,
+      lastValidBlockHeight: Number(request.body?.lastValidBlockHeight) || null,
+    });
+    return response.json(result);
+  } catch (error) {
+    return response.status(502).json({ error: error instanceof Error ? error.message : "Transaksi gagal dikirim" });
   }
 });
 
