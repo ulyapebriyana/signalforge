@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ExternalLink, Loader2, LogOut, Plug, RefreshCw, TriangleAlert, Wallet } from "lucide-react";
 import { RANGE_LABEL } from "../../../../shared/lpPositions.js";
 import { formatUsd } from "../../../lib/format.js";
@@ -71,6 +71,22 @@ export default function PositionsView({
   const walletApi = useWallet();
 
   const connected = walletApi.connected ? walletApi.address : null;
+
+  /**
+   * Connecting a wallet already says which address to watch, so typing it again
+   * is pure duplication — the field fills itself the moment nothing is being
+   * tracked yet.
+   *
+   * It only fills a *blank* field. Watching one wallet while signing with
+   * another is a legitimate thing to be doing, and silently redirecting the
+   * page to the wallet that just connected would change what the user is
+   * looking at without being asked. That case gets an offer instead, below.
+   */
+  useEffect(() => {
+    if (!connected || wallet) return;
+    setDraft(connected);
+    onWallet(connected);
+  }, [connected, onWallet, wallet]);
   // Signing requires the connected wallet to *be* the wallet being watched.
   // Tracking someone else's address is a normal thing to do here, so this is a
   // real state rather than an edge case, and zap out has to stay disabled in it.
@@ -148,9 +164,11 @@ export default function PositionsView({
         </small>
       </form>
 
-      {wallet ? (
-        <div className="fx-connect-bar">
-          {connected ? (
+      {/* Always shown, including before any address is set — connecting is now
+          the shortest way to start, and gating this on a filled field made that
+          route unreachable for a first-time visitor. */}
+      <div className="fx-connect-bar">
+        {connected ? (
             <>
               <span className={`f-chip f-chip--${canSign ? "clear" : "warning"}`}>
                 <Plug /> {walletApi.walletName || "Wallet"} · {connected.slice(0, 4)}…{connected.slice(-4)}
@@ -158,9 +176,24 @@ export default function PositionsView({
               {canSign ? (
                 <span className="fx-connect-note">Zap out aktif untuk wallet ini.</span>
               ) : (
-                <span className="fx-connect-note fx-connect-note--warn">
-                  Wallet tersambung bukan wallet yang dipantau, jadi zap out dimatikan.
-                </span>
+                <>
+                  <span className="fx-connect-note fx-connect-note--warn">
+                    Sedang memantau wallet lain, jadi zap out dimatikan.
+                  </span>
+                  {/* Offered rather than done automatically: switching this
+                      changes which positions are on screen, which is the
+                      user's call to make, not a side effect of connecting. */}
+                  <button
+                    className="f-btn"
+                    type="button"
+                    onClick={() => {
+                      setDraft(connected);
+                      onWallet(connected);
+                    }}
+                  >
+                    <Wallet /> Pantau wallet ini
+                  </button>
+                </>
               )}
               <button className="f-btn f-btn--ghost" type="button" onClick={() => walletApi.disconnect()}>
                 <LogOut /> Putuskan
@@ -192,12 +225,11 @@ export default function PositionsView({
               ) : (
                 <span className="fx-connect-note fx-connect-note--warn">
                   Tidak ada wallet Solana terdeteksi di browser ini.
-                </span>
-              )}
-            </>
-          )}
-        </div>
-      ) : null}
+              </span>
+            )}
+          </>
+        )}
+      </div>
 
       {error ? (
         <div className="fx-banner fx-banner--error" role="alert">
@@ -321,7 +353,7 @@ export default function PositionsView({
         <EmptyState
           icon={Wallet}
           title="Belum ada wallet dipantau"
-          body="Tempel alamat wallet Solana di atas. Cukup alamat publik — bukan seed phrase, bukan private key."
+          body="Sambungkan wallet Anda, atau tempel alamat Solana mana pun di atas untuk memantaunya tanpa menyambung. Cukup alamat publik — bukan seed phrase, bukan private key."
         />
       ) : null}
 
