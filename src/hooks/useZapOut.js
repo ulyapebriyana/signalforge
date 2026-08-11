@@ -43,9 +43,49 @@ export function useZapOut({ wallet, signTransactions, onDone }) {
     setSignatures([]);
   }, []);
 
+  /**
+   * The swap on its own.
+   *
+   * Separate from `execute` because it is the recovery path: when a withdrawal
+   * lands and the swap does not — the likeliest failure, since the price only
+   * has to drift past the slippage bound — the position is already closed and
+   * re-running the withdrawal would be both wrong and impossible. The server
+   * still holds what the swap needs, so this finishes the job.
+   */
+  const runSwap = useCallback(
+    async ({ positionKey, landed = [] }) => {
+      setPhase("swap-preparing");
+      const swap = await postJson("/api/lp/zap-out/swap", { wallet, positionKey });
+
+      if (swap.skipped) {
+        // Nothing left to swap is a complete zap out, not a failure: the
+        // position was already sitting entirely on the target side.
+        setPhase("done");
+        onDone?.();
+        return { ok: true, swapped: false, signatures: landed, note: swap.reason };
+      }
+
+      setPhase("swap-signing");
+      const [signed] = await signTransactions([swap.transaction]);
+
+      setPhase("swapping");
+      const { signature } = await postJson("/api/lp/send", {
+        signedTransaction: signed,
+        wallet,
+        finishesPositionKey: positionKey,
+      });
+      landed.push(signature);
+      setSignatures([...landed]);
+
+      setPhase("done");
+      onDone?.();
+      return { ok: true, swapped: true, signatures: landed };
+    },
+    [onDone, signTransactions, wallet],
+  );
+
   const execute = useCallback(
     async ({ positionKey, targetMint, slippageBps }) => {
-      const body = { wallet, positionKey, targetMint, slippageBps };
       const landed = [];
       setError("");
       setSignatures([]);
@@ -53,7 +93,12 @@ export function useZapOut({ wallet, signTransactions, onDone }) {
       try {
         /* --- withdraw ---------------------------------------------------- */
         setPhase("preparing");
-        const withdraw = await postJson("/api/lp/zap-out/withdraw", body);
+        const withdraw = await postJson("/api/lp/zap-out/withdraw", {
+          wallet,
+          positionKey,
+          targetMint,
+          slippageBps,
+        });
         const unsigned = withdraw.transactions.map((item) => item.transaction);
 
         setPhase("signing");
@@ -65,6 +110,9 @@ export function useZapOut({ wallet, signTransactions, onDone }) {
           try {
             const { signature } = await postJson("/api/lp/send", {
               signedTransaction: transaction,
+              // The transaction's own blockhash, so a dropped one fails when it
+              // really expired rather than waiting out an unrelated window.
+              blockhash: withdraw.blockhash,
               lastValidBlockHeight: withdraw.lastValidBlockHeight,
             });
             landed.push(signature);
@@ -77,28 +125,7 @@ export function useZapOut({ wallet, signTransactions, onDone }) {
         }
 
         /* --- swap -------------------------------------------------------- */
-        setPhase("swap-preparing");
-        const swap = await postJson("/api/lp/zap-out/swap", body);
-
-        if (swap.skipped) {
-          // A withdrawal with nothing left to swap is a complete zap out: the
-          // position was already sitting entirely on the target side.
-          setPhase("done");
-          onDone?.();
-          return { ok: true, swapped: false, signatures: landed };
-        }
-
-        setPhase("swap-signing");
-        const [swapSigned] = await signTransactions([swap.transaction]);
-
-        setPhase("swapping");
-        const { signature } = await postJson("/api/lp/send", { signedTransaction: swapSigned });
-        landed.push(signature);
-        setSignatures([...landed]);
-
-        setPhase("done");
-        onDone?.();
-        return { ok: true, swapped: true, signatures: landed };
+        return await runSwap({ positionKey, landed });
       } catch (runError) {
         const message = runError?.message || "Zap out gagal";
         setError(message);
@@ -109,8 +136,34 @@ export function useZapOut({ wallet, signTransactions, onDone }) {
         return { ok: false, swapped: false, signatures: landed, error: message };
       }
     },
-    [onDone, signTransactions, wallet],
+    [runSwap, signTransactions, wallet],
   );
 
-  return { phase, steps, error, signatures, execute, reset, summary: summarizeExecution(steps) };
+  /** Retry just the swap after a partial run, keeping the signatures already earned. */
+  const resumeSwap = useCallback(
+    async ({ positionKey }) => {
+      setError("");
+      const landed = [...signatures];
+      try {
+        return await runSwap({ positionKey, landed });
+      } catch (runError) {
+        const message = runError?.message || "Swap gagal";
+        setError(message);
+        setPhase("partial");
+        return { ok: false, swapped: false, signatures: landed, error: message };
+      }
+    },
+    [runSwap, signatures],
+  );
+
+  return {
+    phase,
+    steps,
+    error,
+    signatures,
+    execute,
+    resumeSwap,
+    reset,
+    summary: summarizeExecution(steps),
+  };
 }

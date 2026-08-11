@@ -2444,6 +2444,17 @@
   flex: 1;
 }
 
+/* An unfinished zap out is not an error — the funds are safe, there is just a
+   step left to run. It should read as something to act on, not something broken. */
+.fx-banner--warn {
+  border-left-color: var(--f-caution);
+  background: color-mix(in srgb, var(--f-caution) 8%, var(--f-iron-950));
+}
+
+.fx-banner--warn svg {
+  color: var(--f-caution);
+}
+
 .fx-empty {
   display: grid;
   justify-items: center;

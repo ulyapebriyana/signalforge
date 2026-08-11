@@ -11,7 +11,14 @@ import { alertPresetsFor, cooldownKey, presetsCleared } from "../shared/alertRou
 import { collectSignalEntries } from "../shared/signalTransitions.js";
 import { collectPositionAlerts, RANGE_LABEL } from "../shared/lpPositions.js";
 import { configuredWallets, isValidWallet, readWalletPositions, rpcConfigured } from "./lpPositions.mjs";
-import { planPositionZapOut, prepareSwap, prepareWithdraw, sendSignedTransaction } from "./zapOut.mjs";
+import {
+  clearPendingZap,
+  pendingZapsFor,
+  planPositionZapOut,
+  prepareSwap,
+  prepareWithdraw,
+  sendSignedTransaction,
+} from "./zapOut.mjs";
 import { normalizeSlippageBps } from "../shared/zapOut.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -679,14 +686,7 @@ app.post("/api/lp/zap-out/withdraw", async (request, response) => {
   try {
     const context = await zapGuard(request, response);
     if (!context) return undefined;
-    const { position, wallet } = context;
-    const prepared = await prepareWithdraw({
-      wallet,
-      positionKey: position.positionKey,
-      poolAddress: position.poolAddress,
-      lowerBinId: position.lowerBinId,
-      upperBinId: position.upperBinId,
-    });
+    const prepared = await prepareWithdraw(context);
 
     // A transaction that already fails in simulation must never reach a wallet
     // prompt — approving it would burn a fee to accomplish nothing.
@@ -704,31 +704,41 @@ app.post("/api/lp/zap-out/withdraw", async (request, response) => {
   }
 });
 
+/**
+ * The swap leg deliberately does not go through `zapGuard`.
+ *
+ * By the time this runs the withdrawal has closed the position, so looking it
+ * up would always 404 — the swap would fail every time it was actually needed.
+ * What it needs was recorded before the withdrawal ran, and the amount is
+ * bounded by the wallet's real balance, so nothing here relies on the caller's
+ * numbers either.
+ */
 app.post("/api/lp/zap-out/swap", async (request, response) => {
+  if (!rpcConfigured()) return response.status(503).json({ error: "SOLANA_RPC_URL belum diisi di file .env" });
+
+  const wallet = String(request.body?.wallet || "").trim();
+  const positionKey = String(request.body?.positionKey || "").trim();
+  if (!isValidWallet(wallet)) return response.status(400).json({ error: "Alamat wallet tidak valid" });
+
   try {
-    const context = await zapGuard(request, response);
-    if (!context) return undefined;
-    const { wallet, position, pool, targetMint, slippageBps } = context;
-
-    const sourceIsX = targetMint === pool.tokenY.address;
-    const source = sourceIsX ? pool.tokenX : pool.tokenY;
-    const target = sourceIsX ? pool.tokenY : pool.tokenX;
-    if (!source?.address || !target?.address) {
-      return response.status(400).json({ error: "Token tujuan harus salah satu token pool ini" });
-    }
-
-    const prepared = await prepareSwap({
-      wallet,
-      inputMint: source.address,
-      outputMint: target.address,
-      amount: sourceIsX ? position.amountX : position.amountY,
-      decimalsIn: source.decimals,
-      decimalsOut: target.decimals,
-      slippageBps,
-    });
-    return response.json(prepared);
+    return response.json(await prepareSwap({ wallet, positionKey }));
   } catch (error) {
     return response.status(502).json({ error: error instanceof Error ? error.message : "Swap gagal disiapkan" });
+  }
+});
+
+/** Zap outs this wallet started but never finished, so the UI can offer a resume. */
+app.get("/api/lp/zap-out/pending", async (request, response) => {
+  const wallet = String(request.query.wallet || "").trim();
+  if (!isValidWallet(wallet)) return response.status(400).json({ error: "Alamat wallet tidak valid" });
+  if (!rpcConfigured()) return response.json({ pending: [] });
+
+  try {
+    return response.json({ pending: await pendingZapsFor(wallet) });
+  } catch {
+    // A resume offer is a convenience; failing to compute one must not break
+    // the page that reports the positions themselves.
+    return response.json({ pending: [] });
   }
 });
 
@@ -740,8 +750,15 @@ app.post("/api/lp/send", async (request, response) => {
   try {
     const result = await sendSignedTransaction({
       signedTransaction,
+      blockhash: String(request.body?.blockhash || "") || null,
       lastValidBlockHeight: Number(request.body?.lastValidBlockHeight) || null,
     });
+
+    // Sent once the swap lands, so a finished zap out stops offering a resume.
+    const finished = String(request.body?.finishesPositionKey || "").trim();
+    const wallet = String(request.body?.wallet || "").trim();
+    if (finished && isValidWallet(wallet)) clearPendingZap(wallet, finished);
+
     return response.json(result);
   } catch (error) {
     return response.status(502).json({ error: error instanceof Error ? error.message : "Transaksi gagal dikirim" });

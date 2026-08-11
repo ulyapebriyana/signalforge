@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ExternalLink, Loader2, LogOut, Plug, RefreshCw, TriangleAlert, Wallet } from "lucide-react";
 import { RANGE_LABEL } from "../../../../shared/lpPositions.js";
 import { formatUsd } from "../../../lib/format.js";
 import { useWallet } from "../lib/wallet.jsx";
+import { useZapOut } from "../../../hooks/useZapOut.js";
 import { EmptyState, StatTile } from "../components/bits.jsx";
 import ZapOutSheet from "../components/ZapOutSheet.jsx";
 
@@ -16,6 +17,12 @@ const STATE_TONE = {
 };
 
 const money = (value) => (value === null || value === undefined ? "—" : formatUsd(value));
+
+/** Token amounts, not dollars — a memecoin balance needs the whole number. */
+const amount = (value) =>
+  value === null || value === undefined
+    ? "—"
+    : Number(value).toLocaleString("en-US", { maximumFractionDigits: 6 });
 
 /**
  * Prices here run from SOL-USDC to six-decimal memecoins, so a fixed number of
@@ -87,6 +94,41 @@ export default function PositionsView({
     setDraft(connected);
     onWallet(connected);
   }, [connected, onWallet, wallet]);
+
+  /**
+   * A zap out interrupted in an earlier session.
+   *
+   * Closing the tab between the withdrawal and the swap leaves the funds safe
+   * but in two tokens, and nothing on screen would otherwise say so — the
+   * position is gone, so the table simply shows one row fewer. The server still
+   * knows what was meant to be swapped, and only reports it while the wallet
+   * really holds the token, so this never offers a swap that already happened.
+   */
+  const [pending, setPending] = useState([]);
+  const reloadPending = useCallback(async () => {
+    if (!wallet) return setPending([]);
+    try {
+      const response = await fetch(`/api/lp/zap-out/pending?wallet=${encodeURIComponent(wallet)}`);
+      const payload = await response.json();
+      setPending(response.ok ? payload.pending || [] : []);
+    } catch {
+      setPending([]);
+    }
+    return undefined;
+  }, [wallet]);
+
+  useEffect(() => {
+    void reloadPending();
+  }, [reloadPending, readAt]);
+
+  const resume = useZapOut({
+    wallet,
+    signTransactions: walletApi.signTransactions,
+    onDone: () => {
+      onRefresh();
+      void reloadPending();
+    },
+  });
   // Signing requires the connected wallet to *be* the wallet being watched.
   // Tracking someone else's address is a normal thing to do here, so this is a
   // real state rather than an edge case, and zap out has to stay disabled in it.
@@ -235,6 +277,32 @@ export default function PositionsView({
         <div className="fx-banner fx-banner--error" role="alert">
           <TriangleAlert />
           <span>{error}</span>
+        </div>
+      ) : null}
+
+      {pending.map((item) => (
+        <div className="fx-banner fx-banner--warn" role="status" key={item.positionKey}>
+          <TriangleAlert />
+          <span>
+            Zap out <b>{item.pair}</b> belum selesai — {amount(item.amount)} {item.sourceSymbol} masih
+            menunggu ditukar ke {item.targetSymbol}. Likuiditasnya sudah aman di wallet Anda.
+          </span>
+          <button
+            className="f-btn"
+            type="button"
+            disabled={!canSign || resume.phase !== "idle"}
+            title={canSign ? undefined : "Sambungkan wallet yang dipantau untuk melanjutkan"}
+            onClick={() => resume.resumeSwap({ positionKey: item.positionKey })}
+          >
+            {resume.phase === "idle" ? "Lanjutkan swap" : "Memproses…"}
+          </button>
+        </div>
+      ))}
+
+      {resume.error ? (
+        <div className="fx-banner fx-banner--error" role="alert">
+          <TriangleAlert />
+          <span>{resume.error}</span>
         </div>
       ) : null}
 

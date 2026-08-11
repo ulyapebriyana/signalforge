@@ -92,8 +92,12 @@ export default function ZapOutSheet({ position, wallet, walletApi, onClose, onDo
               <strong>Sebagian sudah dieksekusi.</strong>
               <p>
                 {zap.signatures.length} transaksi berhasil sebelum sisanya gagal, jadi sebagian dana
-                sudah berpindah. Periksa posisi dan saldo dulu — <b>jangan langsung ulangi</b>, karena
-                menjalankan lagi bisa menarik atau menukar dua kali.
+                sudah berpindah. Likuiditasnya sudah keluar dari posisi dan aman di wallet Anda —
+                yang belum selesai tinggal menukarnya jadi satu token.
+              </p>
+              <p>
+                <b>Jangan mengulang dari awal.</b> Pakai tombol di bawah: itu hanya menjalankan sisa
+                swap-nya, dan jumlahnya tetap dibatasi saldo yang benar-benar ada.
               </p>
               <p className="fx-zap-error">{zap.error}</p>
             </div>
@@ -239,6 +243,16 @@ export default function ZapOutSheet({ position, wallet, walletApi, onClose, onDo
           <button className="f-btn" type="button" onClick={onClose} disabled={busy}>
             {finished || zap.phase === "partial" ? "Tutup" : "Batal"}
           </button>
+          {zap.phase === "partial" ? (
+            <button
+              className="f-btn f-btn--danger"
+              type="button"
+              disabled={busy}
+              onClick={() => zap.resumeSwap({ positionKey: position.positionKey })}
+            >
+              <Wallet /> Lanjutkan swap saja
+            </button>
+          ) : null}
           {!finished && zap.phase !== "partial" ? (
             <button
               className="f-btn f-btn--danger"
