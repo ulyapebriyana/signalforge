@@ -1,7 +1,11 @@
 node_modules
 dist
 .env
-.env.bak.*
+# Any backup of it, whatever separator was used — these hold the real Telegram
+# token and RPC key, and one on the VPS was already sitting untracked where a
+# `git add -A` would have committed it. The template is the one exception.
+.env.*
+!.env.example
 *.log
 .DS_Store
 data/*.json
