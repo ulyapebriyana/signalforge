@@ -9,7 +9,7 @@ Keduanya memakai API dan logika skor yang sama.
 | Rute | Antarmuka |
 | --- | --- |
 | `/` | Landing page dengan hero 3D (three.js) dan ringkasan data langsung |
-| `/app` | Dashboard **Forge**: ringkasan, scanner, riwayat sinyal, aturan, pengaturan |
+| `/app` | Dashboard **Forge**: ringkasan, scanner, posisi LP, riwayat sinyal, aturan, pengaturan |
 | `/classic` | Antarmuka versi pertama, tidak diubah sama sekali |
 
 Pemilihan bundel terjadi di `src/main.jsx` sebelum salah satu stylesheet dimuat, jadi CSS kedua antarmuka tidak pernah berada dalam satu dokumen. `src/App.jsx` dan `src/styles.css` milik antarmuka klasik tidak disentuh.
@@ -36,6 +36,8 @@ Pemilihan bundel terjadi di `src/main.jsx` sebelum salah satu stylesheet dimuat,
 - Kolom keamanan JupShield, RugCheck, dan Jupiter Organic Score dengan fallback saat data belum tersedia.
 - Telegram alert manual dan scanner otomatis opsional, dengan cooldown per pool.
 - Notifikasi Watch/Hot berbunyi saat pool baru masuk status atau naik dari Watch ke Hot, dengan opsi desktop notification.
+- **Pelacakan posisi LP** dari alamat wallet publik: status dalam/luar range, nilai posisi, fee
+  belum diklaim, dan alert Telegram saat posisi berhenti menghasilkan fee.
 - Tampilan desktop, tablet, dan mobile; animasi menghormati `prefers-reduced-motion`.
 
 ## Menjalankan
@@ -75,6 +77,41 @@ dipakai — satu ambang global akan membungkam preset yang ladder-nya lebih rend
 ketiganya masih ada di `.env`.
 
 Token Telegram hanya dibaca oleh server. Browser tidak pernah menerima nilainya.
+
+## Melacak posisi LP
+
+Scanner mencari tempat masuk. Halaman **Posisi** menjaga posisi yang sudah jalan, dan menjawab
+satu pertanyaan yang tidak bisa ditanyakan ke daftar pool: apakah bin aktif masih ada di dalam
+range Anda. Di luar range, posisi berhenti menghasilkan fee dan hanya memegang satu sisi token —
+itulah sinyal keluar yang selama ini tidak dimiliki aplikasi ini.
+
+Meteora tidak menyediakan endpoint posisi per wallet, jadi posisi dibaca **langsung dari chain**
+lewat `@meteora-ag/dlmm` dan sebuah RPC Solana. Yang dibutuhkan hanya alamat publik:
+
+1. Isi `SOLANA_RPC_URL` di `.env`. Helius: `https://mainnet.helius-rpc.com/?api-key=ISI_KEY_ANDA`.
+   RPC publik Solana kena rate limit dan tidak cukup untuk polling.
+2. Buka `/app/positions`, tempel alamat wallet, klik **Pantau**. Alamat disimpan di browser saja.
+3. Untuk alert Telegram yang tetap jalan setelah tab ditutup, isi `LP_WALLETS` di `.env`
+   (dipisah koma) dan pastikan `ENABLE_ALERTS=true`.
+
+Alert dikirim untuk dua peristiwa: posisi yang tadinya menghasilkan fee **keluar range**, dan
+posisi yang tadinya di tengah **bergeser ke tepi** — peringatan terakhir sebelum berhenti dapat
+fee. Kembali masuk range sengaja dibiarkan diam, supaya posisi yang memantul di tepi tidak
+mengirim pesan tiap kali. Pembacaan pertama setelah restart hanya mencatat keadaan, tidak
+mengirim apa pun.
+
+`LP_SCAN_SECONDS` (default 60, minimum 30) mengatur jarak antar pembacaan. Lebih lambat daripada
+scan pool karena satu pembacaan menelusuri seluruh position account milik wallet dan ditagih per
+panggilan RPC, sementara posisi hanya berubah kalau harga melewati bin.
+
+Aplikasi ini tidak pernah meminta seed phrase atau private key, dan tidak pernah menandatangani
+transaksi. Membaca posisi tidak memerlukan tanda tangan — karena itu tidak ada tombol *connect
+wallet*: menyambungkan wallet tidak akan menghasilkan satu data pun yang tidak bisa didapat dari
+alamat publik.
+
+Yang belum ada: PnL sebenarnya dan impermanent loss. Keduanya butuh jumlah deposit saat posisi
+dibuka, yang hanya ada di riwayat transaksi, bukan di state on-chain saat ini. Yang ditampilkan
+adalah nilai posisi sekarang, fee yang sudah diklaim, dan fee yang belum diklaim.
 
 ## Arti preset
 

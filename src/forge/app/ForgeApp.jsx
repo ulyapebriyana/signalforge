@@ -24,10 +24,12 @@ import {
   Star,
   Sun,
   Telescope,
+  Wallet,
   X,
 } from "lucide-react";
 import { PRESETS, poolTier, resolvePresetId } from "../../../shared/scoring.js";
 import { collectSignalEntries } from "../../../shared/signalTransitions.js";
+import { useLpPositions } from "../../hooks/useLpPositions.js";
 import { usePools } from "../../hooks/usePools.js";
 import { useSignalHistory } from "../../hooks/useSignalHistory.js";
 import { formatWibTime } from "../../lib/format.js";
@@ -47,6 +49,7 @@ import CommandPalette from "./components/CommandPalette.jsx";
 import PoolDrawer from "./components/PoolDrawer.jsx";
 import { ToastStack, useToasts } from "./components/Toasts.jsx";
 import OverviewView from "./views/OverviewView.jsx";
+import PositionsView from "./views/PositionsView.jsx";
 import RulesView from "./views/RulesView.jsx";
 import ScannerView, { defaultColumnKeys } from "./views/ScannerView.jsx";
 import SettingsView from "./views/SettingsView.jsx";
@@ -56,6 +59,7 @@ import "./app.css";
 const NAV = [
   { path: "/app", label: "Ringkasan", icon: Gauge },
   { path: "/app/scanner", label: "Scanner", icon: Telescope },
+  { path: "/app/positions", label: "Posisi", icon: Wallet },
   { path: "/app/signals", label: "Sinyal", icon: History },
   { path: "/app/rules", label: "Aturan", icon: ShieldCheck },
   { path: "/app/settings", label: "Pengaturan", icon: Settings },
@@ -216,6 +220,9 @@ export default function ForgeApp({ path }) {
   });
   const { pools, meta, status, loading, refreshing, error, refresh } = usePools(scanInterval);
   const signalHistory = useSignalHistory(scanInterval);
+  // Polled on the server's own LP cadence rather than the pool scan's: a
+  // position moves when the price crosses a bin, and each read costs an RPC call.
+  const lp = useLpPositions(status?.lpScanSeconds || 60);
 
   const [preset, setPreset] = useState(() => resolvePresetId(localStorage.getItem("signalforge:preset")));
   const [scanner, setScanner] = useState(() => initialScannerState(PRESETS[preset]));
@@ -686,6 +693,20 @@ export default function ForgeApp({ path }) {
             watchlist={watchlist}
             onRefresh={refresh}
             onResetFilters={resetFilters}
+          />
+        ) : null}
+        {view === "positions" ? (
+          <PositionsView
+            wallet={lp.wallet}
+            onWallet={lp.setWallet}
+            positions={lp.positions}
+            totals={lp.totals}
+            readAt={lp.readAt}
+            loading={lp.loading}
+            refreshing={lp.refreshing}
+            error={lp.error}
+            onRefresh={lp.refresh}
+            configured={status?.lpTrackingConfigured !== false}
           />
         ) : null}
         {view === "signals" ? (

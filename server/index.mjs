@@ -9,6 +9,8 @@ import { gmgnAuthQuery, normalizeGmgnToken } from "../shared/gmgn.js";
 import { normalizePool, poolTier, PRESETS, resolvePresetId } from "../shared/scoring.js";
 import { alertPresetsFor, cooldownKey, presetsCleared } from "../shared/alertRouting.js";
 import { collectSignalEntries } from "../shared/signalTransitions.js";
+import { collectPositionAlerts, RANGE_LABEL } from "../shared/lpPositions.js";
+import { configuredWallets, isValidWallet, readWalletPositions, rpcConfigured } from "./lpPositions.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, "..");
@@ -16,6 +18,11 @@ const app = express();
 const port = Number(process.env.PORT || 4173);
 const scanIntervalSeconds = Math.max(20, Number(process.env.SCAN_INTERVAL_SECONDS || 30));
 const scannerPresetName = resolvePresetId(process.env.SCANNER_PRESET);
+// Slower than the pool scan on purpose: an RPC read walks every position
+// account the wallet owns and is billed per call, while a position only changes
+// when the price crosses a bin. The floor keeps a stray 5 in .env from emptying
+// the RPC quota overnight.
+const lpScanSeconds = Math.max(30, Number(process.env.LP_SCAN_SECONDS || 60));
 const dataApi = "https://dlmm.datapi.meteora.ag";
 const poolDiscoveryApi = "https://pool-discovery-api.datapi.meteora.ag";
 const rugCheckApi = "https://api.rugcheck.xyz";
@@ -568,7 +575,45 @@ app.get("/api/status", (_request, response) => {
     preset: scannerPresetName,
     gmgnConfigured: gmgnConfigured(),
     historyPersistent: true,
+    lpTrackingConfigured: rpcConfigured(),
+    lpWallets: configuredWallets(),
+    lpScanSeconds,
   });
+});
+
+/**
+ * A wallet's live LP positions.
+ *
+ * The address may come from the query so the dashboard can track a wallet
+ * without a redeploy, and it is validated before it reaches the RPC — this
+ * endpoint must not become an open relay for arbitrary strings. Only public
+ * data is involved either way: reading a position requires no signature and
+ * this server holds no key that could produce one.
+ */
+app.get("/api/lp/positions", async (request, response) => {
+  const requested = String(request.query.wallet || "").trim();
+  const wallet = requested || configuredWallets()[0] || "";
+
+  if (!wallet) {
+    return response.status(400).json({ error: "Belum ada wallet. Isi LP_WALLETS di .env atau kirim ?wallet=" });
+  }
+  if (!isValidWallet(wallet)) {
+    return response.status(400).json({ error: "Alamat wallet tidak valid" });
+  }
+  if (!rpcConfigured()) {
+    return response.status(503).json({ error: "SOLANA_RPC_URL belum diisi di file .env" });
+  }
+
+  try {
+    const payload = await readWalletPositions(wallet, { force: request.query.force === "1" });
+    response.set("cache-control", "no-store");
+    return response.json(payload);
+  } catch (error) {
+    return response.status(502).json({
+      error: "Gagal membaca posisi dari chain",
+      detail: error instanceof Error ? error.message : "Unknown RPC error",
+    });
+  }
 });
 
 app.get("/api/history", (_request, response) => {
@@ -633,6 +678,82 @@ const runAlertScan = async () => {
   }
 };
 
+/** Position range states, tracked per wallet so one wallet cannot mask another. */
+const positionStates = new Map();
+
+/** Prices here span SOL-USDC to memecoins, so significant digits beat fixed ones. */
+const price = (value) => (value === null || value === undefined
+  ? "—"
+  : Number(value).toPrecision(6).replace(/\.?0+$/, ""));
+
+const money = (value) => (value === null || value === undefined ? "—" : usd(value));
+
+/**
+ * An out-of-range position is not a suggestion to close — it is a statement
+ * that the position has stopped earning, which is a fact the LP should hear
+ * immediately. The wording stays descriptive for the same reason the pool
+ * alerts do: this project reports, it does not advise.
+ */
+const positionAlertMessage = ({ position, kind }) => {
+  const heading = kind === "out-of-range"
+    ? "POSISI KELUAR RANGE"
+    : "POSISI DEKAT TEPI";
+  const consequence = kind === "out-of-range"
+    ? "Posisi berhenti menghasilkan fee sampai harga kembali masuk range."
+    : "Masih dapat fee, tapi satu langkah lagi keluar range.";
+
+  return [
+    `<b>SignalForge · ${heading}</b>`,
+    `<b>${escapeHtml(position.pair || position.poolAddress)}</b> · ${escapeHtml(RANGE_LABEL[position.rangeState])}`,
+    `Range: ${price(position.lowerPrice)} – ${price(position.upperPrice)}`,
+    `Harga aktif: <b>${price(position.activePrice)}</b>`,
+    `Nilai posisi: ${money(position.valueUsd)} · Fee belum diklaim: ${money(position.unclaimedFeesUsd)}`,
+    `Total fee didapat: ${money(position.totalFeesUsd)}`,
+    consequence,
+    `<a href="https://www.meteora.ag/dlmm/${position.poolAddress}">Buka pool di Meteora</a>`,
+    "<i>Alert otomatis; ini bukan rekomendasi finansial.</i>",
+  ].join("\n");
+};
+
+/**
+ * Watch every configured wallet and report positions that stop earning.
+ *
+ * Only wallets from .env are scanned. A wallet typed into the dashboard is
+ * read on demand but never alerted on, because alerting is a background job
+ * that outlives the browser tab — it has to come from server configuration,
+ * not from whatever a page last asked about.
+ */
+const runPositionScan = async () => {
+  if (process.env.ENABLE_ALERTS !== "true" || !telegramConfigured() || !rpcConfigured()) return;
+
+  for (const wallet of configuredWallets()) {
+    if (!isValidWallet(wallet)) {
+      console.warn(`LP_WALLETS berisi alamat tidak valid, dilewati: ${wallet}`);
+      continue;
+    }
+
+    try {
+      const { positions } = await readWalletPositions(wallet, { force: true });
+      const { currentStates, entries } = collectPositionAlerts(positions, positionStates.get(wallet) || new Map());
+      positionStates.set(wallet, currentStates);
+
+      for (const entry of entries) {
+        // Each transition fires once because the state map has already moved on;
+        // a position flapping across its edge re-alerts only after it settles
+        // and crosses again, which is a real event rather than noise.
+        try {
+          await sendTelegram(positionAlertMessage(entry));
+        } catch {
+          // Same posture as the pool alerts: the next scan retries the state it
+          // still sees, and the dashboard shows the position either way.
+        }
+      }
+    } catch {
+      // An RPC hiccup must not kill the loop; the next interval retries.
+    }
+  }
+};
+
 // These were a single-preset knob. Alerts are now per preset, each with its own
 // calibrated floor, so a shared override would silence whole presets instead of
 // tuning them — ALERT_MIN_SCORE=65 alone would mute Auzhinta-like entirely.
@@ -664,8 +785,15 @@ const server = app.listen(port, "127.0.0.1", () => {
 const timer = setInterval(runAlertScan, scanIntervalSeconds * 1_000);
 setTimeout(runAlertScan, 3_000);
 
+const positionTimer = setInterval(runPositionScan, lpScanSeconds * 1_000);
+// The first pass only records where each position stands; it cannot alert
+// without a previous reading to compare against, which is what makes a restart
+// silent instead of replaying every position the wallet holds.
+setTimeout(runPositionScan, 6_000);
+
 const shutdown = async () => {
   clearInterval(timer);
+  clearInterval(positionTimer);
   await vite?.close();
   server.close();
 };

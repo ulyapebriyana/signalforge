@@ -2837,3 +2837,128 @@
     flex-direction: column;
   }
 }
+
+/* --- LP positions ---------------------------------------------------------- */
+
+/*
+ * The range strip. An LP reads two things off a position — is it earning, and
+ * how much room is left — and the second one is a distance, not a number, so it
+ * gets a shape rather than another column of digits.
+ */
+.fx-range {
+  display: grid;
+  gap: 4px;
+  min-width: 128px;
+}
+
+.fx-range-track {
+  position: relative;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--f-line);
+}
+
+.fx-range-marker {
+  position: absolute;
+  top: 50%;
+  width: 3px;
+  height: 12px;
+  border-radius: 2px;
+  background: currentColor;
+  transform: translate(-50%, -50%);
+}
+
+.fx-range-scale {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--f-faint);
+  font-size: 11px;
+}
+
+.fx-range--healthy {
+  color: var(--f-quench);
+}
+
+.fx-range--warning {
+  color: var(--f-caution);
+}
+
+.fx-range--danger {
+  color: var(--f-scorch);
+}
+
+.fx-range--muted {
+  color: var(--f-faint);
+}
+
+/* An out-of-range position is still real money, so it dims rather than hides. */
+.fx-table--positions tr.is-idle td {
+  opacity: 0.72;
+}
+
+/* Pool, status and range read as labels, not quantities — the numeric columns
+   keep the table's right alignment. */
+.fx-table--positions .fx-col-lp,
+.fx-table--positions .fx-col-lp > span {
+  justify-content: flex-start;
+  text-align: left;
+}
+
+.fx-range-cell {
+  width: 168px;
+}
+
+.fx-wallet-form {
+  display: grid;
+  gap: 6px;
+  padding: 14px 16px;
+  border: 1px solid var(--f-line);
+  border-radius: 8px;
+  background: var(--f-raised);
+}
+
+.fx-wallet-form label {
+  color: var(--f-faint);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.fx-wallet-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.fx-wallet-row input {
+  flex: 1 1 320px;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--f-line);
+  border-radius: var(--f-r-sm);
+  outline: none;
+  background: var(--f-iron-900);
+  color: var(--f-ash);
+  /* A base58 address is read character by character when checking it. */
+  font-family: var(--f-mono);
+  font-size: 0.8125rem;
+}
+
+.fx-wallet-row input:focus {
+  border-color: var(--f-ember);
+}
+
+.fx-wallet-row input::placeholder {
+  color: var(--f-faint);
+}
+
+.fx-wallet-form small {
+  color: var(--f-faint);
+  font-size: 12px;
+}
+
+.fx-foot-note {
+  color: var(--f-faint);
+  font-size: 12px;
+}

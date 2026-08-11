@@ -12,6 +12,8 @@
   },
   "dependencies": {
     "@gsap/react": "^2.1.2",
+    "@meteora-ag/dlmm": "^1.9.14",
+    "@solana/web3.js": "^1.98.4",
     "dotenv": "^17.2.1",
     "express": "^5.1.0",
     "gsap": "^3.13.0",
