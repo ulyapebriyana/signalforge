@@ -29,6 +29,7 @@ import {
   Wallet,
   X,
 } from "lucide-react";
+import { collectPositionAlerts } from "../../../shared/lpPositions.js";
 import { PRESETS, poolTier, resolvePresetId } from "../../../shared/scoring.js";
 import { collectSignalEntries } from "../../../shared/signalTransitions.js";
 import { useLpPositions } from "../../hooks/useLpPositions.js";
@@ -39,6 +40,7 @@ import {
   NOTIFICATION_SOUND_OFF,
   NOTIFICATION_SOUNDS,
   resolveNotificationSoundMap,
+  resolvePositionSoundChoice,
   soundForPreset,
 } from "../../lib/notificationSounds.js";
 import { playSignalSound, primeSignalSound, stopSignalSound } from "../../lib/signalSound.js";
@@ -260,6 +262,13 @@ export default function ForgeApp({ path }) {
   );
   const soundChoice = soundForPreset(soundByPreset, preset);
   const soundEnabled = soundChoice !== NOTIFICATION_SOUND_OFF;
+
+  // The LP alarm is one setting for the whole app, not one per preset — see
+  // resolvePositionSoundChoice for why an open position has no preset to vary by.
+  const [positionSound, setPositionSound] = useState(() =>
+    resolvePositionSoundChoice(localStorage.getItem("signalforge:positionSound")),
+  );
+  const positionSoundEnabled = positionSound !== NOTIFICATION_SOUND_OFF;
   const [notificationPermission, setNotificationPermission] = useState(() =>
     typeof window.Notification === "undefined" ? "unsupported" : window.Notification.permission,
   );
@@ -285,16 +294,29 @@ export default function ForgeApp({ path }) {
     [soundChoice],
   );
 
+  /**
+   * Which sound does the unlocking.
+   *
+   * One <audio> element serves every file-backed sound, so priming it once buys
+   * autoplay rights for all of them — but only a sound that *has* a file can do
+   * the priming, and the synthesised ones have no element to unlock. Picking the
+   * first choice with a file means a synth preset sound no longer leaves the LP
+   * alarm locked out, which it silently did while priming followed the preset.
+   */
+  const primeChoice = [soundChoice, positionSound].find(
+    (choice) => NOTIFICATION_SOUNDS[choice]?.src,
+  );
+
   useEffect(() => {
-    if (!soundEnabled) return undefined;
-    const prime = () => void primeSignalSound(soundChoice);
+    if (!primeChoice) return undefined;
+    const prime = () => void primeSignalSound(primeChoice);
     window.addEventListener("pointerdown", prime, { once: true });
     window.addEventListener("keydown", prime, { once: true });
     return () => {
       window.removeEventListener("pointerdown", prime);
       window.removeEventListener("keydown", prime);
     };
-  }, [soundChoice, soundEnabled]);
+  }, [primeChoice]);
 
   useEffect(() => stopSignalSound, []);
 
@@ -318,6 +340,24 @@ export default function ForgeApp({ path }) {
       push(`${NOTIFICATION_SOUNDS[choice].label} dipakai untuk sinyal ${presetLabel}.`, "success");
     },
     [playSound, push, soundByPreset],
+  );
+
+  const changePositionSound = useCallback(
+    async (choice) => {
+      if (choice !== NOTIFICATION_SOUND_OFF && !NOTIFICATION_SOUNDS[choice]) return;
+
+      setPositionSound(choice);
+      localStorage.setItem("signalforge:positionSound", choice);
+
+      if (choice === NOTIFICATION_SOUND_OFF) {
+        stopSignalSound();
+        push("Bunyi posisi keluar range dimatikan.");
+        return;
+      }
+      await playSound(choice);
+      push(`${NOTIFICATION_SOUNDS[choice].label} dipakai untuk posisi keluar range.`, "success");
+    },
+    [playSound, push],
   );
 
   const requestDesktopNotifications = useCallback(async () => {
@@ -380,6 +420,73 @@ export default function ForgeApp({ path }) {
     push,
     signalHistory.refresh,
     soundEnabled,
+  ]);
+
+  /* --- position range transitions ---------------------------------------- */
+
+  /**
+   * The other half of the alarm: the scanner shouts when a pool becomes worth
+   * entering, this shouts when a position stops being worth holding.
+   *
+   * The transition rule is `collectPositionAlerts`, the same one the server's
+   * Telegram alerts run on — reusing it means the browser cannot disagree with
+   * the message that arrives on the phone. Only the out-of-range half is voiced
+   * here; a drift to the edge still earns fees and needs no interruption.
+   *
+   * This lives in the shell rather than in the positions view because the tab is
+   * rarely parked on that page. The LP poll runs for as long as a wallet is set,
+   * so the alarm reaches someone watching the scanner.
+   */
+  const positionsRef = useRef({ readAt: null, wallet: null, states: new Map() });
+
+  useEffect(() => {
+    if (!lp.readAt) return;
+    const snapshot = positionsRef.current;
+    if (snapshot.readAt === lp.readAt && snapshot.wallet === lp.wallet) return;
+
+    // A different wallet holds different positions, so its first read is a
+    // baseline of its own. Comparing across wallets would be comparing keys that
+    // never met, and the empty map makes that explicit rather than accidental.
+    const previous = snapshot.wallet === lp.wallet ? snapshot.states : new Map();
+    const { currentStates, entries } = collectPositionAlerts(lp.positions, previous);
+    positionsRef.current = { readAt: lp.readAt, wallet: lp.wallet, states: currentStates };
+
+    const left = entries.filter((entry) => entry.kind === "out-of-range");
+    if (!left.length) return;
+
+    const primary = left[0];
+    const pair = primary.position.pair || "Posisi";
+    const side = primary.state === "below" ? "tembus batas bawah" : "tembus batas atas";
+    const message =
+      left.length === 1
+        ? `${pair} ${side} dan berhenti dapat fee.`
+        : `${left.length} posisi keluar range. ${pair} ${side}.`;
+
+    if (positionSoundEnabled) void playSound(positionSound);
+    push(message, "warning", {
+      title: "Posisi keluar range",
+      action: { label: "Lihat", onClick: () => navigate("/app/positions") },
+    });
+
+    if (notificationPermission === "granted" && typeof window.Notification !== "undefined") {
+      try {
+        new window.Notification("SignalForge · Posisi keluar range", {
+          body: message,
+          tag: `signalforge-lp-${primary.position.positionKey}-${primary.state}`,
+        });
+      } catch {
+        // Blocked at the OS level; the toast and the sound still carry it.
+      }
+    }
+  }, [
+    lp.positions,
+    lp.readAt,
+    lp.wallet,
+    notificationPermission,
+    playSound,
+    positionSound,
+    positionSoundEnabled,
+    push,
   ]);
 
   /* --- selection --------------------------------------------------------- */
@@ -647,7 +754,7 @@ export default function ForgeApp({ path }) {
               setNotifyOpen(next);
               if (next) {
                 signalHistory.refresh();
-                if (soundEnabled) void unlockAudio();
+                if (primeChoice) void primeSignalSound(primeChoice);
               }
             }}
           >
@@ -758,6 +865,8 @@ export default function ForgeApp({ path }) {
             preset={preset}
             soundByPreset={soundByPreset}
             onSoundChange={changeSound}
+            positionSound={positionSound}
+            onPositionSoundChange={changePositionSound}
             notificationPermission={notificationPermission}
             onRequestPermission={requestDesktopNotifications}
             theme={theme}

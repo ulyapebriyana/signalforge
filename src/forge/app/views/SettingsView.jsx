@@ -27,6 +27,23 @@ const THEMES = [
   ["auto", "Ikuti sistem", Monitor],
 ];
 
+/** The sound picker, shared by the preset alarms and the LP one. */
+function SoundSelect({ value, onChange, label }) {
+  const on = value !== NOTIFICATION_SOUND_OFF;
+  return (
+    <label className={`fx-select ${on ? "is-on" : ""}`}>
+      {on ? <Volume2 /> : <VolumeX />}
+      <select value={value} onChange={(event) => onChange(event.target.value)} aria-label={label}>
+        {NOTIFICATION_SOUND_OPTIONS.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
 function Row({ title, description, children }) {
   return (
     <div className="fx-setting">
@@ -46,6 +63,8 @@ export default function SettingsView({
   preset,
   soundByPreset,
   onSoundChange,
+  positionSound,
+  onPositionSoundChange,
   notificationPermission,
   onRequestPermission,
   theme,
@@ -144,36 +163,35 @@ export default function SettingsView({
             </div>
             <Bell />
           </header>
-          {Object.values(PRESETS).map((item) => {
-            const choice = soundForPreset(soundByPreset, item.id);
-            const on = choice !== NOTIFICATION_SOUND_OFF;
-            return (
-              <Row
-                key={item.id}
-                title={`Bunyi sinyal · ${item.label}`}
-                description={
-                  item.id === preset
-                    ? "Preset aktif. Dimainkan saat pool masuk Watch atau naik ke Hot."
-                    : "Dipakai saat preset ini yang aktif."
-                }
-              >
-                <label className={`fx-select ${on ? "is-on" : ""}`}>
-                  {on ? <Volume2 /> : <VolumeX />}
-                  <select
-                    value={choice}
-                    onChange={(event) => onSoundChange(item.id, event.target.value)}
-                    aria-label={`Pilih bunyi notifikasi untuk preset ${item.label}`}
-                  >
-                    {NOTIFICATION_SOUND_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </Row>
-            );
-          })}
+          {Object.values(PRESETS).map((item) => (
+            <Row
+              key={item.id}
+              title={`Bunyi sinyal · ${item.label}`}
+              description={
+                item.id === preset
+                  ? "Preset aktif. Dimainkan saat pool masuk Watch atau naik ke Hot."
+                  : "Dipakai saat preset ini yang aktif."
+              }
+            >
+              <SoundSelect
+                value={soundForPreset(soundByPreset, item.id)}
+                onChange={(choice) => onSoundChange(item.id, choice)}
+                label={`Pilih bunyi notifikasi untuk preset ${item.label}`}
+              />
+            </Row>
+          ))}
+          {/* Not tied to a preset: an open position leaves its range because of
+              price, not because of which gate found the pool. */}
+          <Row
+            title="Bunyi posisi keluar range"
+            description="Dibunyikan saat posisi LP tembus batas bawah atau atas, jadi berhenti dapat fee. Butuh alamat wallet yang dipantau di halaman Posisi."
+          >
+            <SoundSelect
+              value={positionSound}
+              onChange={onPositionSoundChange}
+              label="Pilih bunyi untuk posisi keluar range"
+            />
+          </Row>
           <Row title="Notifikasi desktop" description="Muncul walau tab sedang tidak dilihat.">
             <button
               className="f-btn"

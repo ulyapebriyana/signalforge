@@ -4,6 +4,17 @@ import { SIGNAL_SOUNDS } from "./signalSound.js";
 export const NOTIFICATION_SOUND_OFF = "off";
 export const DEFAULT_NOTIFICATION_SOUND = "fight";
 
+/**
+ * The LP alarm gets its own default, and a different one on purpose.
+ *
+ * A preset sound says "a pool just qualified" — good news, worth a look when
+ * convenient. This one says "a position stopped earning", which is the opposite
+ * kind of news, so it must not be mistakable for the other while the tab is in
+ * the background. Any sound left over from the preset defaults would do; this is
+ * simply the one none of them claim.
+ */
+export const DEFAULT_POSITION_SOUND = "wowok";
+
 export const NOTIFICATION_SOUNDS = SIGNAL_SOUNDS;
 
 export const NOTIFICATION_SOUND_OPTIONS = [
@@ -32,6 +43,19 @@ export function resolveNotificationSoundChoice(savedChoice, legacySoundEnabled, 
   if (isPlayable(migratedChoice)) return migratedChoice;
   if (NOTIFICATION_SOUNDS[legacyChoice]) return legacyChoice;
   return legacySoundEnabled === "false" ? NOTIFICATION_SOUND_OFF : DEFAULT_NOTIFICATION_SOUND;
+}
+
+/**
+ * The sound for "a position left its range", which is one choice for the whole
+ * app rather than one per preset.
+ *
+ * Presets decide which pools are worth entering, and a position that is already
+ * open does not care which gate found it — it leaves its range for reasons of
+ * price, not of strategy. So there is nothing here for a preset to vary.
+ */
+export function resolvePositionSoundChoice(savedChoice) {
+  const migratedChoice = LEGACY_ALIASES[savedChoice] || savedChoice;
+  return isPlayable(migratedChoice) ? migratedChoice : DEFAULT_POSITION_SOUND;
 }
 
 /**

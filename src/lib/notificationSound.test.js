@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_NOTIFICATION_SOUND,
+  DEFAULT_POSITION_SOUND,
   NOTIFICATION_SOUNDS,
   NOTIFICATION_SOUND_OFF,
   NOTIFICATION_SOUND_OPTIONS,
+  PRESET_DEFAULT_SOUND,
   resolveNotificationSoundChoice,
   resolveNotificationSoundMap,
+  resolvePositionSoundChoice,
   soundForPreset,
 } from "./notificationSounds.js";
 
@@ -37,6 +40,27 @@ describe("notification sound", () => {
     expect(resolveNotificationSoundChoice(NOTIFICATION_SOUND_OFF, "true")).toBe(NOTIFICATION_SOUND_OFF);
     expect(resolveNotificationSoundChoice(null, "false")).toBe(NOTIFICATION_SOUND_OFF);
     expect(resolveNotificationSoundChoice("unknown", "true")).toBe(DEFAULT_NOTIFICATION_SOUND);
+  });
+});
+
+describe("position sound", () => {
+  it("defaults to a sound no preset already claims", () => {
+    expect(resolvePositionSoundChoice(null)).toBe(DEFAULT_POSITION_SOUND);
+    expect(Object.values(PRESET_DEFAULT_SOUND)).not.toContain(DEFAULT_POSITION_SOUND);
+  });
+
+  it("keeps a saved choice, including an explicit mute", () => {
+    expect(resolvePositionSoundChoice("profit")).toBe("profit");
+    expect(resolvePositionSoundChoice(NOTIFICATION_SOUND_OFF)).toBe(NOTIFICATION_SOUND_OFF);
+  });
+
+  it("falls back when the stored id no longer exists", () => {
+    expect(resolvePositionSoundChoice("unknown")).toBe(DEFAULT_POSITION_SOUND);
+    expect(resolvePositionSoundChoice("")).toBe(DEFAULT_POSITION_SOUND);
+  });
+
+  it("migrates the renamed sound ids", () => {
+    expect(resolvePositionSoundChoice("hidupJokowi")).toBe("jokowi");
   });
 });
 
