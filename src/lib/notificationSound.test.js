@@ -15,15 +15,17 @@ describe("notification sound", () => {
     expect(Object.values(NOTIFICATION_SOUNDS).map((sound) => sound.label)).toEqual([
       "Saya Akan Lawan",
       "Hidup Jokowi",
+      "Wowok Bilang Ndasmu",
       "Cuan Keras",
     ]);
   });
 
-  it("offers off and all three notification sounds", () => {
+  it("offers off and every notification sound", () => {
     expect(NOTIFICATION_SOUND_OPTIONS.map((option) => option.value)).toEqual([
       NOTIFICATION_SOUND_OFF,
       "fight",
       "jokowi",
+      "wowok",
       "profit",
     ]);
   });

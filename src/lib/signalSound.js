@@ -4,6 +4,7 @@ let audioPlayer;
 export const SIGNAL_SOUNDS = Object.freeze({
   fight: { id: "fight", label: "Saya Akan Lawan", src: "/sounds/saya-akan-lawan.mp3" },
   jokowi: { id: "jokowi", label: "Hidup Jokowi", src: "/sounds/hidup-jokowi.mp3" },
+  wowok: { id: "wowok", label: "Wowok Bilang Ndasmu", src: "/sounds/wowok-ndasmu.mp3" },
   profit: { id: "profit", label: "Cuan Keras", frequencies: [523.25, 659.25, 783.99, 1046.5], step: 0.16, duration: 0.5, volume: 0.9, type: "sawtooth" },
 });
 
