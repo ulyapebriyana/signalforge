@@ -20,6 +20,10 @@ describe("notification sound", () => {
       "Hidup Jokowi",
       "Wowok Bilang Ndasmu",
       "Cuan Keras",
+      "Saya Masih Sanggup",
+      "Antek-Antek Asing",
+      "Matanya Burem",
+      "Sodara-Sodara",
       "Runner Kencang",
       "Migrasi Baru",
     ]);
@@ -32,6 +36,10 @@ describe("notification sound", () => {
       "jokowi",
       "wowok",
       "profit",
+      "sanggup",
+      "antek",
+      "burem",
+      "sodara",
       "runner",
       "fresh",
     ]);
@@ -74,8 +82,8 @@ describe("per-preset notification sound", () => {
       yanman: "fight",
       auzhinta: "jokowi",
       swanny: "profit",
-      vanchu: "runner",
-      skolmbeagh: "fresh",
+      vanchu: "sanggup",
+      skolmbeagh: "sodara",
     });
   });
 
@@ -85,8 +93,8 @@ describe("per-preset notification sound", () => {
       yanman: "profit",
       auzhinta: NOTIFICATION_SOUND_OFF,
       swanny: "profit",
-      vanchu: "runner",
-      skolmbeagh: "fresh",
+      vanchu: "sanggup",
+      skolmbeagh: "sodara",
     });
   });
 
@@ -97,8 +105,8 @@ describe("per-preset notification sound", () => {
       yanman: "profit",
       auzhinta: "jokowi",
       swanny: "profit",
-      vanchu: "runner",
-      skolmbeagh: "fresh",
+      vanchu: "sanggup",
+      skolmbeagh: "sodara",
     });
   });
 
@@ -118,8 +126,8 @@ describe("per-preset notification sound", () => {
       yanman: "jokowi",
       auzhinta: "fight",
       swanny: "profit",
-      vanchu: "runner",
-      skolmbeagh: "fresh",
+      vanchu: "sanggup",
+      skolmbeagh: "sodara",
     });
   });
 
@@ -128,15 +136,15 @@ describe("per-preset notification sound", () => {
       yanman: "fight",
       auzhinta: "jokowi",
       swanny: "profit",
-      vanchu: "runner",
-      skolmbeagh: "fresh",
+      vanchu: "sanggup",
+      skolmbeagh: "sodara",
     });
     expect(resolveNotificationSoundMap(JSON.stringify({ yanman: "bogus" }), null, null, null)).toEqual({
       yanman: "fight",
       auzhinta: "jokowi",
       swanny: "profit",
-      vanchu: "runner",
-      skolmbeagh: "fresh",
+      vanchu: "sanggup",
+      skolmbeagh: "sodara",
     });
   });
 
