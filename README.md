@@ -31,7 +31,8 @@ Pemilihan bundel terjadi di `src/main.jsx` sebelum salah satu stylesheet dimuat,
 
 - Scan 250 pool dari API resmi Meteora setiap 30 detik.
 - Ambil candle 1 jam untuk maksimal 48 kandidat secara paralel.
-- Preset **Yanman-like**, **Auzhinta-like**, dan **Swanny-like** dengan aturan yang transparan.
+- Preset **Yanman-like**, **Auzhinta-like**, **Swanny-like**, **VanChu-like**, dan
+  **Skolmbeagh-like** dengan aturan yang transparan.
 - Score 0–100: momentum 25, fee efficiency 25, volume quality 20, security 20, freshness 10.
 - **Kecepatan fee**: fee/TVL direkam tiap scan, lalu dibandingkan dengan puncaknya dalam jendela 45 menit.
 - **Volume 5 menit** dari GMGN sebagai kolom scanner. Meteora berhenti di 1 jam, terlalu kasar untuk play berskala menit — di situ volume 5 menit adalah sinyal entry-nya sendiri, bukan pelengkap.
@@ -155,29 +156,33 @@ Rute swap memakai Jupiter.
 
 ## Arti preset
 
-| Aturan | Yanman-like | Auzhinta-like | Swanny-like |
-| --- | ---: | ---: | ---: |
-| Market cap | $100K–$10M | $400K–$15M | $100K–$15M |
-| TVL minimum | $500 | $35K | $500 |
-| Momentum 1h | 20–200% | 0–400% | bebas |
-| Volume 1h minimum | $5K | $10K | $1K |
-| Fee/TVL minimum | 0.5% | 1.0% | — |
-| Bin step | — | 50–400 | — |
-| Base fee minimum | — | 2% | — |
-| Mode fee | — | Base + quote | — |
-| Cluster terbesar maksimum | — | 40% | — |
-| Top-10 holder maksimum | — | 40% | rubrik |
-| Saldo dev maksimum | — | 1% | rubrik |
-| Holder minimum | — | 500 | — |
-| Mint authority | — | Wajib off | Wajib off |
-| Umur pool maksimum | — | 72 jam | — |
-| Umur **token** minimum | — | — | rubrik (≥24 jam) |
-| Rubrik screening | — | — | 12 metrik, tolak merah |
-| Ambang Hot / Watch | 80 / 65 | 60 / 48 | 80 / 65 |
-| Freeze authority | Wajib off | Wajib off | Wajib off |
-| Cooldown alert | 15 menit | 10 menit | 20 menit |
+| Aturan | Yanman-like | Auzhinta-like | Swanny-like | VanChu-like | Skolmbeagh-like |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Market cap | $100K–$10M | $400K–$15M | $100K–$15M | $300K–$15M | $50K–$200K |
+| TVL minimum | $500 | $35K | $500 | $15K | $1K |
+| Momentum 1h | 20–200% | 0–400% | bebas | 15–900% | 0–2000% |
+| Volume 1h minimum | $5K | $10K | $1K | $250K | $20K |
+| Vol/TVL minimum | 0.5x | 0.3x | — | 3x | 1x |
+| Fee/TVL minimum | 0.5% | 1.0% | — | 2% | 2% |
+| Bin step | — | 50–400 | — | — | — |
+| Base fee minimum | — | 2% | — | 2% | — |
+| Mode fee | — | Base + quote | — | — | — |
+| Cluster terbesar maksimum | — | 40% | — | — | — |
+| Top-10 holder | — | ≤40% | rubrik | — | 10–35% |
+| Saldo dev maksimum | — | 1% | rubrik | — | 0% |
+| Sniper / Insider / Bundler | — | — | rubrik | — | ≤15% masing-masing |
+| Holder minimum | — | 500 | — | — | — |
+| Mint authority | — | Wajib off | Wajib off | — | — |
+| Umur pool maksimum | — | 72 jam | — | — | **30 menit** |
+| Umur **token** minimum | — | — | rubrik (≥24 jam) | — | — |
+| Rubrik screening | — | — | 12 metrik, tolak merah | — | — |
+| Skor minimum | 65 | 48 | 50 | 65 | 55 |
+| Risiko maksimum | 72 | 78 | 100 | 88 | 92 |
+| Ambang Hot / Watch | 80 / 65 | 60 / 48 | 80 / 65 | 82 / 68 | 70 / 55 |
+| Freeze authority | Wajib off | Wajib off | Wajib off | Wajib off | Wajib off |
+| Cooldown alert | 15 menit | 10 menit | 20 menit | 5 menit | 5 menit |
 
-Ketiganya rekonstruksi dari materi yang pernah dibagikan terbuka, bukan klaim bahwa ini strategi
+Kelimanya rekonstruksi dari materi yang pernah dibagikan terbuka, bukan klaim bahwa ini strategi
 persis milik orang tersebut.
 
 **Yanman-like** agresif dan dapat memasukkan pool dengan likuiditas sangat tipis.
@@ -321,6 +326,59 @@ Key didapat di <https://gmgn.ai/ai>: buat key pair Ed25519 lokal, upload **publi
 ini. Autentikasinya header `X-APIKEY` plus `timestamp` dan `client_id` di query; server GMGN
 menoleransi selisih jam ±5 detik. Batas lajunya longgar (~3 panggilan/detik terukur), tapi
 permintaan tetap diantre satu jalur seperti RugCheck.
+
+## VanChu-like dan Skolmbeagh-like — dua preset paling agresif
+
+Keduanya direkonstruksi dari postingan publik di X pada Agustus 2026, dan keduanya sengaja punya
+batas risiko paling longgar di seluruh aplikasi. Itu bukan kelalaian: pool yang mereka cari
+mengumpulkan poin risiko justru karena sifat yang sedang diburu — token baru, belum terverifikasi,
+momentum ekstrem. Batas risiko seketat preset lain akan mematikan keduanya.
+
+### VanChu-like
+
+Modelnya satu hal saja: token yang **sudah** lari, di pool dengan fee setinggi mungkin, ditahan
+menit sampai jam — bukan hari. Postingannya menyebut range (−10%/−15% short spot, −42% medium,
+−59%/−65% slow bid-ask) tapi tidak pernah menyebut bin step, jadi preset ini **tidak** mendeklarasi
+gate bin step sama sekali. Mengarang satu angka di situ akan memalsukan sumbernya.
+
+Yang disebut terang-terangan adalah kesalahan yang membuatnya rugi 4 SOL: token dengan volume
+~$30K per menit, dimasuki lewat pool fee 1% yang sudah ada alih-alih membuat pool 3%, lalu terdorong
+keluar range oleh satu red candle. Kesimpulannya sendiri: pool 3% pada volume itu “would have
+compensated for around 90% of the losses”. Kebalikannya ada di postingan lain: +8 SOL dalam tiga
+menit di pool fee 10%. Karena itu **fee tier adalah gate yang menentukan, bukan pilihan tokennya**.
+
+`baseFeeMin` diisi 2, bukan 3 seperti pelajaran itu, karena 2% adalah tier terendah yang pernah dia
+tulis dimasuki dengan sengaja (posisi $LUNA berpindah 5% → 2% saat mereda). Gate tidak boleh menolak
+rig yang sumbernya tercatat memakainya.
+
+### Skolmbeagh-like
+
+Ini menyalin **filter pemilihan token** untuk migrasi baru — checklist yang dijalankan dalam 20–30
+detik sebelum likuiditas dikirim: umur < 30 menit, MC $50K–$200K, top-10 holder 10–35%, dev 0%,
+sniper/insider/bundler masing-masing < 15%.
+
+Thread aslinya adalah strategi DAMM v2, sedangkan scanner ini hanya membaca pool DLMM
+(`dlmm.datapi.meteora.ag`). Yang diambil karena itu hanya separuh pemilihan token, yang memang
+ditulis sebagai checklist bernomor dan berbicara tentang token mana yang layak, bukan venue mana
+yang dipakai. Separuh konstruksi posisinya — fee tier 6%, fee scheduler eksponensial, keluar di
+menit ke-45 — adalah setelan pool DAMM v2 yang tidak bisa dilihat screener DLMM, dan sengaja tidak
+dipalsukan ke dalam angka-angka ini. Thread-nya juga tertanggal Juni 2025 dan penulisnya sejak itu
+lebih banyak di DLMM: perlakukan angkanya sebagai transkripsi, bukan sebagai rekomendasi terkini.
+
+**Preset ini akan diam, dan bukan karena angkanya salah.** Diukur terhadap 48 kandidat live pada
+2026-08-13, tiga batas pipeline pemindaian masing-masing sudah cukup untuk memblokirnya sendirian:
+
+| Penghalang | Terukur |
+| --- | --- |
+| Umur | `loadPools` mengambil pool teratas menurut volume 1 jam; yang termuda dan lolos filter berumur 1,18 jam. Tidak ada yang berumur < 30 menit pernah sampai ke penilaian. |
+| Market cap | Hanya 1 dari 48 kandidat di bawah $200K. Lantai $50K di hulu juga membuang migrasi sub-$50K yang jadi lahan utama strategi ini. |
+| GMGN | Ketiga gate sniper/insider/bundler gagal-tertutup, dan API-nya hanya terisi 0–6 dari ~35 token lintas percobaan. |
+
+Perbaikannya ada di pipeline, bukan di preset: halaman kedua dengan
+`sort_by=fee_tvl_ratio_1h:desc` terbukti memunculkan pool berumur 11 menit dengan MC $6K. Itu
+perubahan yang menyentuh data semua preset, jadi tidak ikut disertakan di sini. Preset ini
+di-commit sebagai transkripsi yang setia, bukan dilonggarkan supaya kelihatan berbunyi — melonggarkannya
+berarti menggambarkan strategi yang tidak pernah dipostingkan siapa pun.
 
 ## Catatan risiko
 

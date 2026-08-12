@@ -31,6 +31,8 @@ export const PRESET_DEFAULT_SOUND = Object.freeze({
   yanman: "fight",
   auzhinta: "jokowi",
   swanny: "profit",
+  vanchu: "runner",
+  skolmbeagh: "fresh",
 });
 
 const isPlayable = (choice) => choice === NOTIFICATION_SOUND_OFF || Boolean(NOTIFICATION_SOUNDS[choice]);

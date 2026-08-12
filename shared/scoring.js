@@ -100,6 +100,148 @@ export const PRESETS = Object.freeze({
     earlyScore: 38,
     cooldownMinutes: 10,
   },
+  // Modelled on the Meteora DLMM posts of @0xVanChu, who farms one thing: a
+  // token that is already running, in the highest-fee pool available, for
+  // minutes to hours rather than days. The posts name ranges (−10%/−15% short
+  // spot, −42% medium, −59%/−65% slow bid-ask) but never a bin step, so no bin
+  // step gate is declared here — inventing one would misrepresent the source.
+  //
+  // What the posts *do* state outright is the mistake that cost them 4 SOL: a
+  // token doing ~$30K of volume per minute, entered through an existing 1% fee
+  // pool instead of a 3% one, pushed out of range on a red candle. Their own
+  // verdict was that a 3% pool at that volume "would have compensated for
+  // around 90% of the losses". The counter-example is the same setup done
+  // right: +8 SOL in three minutes on a 10% fee pool. So the fee tier, not the
+  // token, is the gate that matters, and baseFeeMin exists for that reason.
+  //
+  // baseFeeMin is 2 rather than the 3 that lesson names, because 2% is the
+  // lowest tier they have posted entering on purpose (a $LUNA position moved
+  // 5% → 2% as it calmed). A gate should not exclude a rig the source is on
+  // record using.
+  vanchu: {
+    id: "vanchu",
+    label: "VanChu-like",
+    // Their runners span microcap shitcoins to $ANSEM at a $50M cap, but the
+    // upstream candidate filter in server/index.mjs already drops anything over
+    // $15M before scoring, so a higher ceiling here would be decorative.
+    marketCapMin: 300_000,
+    marketCapMax: 15_000_000,
+    // Positions are 20–100 SOL, so a dust pool cannot absorb one. The ceiling
+    // is deliberately absent: thin TVL against heavy volume is the whole edge.
+    tvlMin: 15_000,
+    // Entry is always into a move already happening — "saw a pump and volumes
+    // that were impossible to ignore". Never into something bleeding.
+    momentumMin: 15,
+    momentumMax: 900,
+    // A runner, not a busy pool. These three are one rule read three ways:
+    // heavy absolute flow, turning the pool over several times an hour, and
+    // actually paying for it. With a 2% base fee, 3x turnover implies roughly
+    // 6% fee/TVL, so feeTvlMin is a floor these already imply rather than a
+    // second, independent squeeze.
+    volume1hMin: 250_000,
+    volumeTvlMin: 3,
+    feeTvlMin: 2,
+    baseFeeMin: 2,
+    requireFreezeOff: true,
+    // The highest ceiling of any preset, and not an oversight. This is the
+    // "heart attack" play by name: a fresh unverified token at extreme
+    // momentum collects risk points for exactly the traits being farmed.
+    maxRisk: 88,
+    // Unlike Auzhinta-like, these pools score *well* on the 100-point model —
+    // momentum, fee efficiency, and volume quality are 70 of the 100 points and
+    // this preset gates hard on all three. So the ladder stays near the shared
+    // default instead of dropping into the fifties.
+    minScore: 65,
+    hotScore: 82,
+    watchScore: 68,
+    earlyScore: 55,
+    // Minutes matter here in a way they do not for the slower presets.
+    cooldownMinutes: 5,
+  },
+  // Modelled on the token filter @skolmbeaghNFT published for fresh migrations,
+  // the one applied in 20–30 seconds before any liquidity is committed.
+  //
+  // The thread it comes from is a DAMM v2 strategy, and this scanner only reads
+  // DLMM pools (server/index.mjs talks to dlmm.datapi.meteora.ag). That is not
+  // a mismatch to paper over: what is reproduced here is the *token selection*
+  // half, which is stated as a numbered checklist and is about which token
+  // deserves liquidity, not about which venue receives it. The position
+  // construction half of the thread — 6% fee tier, exponential fee scheduler,
+  // exit at 45 minutes — is a DAMM v2 pool setting a DLMM screener cannot see,
+  // and is deliberately not faked into these numbers.
+  //
+  // The thread is also from June 2025 and its author has since moved mostly to
+  // DLMM. Treat the thresholds as transcribed, not as currently endorsed.
+  //
+  // EXPECT THIS PRESET TO BE QUIET, and not because the numbers are wrong.
+  // Measured against 48 live candidates on 2026-08-13, three separate limits of
+  // the scan pipeline each block it on their own:
+  //
+  //   - Age. loadPools takes the top pools by 1h volume, where the youngest
+  //     admissible pool was 1.18h old. Nothing inside a 30-minute window ever
+  //     reaches scoring. (A second page sorted by fee_tvl_ratio_1h:desc does
+  //     surface 11-minute-old pools — that is the fix, and it is a pipeline
+  //     change, not a preset one.)
+  //   - Market cap. Only 1 of 48 candidates sat under $200K; the upstream
+  //     $50K floor also drops the sub-$50K migrations this play lives on.
+  //   - GMGN. The sniper/insider/bundler gates fail closed, and the API filled
+  //     0–6 of ~35 tokens across runs.
+  //
+  // It is committed as a faithful transcription rather than tuned into firing,
+  // because loosening it to match the pipeline would describe a play nobody
+  // posted. Widen the pipeline instead.
+  skolmbeagh: {
+    id: "skolmbeagh",
+    label: "Skolmbeagh-like",
+    // "Coins over $200K gradually start opening DLMM pools, and since our
+    // losses increase when the coin price drops, I prefer to avoid them." The
+    // floor is the low end of the companion screener filter (50k–300k).
+    marketCapMin: 50_000,
+    marketCapMax: 200_000,
+    // Positions are 0.05–0.3 SOL, so almost any live pool is deep enough. This
+    // only excludes pools with no liquidity at all.
+    tvlMin: 1_000,
+    // "The coin's price should appear to have moved organically." A fresh
+    // migration already down on the hour is not that; the ceiling is wide
+    // because a migration candle legitimately is not.
+    momentumMin: 0,
+    momentumMax: 2_000,
+    volume1hMin: 20_000,
+    volumeTvlMin: 1,
+    feeTvlMin: 2,
+    // The hard clock, and the single most load-bearing number in the thread:
+    // "The token should have migrated within the last 30 minutes. After an
+    // hour, the fee yield drops from around 50% to about 20%."
+    ageHoursMax: 0.5,
+    // "Top 10 Holders: Should be between 10% and 35%" — a floor on
+    // concentration, which no other preset has. It is not a typo in the
+    // source: on a just-migrated token a top-10 share that low means the supply
+    // is scattered across bots rather than held by anyone.
+    top10HoldersMin: 10,
+    top10HoldersMax: 35,
+    // "Dev: If the dev holds tokens, I stay away." Zero, not "low".
+    devBalanceMax: 0,
+    // "Sniper / Insiders / Bundle: each below 15%." Loose on purpose — the
+    // thread says so — because the candidates are already filtered down to
+    // ~$100K caps where cleaner numbers barely exist.
+    sniperPctMax: 15,
+    insidersPctMax: 15,
+    bundlerPctMax: 15,
+    requireFreezeOff: true,
+    // A sub-30-minute pool collects risk points for being sub-30-minutes old,
+    // thinly held, and violently priced — the exact traits selected for. A
+    // ceiling tuned like the other presets would gate the whole preset off.
+    maxRisk: 92,
+    // Between Auzhinta-like's fifties and the shared default. A fresh pool
+    // takes full freshness and, when it is paying at all, near-full fee and
+    // volume points, but forfeits verification and the holder bonus — so the
+    // reachable band sits roughly 50–85.
+    minScore: 55,
+    hotScore: 70,
+    watchScore: 55,
+    earlyScore: 42,
+    cooldownMinutes: 5,
+  },
   // Modelled on @SwannyDeFi's DLMM Checker, the pre-filter every token is put
   // through before it earns any research time. It is a screen, not a play:
   // where the other two presets describe a way to open a position, this one
@@ -359,6 +501,36 @@ export function evaluatePreset(pool, presetInput) {
     checks.push([
       Number.isFinite(pool.top10HoldersPct) && pool.top10HoldersPct <= preset.top10HoldersMax,
       `Top-10 holder ≤ ${preset.top10HoldersMax}%`,
+    ]);
+  }
+  // A *floor* on top-10 concentration, which reads backwards until you know
+  // what it screens: on a just-migrated token, supply too evenly spread means
+  // it is spread across snipers and bundlers rather than held by holders.
+  if (Number.isFinite(preset.top10HoldersMin)) {
+    checks.push([
+      Number.isFinite(pool.top10HoldersPct) && pool.top10HoldersPct >= preset.top10HoldersMin,
+      `Top-10 holder ≥ ${preset.top10HoldersMin}%`,
+    ]);
+  }
+  // Sniper, insider, and bundler share. These come from GMGN and are null
+  // without a key, so like every other unreadable metric they fail closed —
+  // a preset that declares them goes quiet rather than waving pools through.
+  if (Number.isFinite(preset.sniperPctMax)) {
+    checks.push([
+      Number.isFinite(pool.gmgnSniperPct) && pool.gmgnSniperPct <= preset.sniperPctMax,
+      `Sniper ≤ ${preset.sniperPctMax}%`,
+    ]);
+  }
+  if (Number.isFinite(preset.insidersPctMax)) {
+    checks.push([
+      Number.isFinite(pool.gmgnInsidersPct) && pool.gmgnInsidersPct <= preset.insidersPctMax,
+      `Insider ≤ ${preset.insidersPctMax}%`,
+    ]);
+  }
+  if (Number.isFinite(preset.bundlerPctMax)) {
+    checks.push([
+      Number.isFinite(pool.gmgnBundlerPct) && pool.gmgnBundlerPct <= preset.bundlerPctMax,
+      `Bundler ≤ ${preset.bundlerPctMax}%`,
     ]);
   }
   if (Number.isFinite(preset.devBalanceMax)) {

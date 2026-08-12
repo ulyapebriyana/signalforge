@@ -547,16 +547,22 @@
 .lp-preset-table {
   border: 1px solid var(--f-line);
   border-radius: var(--f-r-lg);
-  overflow: hidden;
+  /* Scrolls itself rather than the page. The column count is set by the number
+     of presets, so past three the table is wider than a phone either way. */
+  overflow-x: auto;
 }
 
 .lp-preset-head,
 .lp-preset-row {
   display: grid;
-  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr);
+  /* One label column plus one per preset — set by Landing, so adding a preset
+     never needs a CSS edit. This used to be hardcoded to two preset columns
+     and silently grew an unstyled implicit column when the third arrived. */
+  grid-template-columns: minmax(0, 1.4fr) repeat(var(--lp-preset-count, 2), minmax(7rem, 1fr));
   gap: 1rem;
   padding: 0.85rem 1.25rem;
   align-items: center;
+  min-width: max-content;
 }
 
 .lp-preset-head {
@@ -590,10 +596,12 @@
   font-size: 0.8125rem;
 }
 
-/* Neither column is pre-selected here, so neither gets the ember treatment —
-   ember means "active" everywhere else in the product. */
-.lp-preset-table > .lp-preset-head > span:nth-child(3),
-.lp-preset-table > .lp-preset-row > span:nth-child(3) {
+/* No column is pre-selected here, so none gets the ember treatment — ember
+   means "active" everywhere else in the product. The separator sits on every
+   preset column; it used to be pinned to nth-child(3), which singled out the
+   second preset for no reason once there were more than two. */
+.lp-preset-table > .lp-preset-head > span:not(:first-child),
+.lp-preset-table > .lp-preset-row > span:not(:first-child) {
   border-left: 1px solid var(--f-line);
   padding-left: 1rem;
 }

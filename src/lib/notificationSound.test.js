@@ -20,6 +20,8 @@ describe("notification sound", () => {
       "Hidup Jokowi",
       "Wowok Bilang Ndasmu",
       "Cuan Keras",
+      "Runner Kencang",
+      "Migrasi Baru",
     ]);
   });
 
@@ -30,6 +32,8 @@ describe("notification sound", () => {
       "jokowi",
       "wowok",
       "profit",
+      "runner",
+      "fresh",
     ]);
   });
 
@@ -70,6 +74,8 @@ describe("per-preset notification sound", () => {
       yanman: "fight",
       auzhinta: "jokowi",
       swanny: "profit",
+      vanchu: "runner",
+      skolmbeagh: "fresh",
     });
   });
 
@@ -79,6 +85,8 @@ describe("per-preset notification sound", () => {
       yanman: "profit",
       auzhinta: NOTIFICATION_SOUND_OFF,
       swanny: "profit",
+      vanchu: "runner",
+      skolmbeagh: "fresh",
     });
   });
 
@@ -89,6 +97,8 @@ describe("per-preset notification sound", () => {
       yanman: "profit",
       auzhinta: "jokowi",
       swanny: "profit",
+      vanchu: "runner",
+      skolmbeagh: "fresh",
     });
   });
 
@@ -97,6 +107,8 @@ describe("per-preset notification sound", () => {
       yanman: NOTIFICATION_SOUND_OFF,
       auzhinta: NOTIFICATION_SOUND_OFF,
       swanny: NOTIFICATION_SOUND_OFF,
+      vanchu: NOTIFICATION_SOUND_OFF,
+      skolmbeagh: NOTIFICATION_SOUND_OFF,
     });
   });
 
@@ -106,6 +118,8 @@ describe("per-preset notification sound", () => {
       yanman: "jokowi",
       auzhinta: "fight",
       swanny: "profit",
+      vanchu: "runner",
+      skolmbeagh: "fresh",
     });
   });
 
@@ -114,11 +128,15 @@ describe("per-preset notification sound", () => {
       yanman: "fight",
       auzhinta: "jokowi",
       swanny: "profit",
+      vanchu: "runner",
+      skolmbeagh: "fresh",
     });
     expect(resolveNotificationSoundMap(JSON.stringify({ yanman: "bogus" }), null, null, null)).toEqual({
       yanman: "fight",
       auzhinta: "jokowi",
       swanny: "profit",
+      vanchu: "runner",
+      skolmbeagh: "fresh",
     });
   });
 

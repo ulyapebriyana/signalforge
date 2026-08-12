@@ -2498,17 +2498,20 @@
   display: grid;
   /* One label column plus one per preset — set by RulesView so adding a preset
      never needs a CSS edit. */
-  grid-template-columns: minmax(0, 1.5fr) repeat(var(--fx-preset-count, 2), minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1.5fr) repeat(var(--fx-preset-count, 2), minmax(5.5rem, 1fr));
   gap: 1rem;
   padding: 0.5rem 0.75rem;
   align-items: center;
   font-size: 0.8125rem;
+  min-width: max-content;
 }
 
 .fx-compare {
   border: 1px solid var(--f-line);
   border-radius: var(--f-r);
-  overflow: hidden;
+  /* Scrolls itself rather than the page. Past three presets the row is wider
+     than the panel on anything narrower than a desktop. */
+  overflow-x: auto;
 }
 
 .fx-compare-head {

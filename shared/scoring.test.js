@@ -72,6 +72,41 @@ const swannyPool = {
   gmgnTotalFeesSol: 250,
 };
 
+// A runner in a high-fee pool: heavy flow against thin liquidity, which is the
+// only shape the VanChu-like posts ever describe entering.
+const vanchuPool = {
+  marketCap: 2_100_000,
+  tvl: 42_000,
+  priceChange1h: 64,
+  volume1h: 480_000,
+  volumeTvl1h: 11.4,
+  feeTvl1h: 22.8,
+  baseFeePct: 3,
+  isVerified: false,
+  freezeAuthorityDisabled: true,
+  isBlacklisted: false,
+  ageHours: 5,
+};
+
+// A migration 18 minutes old that clears every row of the checklist.
+const skolmbeaghPool = {
+  marketCap: 118_000,
+  tvl: 6_400,
+  priceChange1h: 42,
+  volume1h: 91_000,
+  volumeTvl1h: 14.2,
+  feeTvl1h: 18.6,
+  ageHours: 0.3,
+  top10HoldersPct: 22.5,
+  devBalancePct: 0,
+  gmgnSniperPct: 8.1,
+  gmgnInsidersPct: 4.4,
+  gmgnBundlerPct: 11.2,
+  isVerified: false,
+  freezeAuthorityDisabled: true,
+  isBlacklisted: false,
+};
+
 describe("SignalForge scoring", () => {
   it("scores a healthy momentum pool above the watch threshold", () => {
     expect(calculateScore(healthyPool).total).toBeGreaterThanOrEqual(65);
@@ -225,6 +260,114 @@ describe("SignalForge scoring", () => {
     const brandNew = { ...swannyPool, tokenAgeHours: 6 };
     expect(evaluatePreset(brandNew, PRESETS.swanny).misses).toContain("Umur token ≥ 24 jam");
     expect(evaluatePreset({ ...auzhintaPool, ageHours: 6 }, PRESETS.auzhinta).passed).toBe(true);
+  });
+
+  it("passes a runner in a high-fee pool through the VanChu-like gate", () => {
+    expect(evaluatePreset(vanchuPool, PRESETS.vanchu).passed).toBe(true);
+  });
+
+  it("rejects the 1% pool that the VanChu-like posts blame for a loss", () => {
+    // The stated mistake: right token, right volume, wrong fee tier. The pool
+    // still clears every other gate, so the fee tier has to be what stops it.
+    const cheapPool = { ...vanchuPool, baseFeePct: 1 };
+    const { passed, misses } = evaluatePreset(cheapPool, PRESETS.vanchu);
+    expect(passed).toBe(false);
+    expect(misses).toEqual(["Base fee ≥ 2%"]);
+  });
+
+  it("refuses to enter a token that is not already running", () => {
+    // Entry is always into a move in progress. A flat or bleeding pool is not
+    // an early entry here, it is the wrong preset.
+    expect(evaluatePreset({ ...vanchuPool, priceChange1h: 4 }, PRESETS.vanchu).misses)
+      .toContain("1h ≥ 15%");
+    expect(evaluatePreset({ ...vanchuPool, priceChange1h: -20 }, PRESETS.vanchu).passed).toBe(false);
+  });
+
+  it("rejects a busy pool that is not turning over fast enough", () => {
+    // Thin liquidity against heavy flow is the edge; a deep pool doing the same
+    // absolute volume pays far less per dollar and is not the same trade.
+    const deep = { ...vanchuPool, tvl: 900_000, volumeTvl1h: 0.53, feeTvl1h: 1.1 };
+    expect(evaluatePreset(deep, PRESETS.vanchu).misses)
+      .toEqual(expect.arrayContaining(["Vol/TVL ≥ 3x", "Fee/TVL ≥ 2%"]));
+  });
+
+  it("declares no bin step gate, because the source never names one", () => {
+    expect(PRESETS.vanchu.binStepMin).toBeUndefined();
+    expect(PRESETS.vanchu.binStepMax).toBeUndefined();
+    for (const binStep of [10, 20, 100, 400]) {
+      expect(evaluatePreset({ ...vanchuPool, binStep }, PRESETS.vanchu).passed).toBe(true);
+    }
+  });
+
+  it("passes a fresh migration through the Skolmbeagh-like checklist", () => {
+    expect(evaluatePreset(skolmbeaghPool, PRESETS.skolmbeagh).passed).toBe(true);
+  });
+
+  it("closes the 30-minute window the whole preset turns on", () => {
+    // "After an hour, the fee yield drops from around 50% to about 20%."
+    expect(evaluatePreset({ ...skolmbeaghPool, ageHours: 0.5 }, PRESETS.skolmbeagh).passed).toBe(true);
+    expect(evaluatePreset({ ...skolmbeaghPool, ageHours: 0.9 }, PRESETS.skolmbeagh).misses)
+      .toContain("Umur pool ≤ 0.5 jam");
+  });
+
+  it("keeps the market cap band the thread stays inside", () => {
+    // Over $200K the DLMM pools open and the play is over.
+    expect(evaluatePreset({ ...skolmbeaghPool, marketCap: 240_000 }, PRESETS.skolmbeagh).misses)
+      .toContain("MC ≤ $200000");
+  });
+
+  it("gates top-10 concentration from both sides", () => {
+    // "Should be between 10% and 35%" — the floor is the unusual half, and it
+    // is in the source on purpose.
+    expect(evaluatePreset({ ...skolmbeaghPool, top10HoldersPct: 8 }, PRESETS.skolmbeagh).misses)
+      .toContain("Top-10 holder ≥ 10%");
+    expect(evaluatePreset({ ...skolmbeaghPool, top10HoldersPct: 36 }, PRESETS.skolmbeagh).misses)
+      .toContain("Top-10 holder ≤ 35%");
+  });
+
+  it("walks away from any dev balance at all", () => {
+    // "If the dev holds tokens, I stay away" — zero, not merely low.
+    expect(evaluatePreset({ ...skolmbeaghPool, devBalancePct: 0.4 }, PRESETS.skolmbeagh).misses)
+      .toContain("Saldo dev ≤ 0%");
+  });
+
+  it("applies the sniper, insider, and bundler ceilings", () => {
+    expect(evaluatePreset({ ...skolmbeaghPool, gmgnSniperPct: 16 }, PRESETS.skolmbeagh).misses)
+      .toContain("Sniper ≤ 15%");
+    expect(evaluatePreset({ ...skolmbeaghPool, gmgnInsidersPct: 22 }, PRESETS.skolmbeagh).misses)
+      .toContain("Insider ≤ 15%");
+    expect(evaluatePreset({ ...skolmbeaghPool, gmgnBundlerPct: 40 }, PRESETS.skolmbeagh).misses)
+      .toContain("Bundler ≤ 15%");
+  });
+
+  it("goes quiet rather than open when no GMGN key is configured", () => {
+    // Same fail-closed posture as the Swanny-like rubric: an unread metric is
+    // not a clean one, so the preset simply stops producing candidates.
+    const noKey = { ...skolmbeaghPool, gmgnSniperPct: null, gmgnInsidersPct: null, gmgnBundlerPct: null };
+    const { passed, misses } = evaluatePreset(noKey, PRESETS.skolmbeagh);
+    expect(passed).toBe(false);
+    expect(misses).toEqual(["Sniper ≤ 15%", "Insider ≤ 15%", "Bundler ≤ 15%"]);
+  });
+
+  it("keeps the two new presets from qualifying each other's pools", () => {
+    // A 30-minute microcap is too small and too young for VanChu-like; a $2.1M
+    // runner five hours in is too big and too old for Skolmbeagh-like.
+    expect(evaluatePreset(skolmbeaghPool, PRESETS.vanchu).passed).toBe(false);
+    expect(evaluatePreset(vanchuPool, PRESETS.skolmbeagh).passed).toBe(false);
+  });
+
+  it("leaves the presets that predate the new gates untouched", () => {
+    // The new optional gates must stay opt-in: an existing preset that never
+    // declared them cannot start failing on a field it does not screen.
+    for (const preset of [PRESETS.yanman, PRESETS.auzhinta, PRESETS.swanny]) {
+      expect(preset.top10HoldersMin).toBeUndefined();
+      expect(preset.sniperPctMax).toBeUndefined();
+      expect(preset.insidersPctMax).toBeUndefined();
+      expect(preset.bundlerPctMax).toBeUndefined();
+    }
+    expect(evaluatePreset(healthyPool, PRESETS.yanman).passed).toBe(true);
+    expect(evaluatePreset(auzhintaPool, PRESETS.auzhinta).passed).toBe(true);
+    expect(evaluatePreset(swannyPool, PRESETS.swanny).passed).toBe(true);
   });
 
   it("reports a gate result for every preset that exists", () => {

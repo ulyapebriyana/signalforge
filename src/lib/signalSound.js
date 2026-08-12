@@ -6,6 +6,13 @@ export const SIGNAL_SOUNDS = Object.freeze({
   jokowi: { id: "jokowi", label: "Hidup Jokowi", src: "/sounds/hidup-jokowi.mp3" },
   wowok: { id: "wowok", label: "Wowok Bilang Ndasmu", src: "/sounds/wowok-ndasmu.mp3" },
   profit: { id: "profit", label: "Cuan Keras", frequencies: [523.25, 659.25, 783.99, 1046.5], step: 0.16, duration: 0.5, volume: 0.9, type: "sawtooth" },
+  // Two synth alarms rather than two more clips: the file-backed sounds are
+  // picked meme audio, and adding to that set is the user's call, not a side
+  // effect of adding a preset. These follow "Cuan Keras" instead — generated,
+  // so they need no asset — and exist because a preset without its own default
+  // sound is indistinguishable by ear from the one it borrows from.
+  runner: { id: "runner", label: "Runner Kencang", frequencies: [880, 1108.73, 1318.51], step: 0.09, duration: 0.22, volume: 0.85, type: "square" },
+  fresh: { id: "fresh", label: "Migrasi Baru", frequencies: [1046.5, 1567.98], step: 0.12, duration: 0.3, volume: 0.8, type: "triangle" },
 });
 
 export async function playSignalSound(sound = "fight", AudioContextClass = globalThis.AudioContext || globalThis.webkitAudioContext, AudioClass = globalThis.Audio) {

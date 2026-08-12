@@ -284,7 +284,12 @@ const PRESET_ROWS = [
   ["Fee/TVL minimum", (p) => `${p.feeTvlMin}%`],
   ["Bin step", (p) => (p.binStepMin ? `${p.binStepMin} – ${p.binStepMax}` : "—")],
   ["Base fee minimum", (p) => (p.baseFeeMin ? `${p.baseFeeMin}%` : "—")],
-  ["Umur pool maksimum", (p) => (p.ageHoursMax ? `${p.ageHoursMax} jam` : "—")],
+  // Sub-hour reads as minutes: Skolmbeagh-like's window is 0.5, and "0,5 jam"
+  // is a worse way to say the number the whole preset turns on.
+  ["Umur pool maksimum", (p) => {
+    if (!Number.isFinite(p.ageHoursMax)) return "—";
+    return p.ageHoursMax < 1 ? `${p.ageHoursMax * 60} menit` : `${p.ageHoursMax} jam`;
+  }],
   ["Risk maksimum", (p) => String(p.maxRisk)],
   ["Freeze authority", (p) => (p.requireFreezeOff ? "Wajib mati" : "Opsional")],
   ["Cooldown alert", (p) => `${p.cooldownMinutes} menit`],
@@ -294,12 +299,12 @@ function Presets() {
   return (
     <section className="lp-section lp-presets" id="preset" aria-labelledby="preset-title">
       <div className="lp-section-head" data-reveal>
-        <span className="f-eyebrow">Dua gate, aturan terbuka</span>
+        <span className="f-eyebrow">Lima gate, aturan terbuka</span>
         <h2 className="f-display" id="preset-title">
           Pilih seberapa longgar saringannya
         </h2>
       </div>
-      <div className="lp-preset-table" data-reveal>
+      <div className="lp-preset-table" data-reveal style={{ "--lp-preset-count": Object.keys(PRESETS).length }}>
         <div className="lp-preset-head">
           <span className="f-eyebrow">Aturan</span>
           {Object.values(PRESETS).map((preset) => (
@@ -320,11 +325,14 @@ function Presets() {
         ))}
       </div>
       <p className="lp-preset-caveat" data-reveal>
-        Keduanya rekonstruksi dari filter yang pernah dibagikan terbuka — bukan klaim bahwa ini
+        Semuanya rekonstruksi dari filter yang pernah dibagikan terbuka — bukan klaim bahwa ini
         strategi milik orang tersebut. “Yanman-like” longgar dan bisa memasukkan pool dengan
         likuiditas sangat tipis. “Auzhinta-like” menuntut likuiditas jauh lebih tebal dan rig yang
         spesifik, tapi sengaja menerima momentum negatif: range bid-ask lebar memang dipakai untuk
-        memanen fee saat harga turun, dan itu menanggung risiko penurunan yang nyata.
+        memanen fee saat harga turun, dan itu menanggung risiko penurunan yang nyata. “VanChu-like”
+        dan “Skolmbeagh-like” adalah dua yang paling agresif: yang pertama hanya masuk pool fee
+        tinggi saat token sudah lari, yang kedua hanya hidup 30 menit pertama setelah migrasi. Batas
+        risikonya sengaja paling longgar, dan itu berarti kerugiannya juga paling nyata.
       </p>
     </section>
   );
