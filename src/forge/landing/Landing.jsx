@@ -188,11 +188,11 @@ function HeatScale() {
 const PIPELINE = [
   {
     title: "Tarik pool",
-    body: "250 pool teratas menurut volume 1 jam, langsung dari API DLMM Meteora.",
+    body: "Dua halaman 250 pool langsung dari API DLMM Meteora: teratas menurut volume 1 jam, dan teratas menurut rasio fee/TVL 1 jam — halaman kedua itu tempat pool baru migrasi muncul.",
   },
   {
     title: "Perkaya kandidat",
-    body: "Sampai 48 pool yang lolos saringan awal diambil candle 1 jam-nya, ditambah data holder, JupShield, dan RugCheck.",
+    body: "Sampai 72 pool yang lolos saringan awal diambil candle 1 jam-nya, ditambah data holder, JupShield, dan RugCheck.",
   },
   {
     title: "Beri skor",
@@ -498,7 +498,7 @@ export default function Landing() {
             sebelum dingin
           </h1>
           <p className="f-lede lp-hero-lede">
-            SignalForge memindai 250 pool Meteora DLMM, memberi skor 100 poin untuk momentum,
+            SignalForge memindai ratusan pool Meteora DLMM, memberi skor 100 poin untuk momentum,
             efisiensi fee, dan risiko, lalu menandai mana yang layak dibuka. Bukan bot trading, dan
             tidak pernah meminta private key.
           </p>

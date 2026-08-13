@@ -402,25 +402,82 @@ const fetchPoolAnalytics = async (addresses) => {
   }
 };
 
+/**
+ * How many candidates each upstream page may contribute. The volume page keeps
+ * the 48 it always had, so nothing that used to be scanned stops being scanned,
+ * and the fee page adds 24 that the volume page did not already carry — the
+ * budget counts pools actually taken, so a duplicate costs nothing and the walk
+ * simply continues further down that page.
+ *
+ * 72 is therefore the enrichment budget, and enrichment is the expensive half of
+ * a scan: one OHLCV call per pool, plus two RugCheck calls per distinct mint
+ * down a single 180ms lane. Measured 2026-08-13, a cold scan went 20.3s at 48
+ * candidates and 33–41s at 72 — over the 30s interval, which is tolerable only
+ * because it happens once per restart (`activeFetch` makes a tick that lands
+ * mid-scan await the running one instead of starting a second), and because a
+ * warm scan is 1.6s. Re-measure both numbers before raising either budget.
+ */
+const VOLUME_PAGE_BUDGET = 48;
+const FEE_PAGE_BUDGET = 24;
+
+const fetchPoolPage = async (sortBy) => {
+  const query = new URLSearchParams({ page: "1", page_size: "250", sort_by: sortBy });
+  const upstream = await fetchJson(`${dataApi}/pools?${query}`);
+  return {
+    rawPools: Array.isArray(upstream.data) ? upstream.data : [],
+    total: Number(upstream.total || 0),
+  };
+};
+
+const admissibleCandidates = (rawPools) => rawPools
+  .map((pool) => ({ raw: pool, normalized: normalizePool(pool) }))
+  .filter(({ normalized }) =>
+    normalized.marketCap >= 50_000 &&
+    normalized.marketCap <= 15_000_000 &&
+    normalized.tvl >= 300 &&
+    normalized.volume1h >= 1_000,
+  );
+
 const loadPools = async ({ force = false } = {}) => {
   const cacheAge = Date.now() - poolCacheAt;
   if (!force && poolCache && cacheAge < scanIntervalSeconds * 1_000 - 1_000) return poolCache;
   if (activeFetch) return activeFetch;
 
   activeFetch = (async () => {
-    const query = new URLSearchParams({ page: "1", page_size: "250", sort_by: "volume_1h:desc" });
-    const upstream = await fetchJson(`${dataApi}/pools?${query}`);
-    const rawPools = Array.isArray(upstream.data) ? upstream.data : [];
+    /**
+     * Two pages, because one sort cannot see the whole market. `volume_1h:desc`
+     * ranks by size, so its head is old and large — measured 2026-08-13 the
+     * youngest pool in the top 48 was 1.18h, and a preset gated on a 30-minute
+     * window (Skolmbeagh-like) could never fire on it. `fee_tvl_ratio_1h:desc`
+     * ranks by fee efficiency, which is exactly where a fresh migration lands:
+     * on the same run it put two 12-minute-old pools in its top three.
+     *
+     * The fee page is best-effort. If it fails the scan proceeds on the volume
+     * page alone, which is the behaviour that existed before it was added.
+     * `created_at:desc` and `age:asc` would be the direct expression of what is
+     * wanted here, but the upstream returns HTTP 400 for both.
+     */
+    const [byVolume, byFeeTvl] = await Promise.all([
+      fetchPoolPage("volume_1h:desc"),
+      fetchPoolPage("fee_tvl_ratio_1h:desc").catch(() => ({ rawPools: [], total: 0 })),
+    ]);
 
-    const candidates = rawPools
-      .map((pool) => ({ raw: pool, normalized: normalizePool(pool) }))
-      .filter(({ normalized }) =>
-        normalized.marketCap >= 50_000 &&
-        normalized.marketCap <= 15_000_000 &&
-        normalized.tvl >= 300 &&
-        normalized.volume1h >= 1_000,
-      )
-      .slice(0, 48);
+    const seen = new Set();
+    const candidates = [];
+    const takeFrom = (page, budget) => {
+      let taken = 0;
+      for (const entry of admissibleCandidates(page.rawPools)) {
+        if (taken >= budget) break;
+        if (seen.has(entry.raw.address)) continue;
+        seen.add(entry.raw.address);
+        candidates.push(entry);
+        taken += 1;
+      }
+    };
+    takeFrom(byVolume, VOLUME_PAGE_BUDGET);
+    takeFrom(byFeeTvl, FEE_PAGE_BUDGET);
+
+    const scannedAddresses = new Set([...byVolume.rawPools, ...byFeeTvl.rawPools].map((pool) => pool.address));
 
     const [momentumByPool, analyticsByPool, rugCheckByMint, gmgnByMint] = await Promise.all([
       mapConcurrent(candidates, 6, async ({ raw }) => [raw.address, await fetchMomentum(raw.address)]),
@@ -449,8 +506,8 @@ const loadPools = async ({ force = false } = {}) => {
         source: "Meteora DLMM API",
         apiHealthy: true,
         scannedAt: now,
-        scannedCount: rawPools.length,
-        totalAvailable: Number(upstream.total || rawPools.length),
+        scannedCount: scannedAddresses.size,
+        totalAvailable: Math.max(byVolume.total, byFeeTvl.total) || scannedAddresses.size,
         enrichedCount: enriched.length,
         scanIntervalSeconds,
       },

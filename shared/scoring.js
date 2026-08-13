@@ -173,23 +173,25 @@ export const PRESETS = Object.freeze({
   // The thread is also from June 2025 and its author has since moved mostly to
   // DLMM. Treat the thresholds as transcribed, not as currently endorsed.
   //
-  // EXPECT THIS PRESET TO BE QUIET, and not because the numbers are wrong.
-  // Measured against 48 live candidates on 2026-08-13, three separate limits of
-  // the scan pipeline each block it on their own:
+  // EXPECT THIS PRESET TO BE QUIET, and not because the numbers are wrong. It
+  // is a 30-minute window on a narrow cap band, so most scans will hold no pool
+  // that qualifies. What changed on 2026-08-13 is that such a pool can now
+  // reach scoring at all:
   //
-  //   - Age. loadPools takes the top pools by 1h volume, where the youngest
-  //     admissible pool was 1.18h old. Nothing inside a 30-minute window ever
-  //     reaches scoring. (A second page sorted by fee_tvl_ratio_1h:desc does
-  //     surface 11-minute-old pools — that is the fix, and it is a pipeline
-  //     change, not a preset one.)
-  //   - Market cap. Only 1 of 48 candidates sat under $200K; the upstream
-  //     $50K floor also drops the sub-$50K migrations this play lives on.
+  //   - Age. loadPools used to take only the top pools by 1h volume, where the
+  //     youngest admissible pool was 1.18h old — nothing inside a 30-minute
+  //     window ever arrived. It now also reads a page sorted by
+  //     fee_tvl_ratio_1h:desc, which is where fresh migrations rank; on the
+  //     verification run that page put two 12-minute-old pools in its top three.
+  //   - Market cap. Still thin: only 1 of 48 volume-page candidates sat under
+  //     $200K. The upstream $50K floor is not a limit for this preset, whose own
+  //     marketCapMin is the same $50K.
   //   - GMGN. The sniper/insider/bundler gates fail closed, and the API filled
-  //     0–6 of ~35 tokens across runs.
+  //     0–6 of ~35 tokens across local runs. GMGN_API_KEY is set on the VPS.
   //
   // It is committed as a faithful transcription rather than tuned into firing,
   // because loosening it to match the pipeline would describe a play nobody
-  // posted. Widen the pipeline instead.
+  // posted.
   skolmbeagh: {
     id: "skolmbeagh",
     label: "Skolmbeagh-like",

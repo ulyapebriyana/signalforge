@@ -29,8 +29,11 @@ Pemilihan bundel terjadi di `src/main.jsx` sebelum salah satu stylesheet dimuat,
 
 ## Yang sudah berfungsi
 
-- Scan 250 pool dari API resmi Meteora setiap 30 detik.
-- Ambil candle 1 jam untuk maksimal 48 kandidat secara paralel.
+- Scan dua halaman 250 pool dari API resmi Meteora setiap 30 detik: satu diurutkan
+  `volume_1h:desc`, satu lagi `fee_tvl_ratio_1h:desc`. Halaman kedua yang membuat pool baru migrasi
+  ikut terlihat — urutan volume kepalanya selalu pool tua dan besar.
+- Ambil candle 1 jam untuk maksimal 72 kandidat secara paralel (48 dari halaman volume, 24 dari
+  halaman fee yang belum terbawa).
 - Preset **Yanman-like**, **Auzhinta-like**, **Swanny-like**, **VanChu-like**, dan
   **Skolmbeagh-like** dengan aturan yang transparan.
 - Score 0–100: momentum 25, fee efficiency 25, volume quality 20, security 20, freshness 10.
@@ -365,25 +368,23 @@ menit ke-45 — adalah setelan pool DAMM v2 yang tidak bisa dilihat screener DLM
 dipalsukan ke dalam angka-angka ini. Thread-nya juga tertanggal Juni 2025 dan penulisnya sejak itu
 lebih banyak di DLMM: perlakukan angkanya sebagai transkripsi, bukan sebagai rekomendasi terkini.
 
-**Preset ini akan diam, dan bukan karena angkanya salah.** Diukur terhadap 48 kandidat live pada
-2026-08-13, tiga batas pipeline pemindaian masing-masing sudah cukup untuk memblokirnya sendirian:
+**Preset ini akan tetap jarang berbunyi, dan bukan karena angkanya salah** — jendela 30 menit pada
+pita market cap yang sempit memang membuat sebagian besar pemindaian tidak memuat satu pun pool yang
+memenuhi syarat. Yang berubah pada 2026-08-13 adalah pool seperti itu kini bisa sampai ke penilaian:
 
-| Penghalang | Terukur |
+| Penghalang | Status |
 | --- | --- |
-| Umur | `loadPools` mengambil pool teratas menurut volume 1 jam; yang termuda dan lolos filter berumur 1,18 jam. Tidak ada yang berumur < 30 menit pernah sampai ke penilaian. |
-| Market cap | Hanya 1 dari 48 kandidat di bawah $200K. Lantai $50K di hulu juga membuang migrasi sub-$50K yang jadi lahan utama strategi ini. |
-| GMGN | Ketiga gate sniper/insider/bundler gagal-tertutup, dan API-nya hanya terisi 0–6 dari ~35 token lintas percobaan. |
+| Umur | **Sudah dibuka.** Dulu `loadPools` hanya mengambil pool teratas menurut volume 1 jam, dan yang termuda pun berumur 1,18 jam. Sekarang ada halaman kedua `sort_by=fee_tvl_ratio_1h:desc`, tempat pool baru migrasi berada. Pada pemindaian verifikasi, pool berumur 19 menit lolos gate umur dan ditolak karena market cap serta momentum — kriteria strategi itu sendiri, bukan batas pipeline. |
+| Market cap | Masih tipis: hanya 1 dari 48 kandidat halaman volume yang di bawah $200K. Lantai $50K di hulu bukan penghalang bagi preset ini, karena `marketCapMin`-nya juga $50K. |
+| GMGN | Ketiga gate sniper/insider/bundler gagal-tertutup, dan API-nya hanya terisi 0–6 dari ~35 token lintas percobaan lokal. `GMGN_API_KEY` terpasang di VPS. |
 
-Perbaikannya ada di pipeline, bukan di preset: halaman kedua dengan
-`sort_by=fee_tvl_ratio_1h:desc` terbukti memunculkan pool berumur 11 menit dengan MC $6K. Itu
-perubahan yang menyentuh data semua preset, jadi tidak ikut disertakan di sini. Preset ini
-di-commit sebagai transkripsi yang setia, bukan dilonggarkan supaya kelihatan berbunyi — melonggarkannya
-berarti menggambarkan strategi yang tidak pernah dipostingkan siapa pun.
+Preset ini di-commit sebagai transkripsi yang setia, bukan dilonggarkan supaya kelihatan berbunyi —
+melonggarkannya berarti menggambarkan strategi yang tidak pernah dipostingkan siapa pun.
 
 ## Catatan risiko
 
 - Data Top-10 holders, dev balance, JupShield, dan Organic Score berasal dari Pool Discovery API Meteora. RugCheck disimpan dalam cache agar pemindaian tidak membebani layanan eksternal.
-- RugCheck membatasi laju permintaan cukup ketat: burst 39 mint tanpa jeda kehilangan sekitar sepertiga respons ke HTTP 429, dan kegagalan itu tersimpan sebagai “data tidak ada”. Semua permintaan ke host itu kini mengantre di satu jalur dengan jeda minimum dan satu kali retry, sehingga cakupannya penuh. Pemindaian dingin karena itu memakan ~16 detik sekali, lalu tersebar oleh jitter pada masa kedaluwarsa cache.
+- RugCheck membatasi laju permintaan cukup ketat: burst 39 mint tanpa jeda kehilangan sekitar sepertiga respons ke HTTP 429, dan kegagalan itu tersimpan sebagai “data tidak ada”. Semua permintaan ke host itu kini mengantre di satu jalur dengan jeda minimum dan satu kali retry, sehingga cakupannya penuh. Pemindaian dingin karena itu memakan 33–41 detik sekali (20 detik sebelum halaman fee ditambahkan), lalu tersebar oleh jitter pada masa kedaluwarsa cache; pemindaian hangat 1,6 detik. Pemindaian dingin memang melewati interval 30 detik, tetapi hanya sekali per restart — `activeFetch` membuat tick yang jatuh di tengah pemindaian ikut menunggu, bukan memulai pemindaian kedua.
 - Tidak ada score yang menjamin profit. Slippage, perubahan liquidity bin, smart-contract risk, dan pergerakan harga setelah alert tetap dapat menghasilkan kerugian.
 - Backtest historis penuh belum termasuk MVP; endpoint `/api/history` merekam alert selama proses server masih hidup untuk paper review.
 - Kecepatan fee dihitung dari snapshot 1 jam yang dikirim Meteora tiap scan, bukan dari fee posisi kamu sendiri. Dia menggambarkan pool, bukan PnL-mu.
