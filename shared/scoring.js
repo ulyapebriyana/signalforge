@@ -2,104 +2,6 @@ import { emptyGmgnFields } from "./gmgn.js";
 import { bandOf, gateLabel, SWANNY_RUBRIC } from "./swannyRubric.js";
 
 export const PRESETS = Object.freeze({
-  yanman: {
-    id: "yanman",
-    label: "Yanman-like",
-    marketCapMin: 100_000,
-    marketCapMax: 10_000_000,
-    tvlMin: 500,
-    momentumMin: 20,
-    momentumMax: 200,
-    volume1hMin: 5_000,
-    volumeTvlMin: 0.5,
-    feeTvlMin: 0.5,
-    requireFreezeOff: true,
-    maxRisk: 72,
-    minScore: 65,
-    hotScore: 80,
-    watchScore: 65,
-    earlyScore: 50,
-    cooldownMinutes: 15,
-  },
-  // Modelled on the publicly posted Meteora DLMM routine of @auzhinta: enter a
-  // fresh memecoin pool at or just after its top with a one-sided bid-ask range
-  // pushed 70–80% below entry, then harvest fees until the volume dies. Three
-  // things follow from that and make this preset unlike the other one.
-  //
-  //  1. The rig is specific and screenable. Bin step 80/100/125 with a 2–3%
-  //     base fee is the setup behind every position they have posted, so it is
-  //     a hard gate rather than a preference.
-  //  2. Direction barely matters. A bid-ask range that wide earns on the way
-  //     down — their own MOGDOG-SOL position closed +10.89% while the token
-  //     fell ~70% — so momentumMin is negative on purpose. What has to be true
-  //     is that the pool is *paying*, which is why feeTvlMin is the strictest
-  //     number here.
-  //  3. The exit is a volume rule, not a price rule. A screener cannot watch
-  //     fee velocity decay, so the closest standing equivalent is refusing to
-  //     surface a pool that is not already earning at ≥1% fee/TVL per hour.
-  auzhinta: {
-    id: "auzhinta",
-    label: "Auzhinta-like",
-    // Numbers below are stated outright in the step-by-step article, not
-    // inferred: MCAP ≥ $400K ("di bawah itu terlalu kecil dan rentan
-    // manipulasi"), holders ≥ 500, a Bubblemaps cluster of 40%+ is a reject,
-    // dev wallet ideally 0%, NoMint mandatory, base fee 2–3%.
-    marketCapMin: 400_000,
-    marketCapMax: 15_000_000,
-    // "TVL at least di minimal 35k an, at least kalo dump gak keberatan nahan
-    // IL" — and no ceiling: the article sorts by highest TVL on purpose,
-    // treating a crowded pool as other people's research already done.
-    tvlMin: 35_000,
-    // Entry wants the move intact — "cari yang baru ATH atau masih dalam fase
-    // naik", "kalau udah ATH lama terus turun panjang, momentumnya udah lewat".
-    // The wide range below is for what happens *after* entry, not a licence to
-    // enter something already bleeding.
-    momentumMin: 0,
-    momentumMax: 400,
-    volume1hMin: 10_000,
-    volumeTvlMin: 0.3,
-    feeTvlMin: 1,
-    // The article gives four rigs, each with its own depth: BS 50 → −50/−60%,
-    // BS 80 → −60/−70%, BS 100 → −70/−80% ("paling umum dipake buat meme
-    // coin"), BS 400+ → −80% and beyond. All four are in play.
-    binStepMin: 50,
-    binStepMax: 400,
-    baseFeeMin: 2,
-    // Fees must accrue in base + quote, not quote only: "karna kita cari
-    // rebound pas dia turun jadi pas rebound pnl kedorong sama fee kita yang
-    // belum di claim". Quote-only fees forfeit that push.
-    requireBothTokenFees: true,
-    // The Bubblemaps check itself: RugCheck's transfer-linked wallet groups,
-    // measured against the article's own threshold — "kalau ada satu cluster
-    // gede yang pegang 40%+ supply, bahaya". The dangerous example walked
-    // through there was a single cluster of 371 wallets holding 47.95%.
-    maxClusterPct: 40,
-    // Top-10 concentration is a different, coarser cut of the same worry, kept
-    // because a cluster graph can miss supply parked in unlinked whales.
-    top10HoldersMax: 40,
-    devBalanceMax: 1,
-    holdersMin: 500,
-    requireMintOff: true,
-    // Crude wash-trade guard. The article checks whether the buyers and
-    // sellers are the same handful of wallets; swaps per unique trader is the
-    // only shape of that visible from the API. Live median sits near 1.7, so
-    // this only catches the pathological end.
-    maxSwapsPerTrader: 6,
-    ageHoursMax: 72,
-    requireFreezeOff: true,
-    maxRisk: 78,
-    // The 100-point model is built for pools this preset never trades. An
-    // unverified memecoin forfeits the verification points outright and rarely
-    // sustains the 2x volume/TVL that tops out volume quality, so a strong
-    // candidate lands in the fifties: the two pools that inspired this preset
-    // scored 53 and 45 while they were being farmed. Reusing the 65/80 ladder
-    // would gate every alert off and leave the preset inert.
-    minScore: 48,
-    hotScore: 60,
-    watchScore: 48,
-    earlyScore: 38,
-    cooldownMinutes: 10,
-  },
   // Modelled on the Meteora DLMM posts of @0xVanChu, who farms one thing: a
   // token that is already running, in the highest-fee pool available, for
   // minutes to hours rather than days. The posts name ranges (−10%/−15% short
@@ -243,6 +145,104 @@ export const PRESETS = Object.freeze({
     watchScore: 55,
     earlyScore: 42,
     cooldownMinutes: 5,
+  },
+  yanman: {
+    id: "yanman",
+    label: "Yanman-like",
+    marketCapMin: 100_000,
+    marketCapMax: 10_000_000,
+    tvlMin: 500,
+    momentumMin: 20,
+    momentumMax: 200,
+    volume1hMin: 5_000,
+    volumeTvlMin: 0.5,
+    feeTvlMin: 0.5,
+    requireFreezeOff: true,
+    maxRisk: 72,
+    minScore: 65,
+    hotScore: 80,
+    watchScore: 65,
+    earlyScore: 50,
+    cooldownMinutes: 15,
+  },
+  // Modelled on the publicly posted Meteora DLMM routine of @auzhinta: enter a
+  // fresh memecoin pool at or just after its top with a one-sided bid-ask range
+  // pushed 70–80% below entry, then harvest fees until the volume dies. Three
+  // things follow from that and make this preset unlike the other one.
+  //
+  //  1. The rig is specific and screenable. Bin step 80/100/125 with a 2–3%
+  //     base fee is the setup behind every position they have posted, so it is
+  //     a hard gate rather than a preference.
+  //  2. Direction barely matters. A bid-ask range that wide earns on the way
+  //     down — their own MOGDOG-SOL position closed +10.89% while the token
+  //     fell ~70% — so momentumMin is negative on purpose. What has to be true
+  //     is that the pool is *paying*, which is why feeTvlMin is the strictest
+  //     number here.
+  //  3. The exit is a volume rule, not a price rule. A screener cannot watch
+  //     fee velocity decay, so the closest standing equivalent is refusing to
+  //     surface a pool that is not already earning at ≥1% fee/TVL per hour.
+  auzhinta: {
+    id: "auzhinta",
+    label: "Auzhinta-like",
+    // Numbers below are stated outright in the step-by-step article, not
+    // inferred: MCAP ≥ $400K ("di bawah itu terlalu kecil dan rentan
+    // manipulasi"), holders ≥ 500, a Bubblemaps cluster of 40%+ is a reject,
+    // dev wallet ideally 0%, NoMint mandatory, base fee 2–3%.
+    marketCapMin: 400_000,
+    marketCapMax: 15_000_000,
+    // "TVL at least di minimal 35k an, at least kalo dump gak keberatan nahan
+    // IL" — and no ceiling: the article sorts by highest TVL on purpose,
+    // treating a crowded pool as other people's research already done.
+    tvlMin: 35_000,
+    // Entry wants the move intact — "cari yang baru ATH atau masih dalam fase
+    // naik", "kalau udah ATH lama terus turun panjang, momentumnya udah lewat".
+    // The wide range below is for what happens *after* entry, not a licence to
+    // enter something already bleeding.
+    momentumMin: 0,
+    momentumMax: 400,
+    volume1hMin: 10_000,
+    volumeTvlMin: 0.3,
+    feeTvlMin: 1,
+    // The article gives four rigs, each with its own depth: BS 50 → −50/−60%,
+    // BS 80 → −60/−70%, BS 100 → −70/−80% ("paling umum dipake buat meme
+    // coin"), BS 400+ → −80% and beyond. All four are in play.
+    binStepMin: 50,
+    binStepMax: 400,
+    baseFeeMin: 2,
+    // Fees must accrue in base + quote, not quote only: "karna kita cari
+    // rebound pas dia turun jadi pas rebound pnl kedorong sama fee kita yang
+    // belum di claim". Quote-only fees forfeit that push.
+    requireBothTokenFees: true,
+    // The Bubblemaps check itself: RugCheck's transfer-linked wallet groups,
+    // measured against the article's own threshold — "kalau ada satu cluster
+    // gede yang pegang 40%+ supply, bahaya". The dangerous example walked
+    // through there was a single cluster of 371 wallets holding 47.95%.
+    maxClusterPct: 40,
+    // Top-10 concentration is a different, coarser cut of the same worry, kept
+    // because a cluster graph can miss supply parked in unlinked whales.
+    top10HoldersMax: 40,
+    devBalanceMax: 1,
+    holdersMin: 500,
+    requireMintOff: true,
+    // Crude wash-trade guard. The article checks whether the buyers and
+    // sellers are the same handful of wallets; swaps per unique trader is the
+    // only shape of that visible from the API. Live median sits near 1.7, so
+    // this only catches the pathological end.
+    maxSwapsPerTrader: 6,
+    ageHoursMax: 72,
+    requireFreezeOff: true,
+    maxRisk: 78,
+    // The 100-point model is built for pools this preset never trades. An
+    // unverified memecoin forfeits the verification points outright and rarely
+    // sustains the 2x volume/TVL that tops out volume quality, so a strong
+    // candidate lands in the fifties: the two pools that inspired this preset
+    // scored 53 and 45 while they were being farmed. Reusing the 65/80 ladder
+    // would gate every alert off and leave the preset inert.
+    minScore: 48,
+    hotScore: 60,
+    watchScore: 48,
+    earlyScore: 38,
+    cooldownMinutes: 10,
   },
   // Modelled on @SwannyDeFi's DLMM Checker, the pre-filter every token is put
   // through before it earns any research time. It is a screen, not a play:
