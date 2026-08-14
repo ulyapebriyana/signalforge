@@ -27,10 +27,12 @@ export const PRESETS = Object.freeze({
   //     more like gambling. Not recommended to attempt." Hence the loosest
   //     risk ceiling in the app, and this comment.
   //
-  // Four numbers were set or moved by the user's explicit instruction rather
-  // than transcribed, and each is called out again at its own gate below:
-  // `volume5mMin` (50_000, not @0xMrBeefman's 1M), `marketCapMin` (lowered
-  // from $300K to $150K), `volume1hMin` (lowered from $200K to $50K), and
+  // Several numbers were set or moved by the user's explicit instruction
+  // rather than transcribed, and each is called out again at its own gate
+  // below: `volume5mMin` (50_000, not @0xMrBeefman's 1M), `marketCapMin`
+  // (lowered from $300K to $150K), `volume1hMin` (lowered from $200K to $50K,
+  // then to $25K), `volumeTvlMin` (loosened from 3x to 1x), `devBalanceMax`
+  // (loosened from 0 to 10%), `ageHoursMax` (removed outright, was 24h), and
   // `bundlerPctMax` (loosened from Skolmbeagh-like's 15% to 50%). None of
   // these are transcription errors — they are recorded here so a later reader
   // does not mistake them for source-backed numbers.
@@ -60,11 +62,14 @@ export const PRESETS = Object.freeze({
     // something flat and never into something bleeding.
     momentumMin: 20,
     momentumMax: 2_000,
-    // Lowered from $200K to $50K on the user's explicit instruction — it no
-    // longer demands sustained flow beyond the 5m spike itself, just that the
-    // hour containing that spike wasn't otherwise dead.
-    volume1hMin: 50_000,
-    volumeTvlMin: 3,
+    // Lowered from $200K to $50K, then to $25K on the user's explicit
+    // instruction — it no longer demands sustained flow beyond the 5m spike
+    // itself, just that the hour containing that spike wasn't otherwise dead.
+    volume1hMin: 25_000,
+    // Loosened from 3 to 1 on the user's explicit instruction — the 5m spike
+    // gate above already does the heavy lifting on flow, so this floor only
+    // needs to rule out a pool where the hour's volume barely touches its TVL.
+    volumeTvlMin: 1,
     // Stricter than VanChu-like's 2 on purpose. The Metlex alert measured
     // 129.1%/h actual on the 2% pool; the pools this play targets pay
     // extravagantly or they are not worth the range risk being taken.
@@ -74,15 +79,17 @@ export const PRESETS = Object.freeze({
     // range by one red candle. 2% is the floor because it is the lowest tier
     // he is on record entering deliberately.
     baseFeeMin: 2,
-    // A runner more than a day old is a trend, not a heart attack. This is an
-    // inference rather than a stated rule — no source names a maximum age —
-    // but the Metlex trigger is explicitly a young-pool tier, and the exits
-    // these posts describe are measured in minutes.
-    ageHoursMax: 24,
+    // No age gate, on the user's explicit instruction. The earlier 24h ceiling
+    // was an inference rather than a stated rule — no source names a maximum
+    // age — and the user removed it outright rather than widen it further.
+    //
     // Beefman's Stage 1, in numbers. Borrowed from Skolmbeagh-like rather than
     // re-derived, because it is the same checklist doing the same job: make
     // sure the thing cannot wipe you out with a single candle.
-    devBalanceMax: 0,
+    // Loosened from 0 to 10 on the user's explicit instruction — a token where
+    // the dev still holds a small residual balance is no longer disqualified
+    // outright.
+    devBalanceMax: 10,
     sniperPctMax: 15,
     insidersPctMax: 15,
     // Loosened from Skolmbeagh-like's 15% to 50% on the user's explicit

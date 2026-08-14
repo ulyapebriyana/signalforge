@@ -415,9 +415,9 @@ describe("SignalForge scoring", () => {
       .toContain("MC ≥ $150000");
     expect(evaluatePreset({ ...heartAttackPool, marketCap: 150_000 }, PRESETS.heartattack).passed).toBe(true);
 
-    expect(evaluatePreset({ ...heartAttackPool, volume1h: 49_999 }, PRESETS.heartattack).misses)
-      .toContain("Vol 1h ≥ $50000");
-    expect(evaluatePreset({ ...heartAttackPool, volume1h: 50_000 }, PRESETS.heartattack).passed).toBe(true);
+    expect(evaluatePreset({ ...heartAttackPool, volume1h: 24_999 }, PRESETS.heartattack).misses)
+      .toContain("Vol 1h ≥ $25000");
+    expect(evaluatePreset({ ...heartAttackPool, volume1h: 25_000 }, PRESETS.heartattack).passed).toBe(true);
 
     expect(evaluatePreset({ ...heartAttackPool, gmgnBundlerPct: 50.1 }, PRESETS.heartattack).misses)
       .toContain("Bundler ≤ 50%");
@@ -446,8 +446,10 @@ describe("SignalForge scoring", () => {
 
   it("applies Stage 1 — the rugpull checks borrowed from Skolmbeagh-like", () => {
     // "Quickly going through holders, distribution" before any liquidity moves.
-    expect(evaluatePreset({ ...heartAttackPool, devBalancePct: 0.5 }, PRESETS.heartattack).misses)
-      .toContain("Saldo dev ≤ 0%");
+    // Dev balance loosened from 0% to 10% on the user's explicit instruction.
+    expect(evaluatePreset({ ...heartAttackPool, devBalancePct: 10.1 }, PRESETS.heartattack).misses)
+      .toContain("Saldo dev ≤ 10%");
+    expect(evaluatePreset({ ...heartAttackPool, devBalancePct: 10 }, PRESETS.heartattack).passed).toBe(true);
     expect(evaluatePreset({ ...heartAttackPool, top10HoldersPct: 42 }, PRESETS.heartattack).misses)
       .toContain("Top-10 holder ≤ 35%");
     expect(evaluatePreset({ ...heartAttackPool, gmgnSniperPct: 18 }, PRESETS.heartattack).misses)
@@ -467,9 +469,9 @@ describe("SignalForge scoring", () => {
     expect(evaluatePreset({ ...heartAttackPool, top10HoldersPct: 6 }, PRESETS.heartattack).passed).toBe(true);
   });
 
-  it("treats a day-old runner as a trend rather than a heart attack", () => {
-    expect(evaluatePreset({ ...heartAttackPool, ageHours: 30 }, PRESETS.heartattack).misses)
-      .toContain("Umur pool ≤ 24 jam");
+  it("declares no age gate, on the user's explicit instruction", () => {
+    expect(PRESETS.heartattack.ageHoursMax).toBeUndefined();
+    expect(evaluatePreset({ ...heartAttackPool, ageHours: 400 }, PRESETS.heartattack).passed).toBe(true);
   });
 
   it("separates Heart Attack from the two presets it borrows from", () => {
