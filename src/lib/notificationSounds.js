@@ -33,6 +33,13 @@ export const PRESET_DEFAULT_SOUND = Object.freeze({
   swanny: "profit",
   vanchu: "sanggup",
   skolmbeagh: "sodara",
+  // "burem" (blurry eyes) was a placeholder claimed by no preset — fitting for
+  // the one strategy explicitly built around not staring at the chart.
+  slowwallet: "burem",
+  // "runner" was added as a placeholder for exactly this kind of pool and then
+  // left unclaimed when the two presets it was meant for got real clips. The
+  // preset it was named after finally exists.
+  heartattack: "runner",
 });
 
 const isPlayable = (choice) => choice === NOTIFICATION_SOUND_OFF || Boolean(NOTIFICATION_SOUNDS[choice]);

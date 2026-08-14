@@ -280,6 +280,7 @@ const PRESET_ROWS = [
   ["TVL minimum", (p) => formatUsd(p.tvlMin)],
   ["Momentum 1 jam", (p) => `${p.momentumMin}% – ${p.momentumMax}%`],
   ["Volume 1 jam minimum", (p) => formatUsd(p.volume1hMin)],
+  ["Volume 5 menit minimum", (p) => (Number.isFinite(p.volume5mMin) ? formatUsd(p.volume5mMin) : "—")],
   ["Vol/TVL minimum", (p) => `${p.volumeTvlMin}x`],
   ["Fee/TVL minimum", (p) => `${p.feeTvlMin}%`],
   ["Bin step", (p) => (p.binStepMin ? `${p.binStepMin} – ${p.binStepMax}` : "—")],
@@ -299,7 +300,7 @@ function Presets() {
   return (
     <section className="lp-section lp-presets" id="preset" aria-labelledby="preset-title">
       <div className="lp-section-head" data-reveal>
-        <span className="f-eyebrow">Lima gate, aturan terbuka</span>
+        <span className="f-eyebrow">Tujuh gate, aturan terbuka</span>
         <h2 className="f-display" id="preset-title">
           Pilih seberapa longgar saringannya
         </h2>
@@ -332,7 +333,11 @@ function Presets() {
         memanen fee saat harga turun, dan itu menanggung risiko penurunan yang nyata. “VanChu-like”
         dan “Skolmbeagh-like” adalah dua yang paling agresif: yang pertama hanya masuk pool fee
         tinggi saat token sudah lari, yang kedua hanya hidup 30 menit pertama setelah migrasi. Batas
-        risikonya sengaja paling longgar, dan itu berarti kerugiannya juga paling nyata.
+        risikonya sengaja paling longgar, dan itu berarti kerugiannya juga paling nyata. “Slow
+        Wallet” di ujung yang berlawanan: token established, pool berumur minimal seminggu, wajib
+        terverifikasi, dan batas risiko paling ketat di seluruh aplikasi. “Heart Attack” yang paling
+        ekstrem dari semuanya — dipicu volume 5 menit ≥ $50K pada token yang sedang lari, dengan
+        batas risiko paling longgar. LP Army Academy sendiri menyebut strategi ini “lebih mirip judi”.
       </p>
     </section>
   );

@@ -88,6 +88,45 @@ const vanchuPool = {
   ageHours: 5,
 };
 
+// A runner mid-spike: five-minute volume well past the trigger, extravagant
+// fee capture, and a holder split clean enough to survive Stage 1.
+const heartAttackPool = {
+  marketCap: 1_680_000,
+  tvl: 83_300,
+  priceChange1h: 74,
+  volume1h: 544_500,
+  volumeTvl1h: 6.5,
+  feeTvl1h: 129.1,
+  baseFeePct: 2,
+  gmgnVolume5m: 78_000,
+  ageHours: 0.6,
+  top10HoldersPct: 24.1,
+  devBalancePct: 0,
+  gmgnSniperPct: 7.4,
+  gmgnInsidersPct: 3.9,
+  gmgnBundlerPct: 10.5,
+  isVerified: false,
+  freezeAuthorityDisabled: true,
+  isBlacklisted: false,
+};
+
+// A calm, established pool — deep, verified, well past its migration, not
+// doing anything violent. The shape of pool the $TOAD trade describes.
+const slowWalletPool = {
+  marketCap: 5_000_000,
+  tvl: 250_000,
+  priceChange1h: 5,
+  volume1h: 35_000,
+  volumeTvl1h: 0.2,
+  feeTvl1h: 0.25,
+  holders: 3_000,
+  isVerified: true,
+  mintAuthorityDisabled: true,
+  freezeAuthorityDisabled: true,
+  isBlacklisted: false,
+  ageHours: 400,
+};
+
 // A migration 18 minutes old that clears every row of the checklist.
 const skolmbeaghPool = {
   marketCap: 118_000,
@@ -356,6 +395,108 @@ describe("SignalForge scoring", () => {
     expect(evaluatePreset(vanchuPool, PRESETS.skolmbeagh).passed).toBe(false);
   });
 
+  it("passes a mid-spike runner through the Heart Attack gate", () => {
+    expect(evaluatePreset(heartAttackPool, PRESETS.heartattack).passed).toBe(true);
+  });
+
+  it("turns on the five-minute volume trigger the user asked for", () => {
+    // $50K/5m is the whole preset. Just under it is not a near miss, it is the
+    // trigger not having fired.
+    expect(evaluatePreset({ ...heartAttackPool, gmgnVolume5m: 49_000 }, PRESETS.heartattack).misses)
+      .toEqual(["Vol 5m ≥ $50000"]);
+    expect(evaluatePreset({ ...heartAttackPool, gmgnVolume5m: 50_000 }, PRESETS.heartattack).passed).toBe(true);
+  });
+
+  it("goes silent without a GMGN key rather than waving runners through", () => {
+    // Volume 5m, sniper, insider, and bundler are all GMGN-backed. No key means
+    // no reading, and no reading is not a pass — same posture as Skolmbeagh-like.
+    const noKey = {
+      ...heartAttackPool,
+      gmgnVolume5m: null,
+      gmgnSniperPct: null,
+      gmgnInsidersPct: null,
+      gmgnBundlerPct: null,
+    };
+    const { passed, misses } = evaluatePreset(noKey, PRESETS.heartattack);
+    expect(passed).toBe(false);
+    expect(misses).toEqual([
+      "Vol 5m ≥ $50000",
+      "Sniper ≤ 15%",
+      "Insider ≤ 15%",
+      "Bundler ≤ 15%",
+    ]);
+  });
+
+  it("applies Stage 1 — the rugpull checks borrowed from Skolmbeagh-like", () => {
+    // "Quickly going through holders, distribution" before any liquidity moves.
+    expect(evaluatePreset({ ...heartAttackPool, devBalancePct: 0.5 }, PRESETS.heartattack).misses)
+      .toContain("Saldo dev ≤ 0%");
+    expect(evaluatePreset({ ...heartAttackPool, top10HoldersPct: 42 }, PRESETS.heartattack).misses)
+      .toContain("Top-10 holder ≤ 35%");
+    expect(evaluatePreset({ ...heartAttackPool, gmgnSniperPct: 18 }, PRESETS.heartattack).misses)
+      .toContain("Sniper ≤ 15%");
+  });
+
+  it("keeps VanChu-like's fee tier lesson, the most expensive one in the posts", () => {
+    expect(evaluatePreset({ ...heartAttackPool, baseFeePct: 1 }, PRESETS.heartattack).misses)
+      .toContain("Base fee ≥ 2%");
+  });
+
+  it("does not borrow Skolmbeagh-like's top-10 floor", () => {
+    // The floor screens supply scattered across bots on a just-migrated token.
+    // A runner that has already moved is past the moment that reads, so only
+    // the ceiling carries over.
+    expect(PRESETS.heartattack.top10HoldersMin).toBeUndefined();
+    expect(evaluatePreset({ ...heartAttackPool, top10HoldersPct: 6 }, PRESETS.heartattack).passed).toBe(true);
+  });
+
+  it("treats a day-old runner as a trend rather than a heart attack", () => {
+    expect(evaluatePreset({ ...heartAttackPool, ageHours: 30 }, PRESETS.heartattack).misses)
+      .toContain("Umur pool ≤ 24 jam");
+  });
+
+  it("separates Heart Attack from the two presets it borrows from", () => {
+    // Skolmbeagh-like's fresh migration is too small-cap and too illiquid;
+    // VanChu-like's runner carries no GMGN reading at all, so the 5m trigger
+    // it never declares cannot fire here.
+    expect(evaluatePreset(skolmbeaghPool, PRESETS.heartattack).passed).toBe(false);
+    expect(evaluatePreset(vanchuPool, PRESETS.heartattack).passed).toBe(false);
+    // And the borrowing runs one way only — neither source preset gains a
+    // five-minute gate it never declared.
+    expect(PRESETS.vanchu.volume5mMin).toBeUndefined();
+    expect(PRESETS.skolmbeagh.volume5mMin).toBeUndefined();
+    expect(evaluatePreset({ ...vanchuPool, gmgnVolume5m: null }, PRESETS.vanchu).passed).toBe(true);
+  });
+
+  it("passes a calm, established pool through the Slow Wallet gate", () => {
+    expect(evaluatePreset(slowWalletPool, PRESETS.slowwallet).passed).toBe(true);
+  });
+
+  it("rejects a runner, because that is what the vanchu preset is for", () => {
+    expect(evaluatePreset({ ...slowWalletPool, priceChange1h: 45 }, PRESETS.slowwallet).misses)
+      .toContain("1h ≤ 20%");
+  });
+
+  it("rejects a pool that has not survived its first week", () => {
+    // The inverse of Skolmbeagh-like's ageHoursMax: "proven" means past the
+    // early hours, not caught inside them.
+    expect(evaluatePreset({ ...slowWalletPool, ageHours: 20 }, PRESETS.slowwallet).misses)
+      .toContain("Umur pool ≥ 168 jam");
+  });
+
+  it("requires verification, unlike every other preset", () => {
+    expect(evaluatePreset({ ...slowWalletPool, isVerified: false }, PRESETS.slowwallet).misses)
+      .toContain("Token terverifikasi");
+  });
+
+  it("keeps Slow Wallet and VanChu-like from qualifying each other's pools", () => {
+    // A calm $5M pool sitting flat is too slow and too big a cap gap for
+    // VanChu-like's runner gate; a $2.1M pool up 64% in an hour is exactly
+    // the momentum Slow Wallet's ceiling exists to exclude.
+    expect(evaluatePreset(slowWalletPool, PRESETS.vanchu).passed).toBe(false);
+    expect(evaluatePreset(vanchuPool, PRESETS.slowwallet).passed).toBe(false);
+  });
+
   it("leaves the presets that predate the new gates untouched", () => {
     // The new optional gates must stay opt-in: an existing preset that never
     // declared them cannot start failing on a field it does not screen.
@@ -364,6 +505,9 @@ describe("SignalForge scoring", () => {
       expect(preset.sniperPctMax).toBeUndefined();
       expect(preset.insidersPctMax).toBeUndefined();
       expect(preset.bundlerPctMax).toBeUndefined();
+      expect(preset.ageHoursMin).toBeUndefined();
+      expect(preset.requireVerified).toBeUndefined();
+      expect(preset.volume5mMin).toBeUndefined();
     }
     expect(evaluatePreset(healthyPool, PRESETS.yanman).passed).toBe(true);
     expect(evaluatePreset(auzhintaPool, PRESETS.auzhinta).passed).toBe(true);
@@ -400,6 +544,26 @@ describe("SignalForge scoring", () => {
     expect(poolTier(65, "yanman")).toBe("watch");
     expect(poolTier(50, "yanman")).toBe("early");
     expect(poolTier(49, "yanman")).toBe("skip");
+  });
+
+  it("reads the Heart Attack ladder high, matching what these pools actually score", () => {
+    // Extreme momentum, fee efficiency far past the 2% cap, full volume
+    // quality, and full freshness are 80 of the 100 points, and this preset
+    // gates hard on all four — so the ladder sits above VanChu-like's.
+    expect(calculateScore(heartAttackPool).total).toBeGreaterThanOrEqual(PRESETS.heartattack.hotScore);
+    expect(poolTier(85, "heartattack")).toBe("hot");
+    expect(poolTier(70, "heartattack")).toBe("watch");
+    expect(poolTier(55, "heartattack")).toBe("early");
+    expect(poolTier(54, "heartattack")).toBe("skip");
+  });
+
+  it("reads the Slow Wallet ladder low, matching what the score model can actually give it", () => {
+    // Momentum capped at 20% and freshness capped at 5 (often 3) keep even a
+    // qualifying pool well under the 65/80 shared default.
+    expect(poolTier(55, "slowwallet")).toBe("hot");
+    expect(poolTier(40, "slowwallet")).toBe("watch");
+    expect(poolTier(28, "slowwallet")).toBe("early");
+    expect(poolTier(27, "slowwallet")).toBe("skip");
   });
 
   it("falls back to the default ladder for an unknown preset id", () => {

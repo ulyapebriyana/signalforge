@@ -84,6 +84,8 @@ describe("per-preset notification sound", () => {
       swanny: "profit",
       vanchu: "sanggup",
       skolmbeagh: "sodara",
+      slowwallet: "burem",
+      heartattack: "runner",
     });
   });
 
@@ -95,6 +97,8 @@ describe("per-preset notification sound", () => {
       swanny: "profit",
       vanchu: "sanggup",
       skolmbeagh: "sodara",
+      slowwallet: "burem",
+      heartattack: "runner",
     });
   });
 
@@ -107,6 +111,8 @@ describe("per-preset notification sound", () => {
       swanny: "profit",
       vanchu: "sanggup",
       skolmbeagh: "sodara",
+      slowwallet: "burem",
+      heartattack: "runner",
     });
   });
 
@@ -117,6 +123,8 @@ describe("per-preset notification sound", () => {
       swanny: NOTIFICATION_SOUND_OFF,
       vanchu: NOTIFICATION_SOUND_OFF,
       skolmbeagh: NOTIFICATION_SOUND_OFF,
+      slowwallet: NOTIFICATION_SOUND_OFF,
+      heartattack: NOTIFICATION_SOUND_OFF,
     });
   });
 
@@ -128,6 +136,8 @@ describe("per-preset notification sound", () => {
       swanny: "profit",
       vanchu: "sanggup",
       skolmbeagh: "sodara",
+      slowwallet: "burem",
+      heartattack: "runner",
     });
   });
 
@@ -138,6 +148,8 @@ describe("per-preset notification sound", () => {
       swanny: "profit",
       vanchu: "sanggup",
       skolmbeagh: "sodara",
+      slowwallet: "burem",
+      heartattack: "runner",
     });
     expect(resolveNotificationSoundMap(JSON.stringify({ yanman: "bogus" }), null, null, null)).toEqual({
       yanman: "fight",
@@ -145,6 +157,8 @@ describe("per-preset notification sound", () => {
       swanny: "profit",
       vanchu: "sanggup",
       skolmbeagh: "sodara",
+      slowwallet: "burem",
+      heartattack: "runner",
     });
   });
 

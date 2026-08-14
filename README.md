@@ -34,8 +34,8 @@ Pemilihan bundel terjadi di `src/main.jsx` sebelum salah satu stylesheet dimuat,
   ikut terlihat — urutan volume kepalanya selalu pool tua dan besar.
 - Ambil candle 1 jam untuk maksimal 72 kandidat secara paralel (48 dari halaman volume, 24 dari
   halaman fee yang belum terbawa).
-- Preset **Yanman-like**, **Auzhinta-like**, **Swanny-like**, **VanChu-like**, dan
-  **Skolmbeagh-like** dengan aturan yang transparan.
+- Preset **Yanman-like**, **Auzhinta-like**, **Swanny-like**, **VanChu-like**,
+  **Skolmbeagh-like**, **Slow Wallet**, dan **Heart Attack** dengan aturan yang transparan.
 - Score 0–100: momentum 25, fee efficiency 25, volume quality 20, security 20, freshness 10.
 - **Kecepatan fee**: fee/TVL direkam tiap scan, lalu dibandingkan dengan puncaknya dalam jendela 45 menit.
 - **Volume 5 menit** dari GMGN sebagai kolom scanner. Meteora berhenti di 1 jam, terlalu kasar untuk play berskala menit — di situ volume 5 menit adalah sinyal entry-nya sendiri, bukan pelengkap.
@@ -159,34 +159,39 @@ Rute swap memakai Jupiter.
 
 ## Arti preset
 
-| Aturan | Yanman-like | Auzhinta-like | Swanny-like | VanChu-like | Skolmbeagh-like |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| Market cap | $100K–$10M | $400K–$15M | $100K–$15M | $300K–$15M | $50K–$200K |
-| TVL minimum | $500 | $35K | $500 | $15K | $1K |
-| Momentum 1h | 20–200% | 0–400% | bebas | 15–900% | 0–2000% |
-| Volume 1h minimum | $5K | $10K | $1K | $250K | $20K |
-| Vol/TVL minimum | 0.5x | 0.3x | — | 3x | 1x |
-| Fee/TVL minimum | 0.5% | 1.0% | — | 2% | 2% |
-| Bin step | — | 50–400 | — | — | — |
-| Base fee minimum | — | 2% | — | 2% | — |
-| Mode fee | — | Base + quote | — | — | — |
-| Cluster terbesar maksimum | — | 40% | — | — | — |
-| Top-10 holder | — | ≤40% | rubrik | — | 10–35% |
-| Saldo dev maksimum | — | 1% | rubrik | — | 0% |
-| Sniper / Insider / Bundler | — | — | rubrik | — | ≤15% masing-masing |
-| Holder minimum | — | 500 | — | — | — |
-| Mint authority | — | Wajib off | Wajib off | — | — |
-| Umur pool maksimum | — | 72 jam | — | — | **30 menit** |
-| Umur **token** minimum | — | — | rubrik (≥24 jam) | — | — |
-| Rubrik screening | — | — | 12 metrik, tolak merah | — | — |
-| Skor minimum | 65 | 48 | 50 | 65 | 55 |
-| Risiko maksimum | 72 | 78 | 100 | 88 | 92 |
-| Ambang Hot / Watch | 80 / 65 | 60 / 48 | 80 / 65 | 82 / 68 | 70 / 55 |
-| Freeze authority | Wajib off | Wajib off | Wajib off | Wajib off | Wajib off |
-| Cooldown alert | 15 menit | 10 menit | 20 menit | 5 menit | 5 menit |
+| Aturan | Yanman-like | Auzhinta-like | Swanny-like | VanChu-like | Skolmbeagh-like | Slow Wallet | Heart Attack |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Market cap | $100K–$10M | $400K–$15M | $100K–$15M | $300K–$15M | $50K–$200K | $2M–$15M | $300K–$15M |
+| TVL minimum | $500 | $35K | $500 | $15K | $1K | $100K | $10K |
+| Momentum 1h | 20–200% | 0–400% | bebas | 15–900% | 0–2000% | −15–20% | 20–2000% |
+| Volume 1h minimum | $5K | $10K | $1K | $250K | $20K | $20K | $200K |
+| **Volume 5m minimum** | — | — | — | — | — | — | **$50K** |
+| Vol/TVL minimum | 0.5x | 0.3x | — | 3x | 1x | 0.15x | 3x |
+| Fee/TVL minimum | 0.5% | 1.0% | — | 2% | 2% | 0.2% | **5%** |
+| Bin step | — | 50–400 | — | — | — | — | — |
+| Base fee minimum | — | 2% | — | 2% | — | — | 2% |
+| Mode fee | — | Base + quote | — | — | — | — | — |
+| Cluster terbesar maksimum | — | 40% | — | — | — | — | — |
+| Top-10 holder | — | ≤40% | rubrik | — | 10–35% | — | ≤35% |
+| Saldo dev maksimum | — | 1% | rubrik | — | 0% | — | 0% |
+| Sniper / Insider / Bundler | — | — | rubrik | — | ≤15% masing-masing | — | ≤15% masing-masing |
+| Holder minimum | — | 500 | — | — | — | 1.000 | — |
+| Mint authority | — | Wajib off | Wajib off | — | — | Wajib off | — |
+| Token terverifikasi | — | — | — | — | — | **Wajib** | — |
+| Umur pool maksimum | — | 72 jam | — | — | **30 menit** | — | 24 jam |
+| Umur pool minimum | — | — | — | — | — | **7 hari** | — |
+| Umur **token** minimum | — | — | rubrik (≥24 jam) | — | — | — | — |
+| Rubrik screening | — | — | 12 metrik, tolak merah | — | — | — | — |
+| Skor minimum | 65 | 48 | 50 | 65 | 55 | 35 | 65 |
+| Risiko maksimum | 72 | 78 | 100 | 88 | 92 | **45** | **95** |
+| Ambang Hot / Watch | 80 / 65 | 60 / 48 | 80 / 65 | 82 / 68 | 70 / 55 | 55 / 40 | 85 / 70 |
+| Freeze authority | Wajib off | Wajib off | Wajib off | Wajib off | Wajib off | Wajib off | Wajib off |
+| Cooldown alert | 15 menit | 10 menit | 20 menit | 5 menit | 5 menit | 60 menit | **3 menit** |
 
-Kelimanya rekonstruksi dari materi yang pernah dibagikan terbuka, bukan klaim bahwa ini strategi
-persis milik orang tersebut.
+Lima dari tujuhnya rekonstruksi dari materi yang pernah dibagikan terbuka, bukan klaim bahwa ini
+strategi persis milik orang tersebut. Dua sisanya punya sumber berbeda dan dijelaskan tersendiri:
+[Slow Wallet](#slow-wallet--yang-tidak-dikonstruksi-dari-postingan) dan
+[Heart Attack](#heart-attack--pemicu-volume-5-menit).
 
 **Yanman-like** agresif dan dapat memasukkan pool dengan likuiditas sangat tipis.
 
@@ -380,6 +385,84 @@ memenuhi syarat. Yang berubah pada 2026-08-13 adalah pool seperti itu kini bisa 
 
 Preset ini di-commit sebagai transkripsi yang setia, bukan dilonggarkan supaya kelihatan berbunyi —
 melonggarkannya berarti menggambarkan strategi yang tidak pernah dipostingkan siapa pun.
+
+## Slow Wallet — yang tidak dikonstruksi dari postingan
+
+Lima preset di atas semuanya transkripsi dari checklist atau artikel yang pernah dipublikasikan
+terbuka. Slow Wallet beda posisinya, dan itu disebutkan terang-terangan supaya tidak disamakan
+dengan lima yang lain: @0xVanChu tidak pernah mempublikasikan checklist untuk wallet keduanya ini —
+cuma serpihan. Yang dia sebutkan:
+
+- "Slow Wallet takes noticeably less time and nerves" dibanding wallet aksinya (yang jadi dasar
+  preset VanChu-like) — "Bid-Ask on more proven tokens, without the constant race for new shitcoins
+  and without the need to stare at the chart."
+- Satu posisi konkret yang dia bagikan: $TOAD, strategi Bid-Ask, range −42%, deposit 20.000 USDC,
+  return ~3% selama 11 jam, dan harga bertahan dalam pita 15% sepanjang posisi terbuka.
+
+Angka-angka di tabel adalah sintesis saya sendiri di atas serpihan itu, disusun atas permintaan
+langsung pengguna ("menurutmu kayak gimana metode screeningnya") — bukan hasil terka-terka acak,
+tapi juga bukan klaim bahwa ini transkripsi persis dari sesuatu yang pernah dia tulis.
+
+Tiga hal yang membedakannya dari preset lain:
+
+- **Dua gate baru di mesin scoring**: `ageHoursMin` (kebalikan dari `ageHoursMax` yang dipakai
+  Skolmbeagh-like — pool harus *sudah lewat* 7 hari pertamanya, bukan justru masih di dalamnya) dan
+  `requireVerified` (satu-satunya preset yang mewajibkan token terverifikasi). Keduanya gagal-tertutup
+  seperti gate opsional lain: umur tidak diketahui atau status verifikasi tidak diketahui dianggap
+  gagal, bukan diloloskan.
+- **Batas risiko paling ketat di seluruh aplikasi (45)**, kebalikan penuh dari VanChu-like (88) dan
+  Skolmbeagh-like (92). Itu memang intinya: Slow Wallet ada karena wallet aksinya "costs adrenaline
+  and stress", jadi pool yang lolos gate ini seharusnya sudah genuinely aman, bukan risiko yang
+  ditoleransi demi cuan cepat.
+- **Skor minimumnya rendah (35) untuk alasan yang sama seperti Auzhinta-like**: model 100 poin
+  menghadiahkan momentum tinggi dan pool yang masih segar, dan preset ini sengaja membatasi momentum
+  di 20% serta menuntut pool berumur ≥7 hari (yang paling banter dapat 5 dari 10 poin freshness).
+  Pool yang genuinely lolos gate ini biasanya mendarat di kisaran 35–55, bukan 65+.
+
+## Heart Attack — pemicu volume 5 menit
+
+Nama komunitas, bukan istilah Meteora: range paling sempit yang masih bisa ditahan, dipasang pada
+token yang **sudah** lari, ditahan hitungan menit, keluar sebelum dump. Dipopulerkan
+[@\_mythicalpotato](https://x.com/_mythicalpotato) dan dijalankan terbuka oleh
+[@0xVanChu](https://x.com/0xVanChu) serta [@0xMrBeefman](https://x.com/0xMrBeefman).
+
+Yang benar-benar disebut sumbernya:
+
+- **Range −5% s/d −15%, paling sering −10%.** @0xMrBeefman: *"one of the criteria for using a
+  'tight range' of −5-15% is the token ripping upward with almost no corrections."* @0xVanChu pada
+  posisi $TOAD yang menghasilkan +101 SOL: *"realized it was more effective to work in the −10%"*.
+  Range adalah setelan posisi, bukan properti pool — **tidak ada gate di screener yang bisa
+  menyatakannya**, jadi itu urusan eksekusi, bukan penyaringan.
+- **Pemicunya lonjakan volume lima menit.** Algoritma @0xMrBeefman dibuka dengan *"say a runner
+  launches and on the 5 minute I see 1M+ in trading volume."*
+- **Stage 1 selalu pemeriksaan rugpull** sebelum likuiditas dikirim — *"quickly going through
+  holders, distribution."* Itulah gate dev, sniper, insider, bundler, dan top-10 di tabel, dipinjam
+  utuh dari Skolmbeagh-like yang menuliskan checklist yang sama dalam angka.
+- **Penilaian LP Army Academy sendiri**: *"extremely high risk and more like gambling. Not
+  recommended to attempt."*
+
+### Dua hal yang perlu diketahui sebelum memakainya
+
+**Ambang $50K itu keputusan pengguna, bukan sumbernya.** @0xMrBeefman menyebut 1M. $50K dalam lima
+menit setara $600K/jam bila bertahan — sudah benar-benar runner — sedangkan candle lima menit
+bervolume 1M cukup langka sampai presetnya praktis tidak akan pernah berbunyi. Pelonggaran ini
+dicatat di komentar kode supaya tidak terbaca sebagai transkripsi.
+
+**Preset ini butuh `GMGN_API_KEY`.** Volume 5m, sniper, insider, dan bundler semuanya dari GMGN dan
+semuanya gagal-tertutup: tanpa kunci, preset ini diam total — persis posture Skolmbeagh-like. Kunci
+itu terpasang di VPS, jadi ini hanya menggigit pada percobaan lokal.
+
+### Yang dipinjam, dan yang tidak
+
+| Dari | Dipinjam | Tidak dipinjam |
+| --- | --- | --- |
+| VanChu-like | `baseFeeMin` 2% — pelajaran fee tier yang paling mahal di postingan itu | Batas momentum dan volume yang lebih longgar |
+| Skolmbeagh-like | Dev 0%, sniper/insider/bundler ≤15%, top-10 ≤35% | **Lantai** top-10 10%: itu menyaring supply yang tersebar ke bot pada token baru migrasi, dan runner yang sudah bergerak melewati momen itu |
+
+Satu gate yang murni inferensi dan ditandai begitu di kode: **umur pool ≤24 jam**. Tidak ada sumber
+yang menyebut batas umur, tapi trigger Metlex eksplisit young-pool tier dan exit yang digambarkan
+postingan-postingan itu dihitung dalam menit — runner berumur lebih dari sehari adalah tren, bukan
+heart attack.
 
 ## Catatan risiko
 

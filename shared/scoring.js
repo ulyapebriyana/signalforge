@@ -2,6 +2,111 @@ import { emptyGmgnFields } from "./gmgn.js";
 import { bandOf, gateLabel, SWANNY_RUBRIC } from "./swannyRubric.js";
 
 export const PRESETS = Object.freeze({
+  // The "Heart Attack" play, named for how it feels rather than how it works:
+  // the tightest survivable range on a token that is already ripping, held for
+  // minutes, exited before the dump. It is community slang from the LP Army
+  // circle rather than a Meteora term, popularised by @_mythicalpotato and run
+  // publicly by @0xVanChu and @0xMrBeefman.
+  //
+  // What the sources actually state, and what is gated on below:
+  //   - Range −5% to −15%, most often −10%. @0xMrBeefman: "one of the criteria
+  //     for using a 'tight range' of −5-15% is the token ripping upward with
+  //     almost no corrections". @0xVanChu on his +101 SOL $TOAD position:
+  //     "realized it was more effective to work in the −10%" band. A range is
+  //     a position setting, not a pool property, so no gate here can express
+  //     it — it belongs in the execution notes, not the screener.
+  //   - The trigger is a five-minute volume spike. @0xMrBeefman's algorithm
+  //     opens with "say a runner launches and on the 5 minute I see 1M+ in
+  //     trading volume". `volume5mMin` is the gate the user asked for and the
+  //     one this whole preset turns on.
+  //   - Stage 1 is always a rugpull check before any liquidity moves —
+  //     "quickly going through holders, distribution". That is what the dev,
+  //     sniper, insider, bundler, and top-10 gates below are, borrowed intact
+  //     from Skolmbeagh-like where the same checklist is spelled out in
+  //     numbers.
+  //   - LP Army Academy's own verdict on the play: "extremely high risk and
+  //     more like gambling. Not recommended to attempt." Hence the loosest
+  //     risk ceiling in the app, and this comment.
+  //
+  // `volume5mMin` is 50_000 on the user's explicit instruction, NOT the 1M
+  // @0xMrBeefman names. That is a deliberate, documented divergence: $50K in
+  // five minutes is $600K/hour sustained, already a genuine runner, while a 1M
+  // five-minute candle is rare enough that the preset would effectively never
+  // fire. The looser number is the user's call, not the source's.
+  //
+  // NEEDS `GMGN_API_KEY`. Volume 5m, sniper, insider, and bundler all come from
+  // GMGN and every one of them fails closed, so without a key this preset is
+  // silent — the same posture as Skolmbeagh-like.
+  heartattack: {
+    id: "heartattack",
+    label: "Heart Attack",
+    // The gate the whole preset turns on. GMGN's `price.volume_5m`, finer than
+    // anything Meteora exposes — Meteora stops at one hour, which is far too
+    // coarse for a play measured in minutes.
+    volume5mMin: 50_000,
+    // The Metlex "HEART ATTACK · RUNNER" alert that prompted this preset showed
+    // MC $1.68M. Runners live in the low millions: above Skolmbeagh-like's
+    // fresh-migration band, below the $15M the upstream candidate filter in
+    // server/index.mjs imposes anyway.
+    marketCapMin: 300_000,
+    marketCapMax: 15_000_000,
+    // Thin liquidity against violent flow is the entire edge, exactly as in
+    // VanChu-like. The floor only excludes pools too small to take a position
+    // at all; the same Metlex alert's working pool held $83.3K.
+    tvlMin: 10_000,
+    // "Ripping upward with almost no corrections." Entry is never into
+    // something flat and never into something bleeding.
+    momentumMin: 20,
+    momentumMax: 2_000,
+    // $50K/5m sustained is $600K/h, but a spike does not have to have lasted a
+    // full hour to be tradeable — so the 1h floor sits below what the 5m gate
+    // implies rather than demanding the runner already ran for an hour.
+    volume1hMin: 200_000,
+    volumeTvlMin: 3,
+    // Stricter than VanChu-like's 2 on purpose. The Metlex alert measured
+    // 129.1%/h actual on the 2% pool; the pools this play targets pay
+    // extravagantly or they are not worth the range risk being taken.
+    feeTvlMin: 5,
+    // VanChu-like's lesson applies unchanged and is the most expensive one in
+    // these posts: right token, right volume, wrong fee tier, pushed out of
+    // range by one red candle. 2% is the floor because it is the lowest tier
+    // he is on record entering deliberately.
+    baseFeeMin: 2,
+    // A runner more than a day old is a trend, not a heart attack. This is an
+    // inference rather than a stated rule — no source names a maximum age —
+    // but the Metlex trigger is explicitly a young-pool tier, and the exits
+    // these posts describe are measured in minutes.
+    ageHoursMax: 24,
+    // Beefman's Stage 1, in numbers. Borrowed from Skolmbeagh-like rather than
+    // re-derived, because it is the same checklist doing the same job: make
+    // sure the thing cannot wipe you out with a single candle.
+    devBalanceMax: 0,
+    sniperPctMax: 15,
+    insidersPctMax: 15,
+    bundlerPctMax: 15,
+    // Only the ceiling, not Skolmbeagh-like's unusual floor. That floor exists
+    // because supply spread too thin across a just-migrated token means bots
+    // hold it; a runner that has already moved is past the moment that reads.
+    top10HoldersMax: 35,
+    requireFreezeOff: true,
+    // The loosest ceiling in the app, above even Skolmbeagh-like's 92. A pool
+    // that qualifies here is young, unverified, thinly held, and violently
+    // priced — it collects risk points for every single trait being farmed.
+    // Anything tighter would gate the preset off entirely, and the honest way
+    // to say that is in the number, not by quietly softening the risk model.
+    maxRisk: 95,
+    // These pools score *high* on the 100-point model — extreme momentum, fee
+    // efficiency far past the 2% cap, full volume quality, and full freshness
+    // are 80 of the 100 points, and this preset gates hard on all four. The
+    // ladder therefore sits above VanChu-like's rather than below it.
+    minScore: 65,
+    hotScore: 85,
+    watchScore: 70,
+    earlyScore: 55,
+    // The shortest cooldown in the app. A play that exits in minutes cannot
+    // wait five for its second alert.
+    cooldownMinutes: 3,
+  },
   // Modelled on the Meteora DLMM posts of @0xVanChu, who farms one thing: a
   // token that is already running, in the highest-fee pool available, for
   // minutes to hours rather than days. The posts name ranges (−10%/−15% short
@@ -145,6 +250,81 @@ export const PRESETS = Object.freeze({
     watchScore: 55,
     earlyScore: 42,
     cooldownMinutes: 5,
+  },
+  // Modelled on @0xVanChu's *other* wallet — the one he says takes "noticeably
+  // less time and nerves" than the Action Wallet the `vanchu` preset above
+  // reconstructs: "Bid-Ask on more proven tokens, without the constant race
+  // for new shitcoins and without the need to stare at the chart."
+  //
+  // Unlike every preset above, this is NOT a reconstruction of a published
+  // checklist — he never posted one for Slow Wallet, only fragments. The one
+  // concrete trade he did share: $TOAD, Bid-Ask, range −42%, 20,000 USDC
+  // deposited, ~3% return over an 11-hour hold, price staying inside a 15%
+  // band the whole time. The thresholds below are my own synthesis around
+  // those fragments, at the user's explicit request ("menurutmu kayak gimana
+  // metode screeningnya") rather than a transcription — flagged here so this
+  // preset is never mistaken for the same kind of source-backed gate as its
+  // five siblings.
+  slowwallet: {
+    id: "slowwallet",
+    label: "Slow Wallet",
+    // "Proven tokens" as opposed to the shitcoins Action Wallet chases. The
+    // upstream pipeline filter already caps candidates at $15M (see
+    // server/index.mjs), so a higher ceiling here would be decorative — same
+    // reasoning as VanChu-like's marketCapMax.
+    marketCapMin: 2_000_000,
+    marketCapMax: 15_000_000,
+    // A 20,000 USDC single-sided deposit is the one deposit size on record.
+    // The pool has to be deep enough to take that without brutal price impact,
+    // so this floor sits above every other preset's — deep liquidity is the
+    // whole point of "proven," not a side effect of it.
+    tvlMin: 100_000,
+    // The $TOAD position "traded sideways within 15% the whole" hold, and the
+    // $LUNA position he named moved 5% → 2% as it calmed — this is a preset
+    // for a token that is not doing anything violent right now. A wide bid-ask
+    // range still earns on a mild pullback, so the floor is negative; the
+    // ceiling excludes anything that has become a runner, which is what the
+    // `vanchu` preset is for.
+    momentumMin: -15,
+    momentumMax: 20,
+    // Still needs to be a real, trading pool — just not a runner. $20K/hour is
+    // enough to matter against a $100K+ TVL floor without demanding vanchu-
+    // grade turnover.
+    volume1hMin: 20_000,
+    volumeTvlMin: 0.15,
+    // Back-computed from the one trade on record: 20,000 USDC, ~3% return over
+    // 11 hours ≈ ~0.27%/hr average fee/TVL. Set a shade under that so the gate
+    // does not exclude the very trade it is modelled on.
+    feeTvlMin: 0.2,
+    requireFreezeOff: true,
+    // "Proven" implies the standard rug levers are already closed off, not
+    // merely tolerated.
+    requireMintOff: true,
+    requireVerified: true,
+    // An established community, not a just-migrated one — well above
+    // Auzhinta-like's 500, which is itself the floor for a much younger token.
+    holdersMin: 1_000,
+    // The plain inverse of Skolmbeagh-like's 0.5-hour ceiling: a pool has to
+    // have survived at least a week before it counts as "proven" rather than
+    // "still in its violent early hours."
+    ageHoursMin: 168,
+    // The lowest ceiling of any preset, and the point of the exercise — Slow
+    // Wallet exists because Action Wallet costs "adrenaline and stress."
+    // A genuinely established, verified, deep pool clears this with room to
+    // spare; nothing here is tuned to let a risky pool through the back door.
+    maxRisk: 45,
+    // The 100-point model rewards momentum and freshness, and this preset
+    // deliberately scores low on both (momentum capped at 20%, and a pool
+    // ≥168h old never earns more than 5 of the 10 freshness points, often 3).
+    // A qualifying pool lands roughly 35–55 in practice — the same shape of
+    // mismatch as Auzhinta-like, and for the same reason: reusing the 65/80
+    // ladder would gate every alert off.
+    minScore: 35,
+    hotScore: 55,
+    watchScore: 40,
+    earlyScore: 28,
+    // No reason to ping often for a position meant to sit for hours.
+    cooldownMinutes: 60,
   },
   yanman: {
     id: "yanman",
@@ -514,6 +694,15 @@ export function evaluatePreset(pool, presetInput) {
       `Top-10 holder ≥ ${preset.top10HoldersMin}%`,
     ]);
   }
+  // Five-minute volume, the only sub-hour flow figure available — Meteora
+  // stops at 1h. GMGN-backed, so it fails closed like the rows below it: no
+  // key means no reading, and no reading is not a pass.
+  if (Number.isFinite(preset.volume5mMin)) {
+    checks.push([
+      Number.isFinite(pool.gmgnVolume5m) && pool.gmgnVolume5m >= preset.volume5mMin,
+      `Vol 5m ≥ $${preset.volume5mMin}`,
+    ]);
+  }
   // Sniper, insider, and bundler share. These come from GMGN and are null
   // without a key, so like every other unreadable metric they fail closed —
   // a preset that declares them goes quiet rather than waving pools through.
@@ -546,6 +735,18 @@ export function evaluatePreset(pool, presetInput) {
       Number.isFinite(pool.ageHours) && pool.ageHours <= preset.ageHoursMax,
       `Umur pool ≤ ${preset.ageHoursMax} jam`,
     ]);
+  }
+  // The inverse of ageHoursMax: a floor for presets that want a pool to have
+  // survived past its early hours rather than caught inside them. Unknown age
+  // fails closed, same as the ceiling.
+  if (Number.isFinite(preset.ageHoursMin)) {
+    checks.push([
+      Number.isFinite(pool.ageHours) && pool.ageHours >= preset.ageHoursMin,
+      `Umur pool ≥ ${preset.ageHoursMin} jam`,
+    ]);
+  }
+  if (preset.requireVerified) {
+    checks.push([pool.isVerified === true, "Token terverifikasi"]);
   }
   if (Number.isFinite(preset.holdersMin)) {
     checks.push([pool.holders >= preset.holdersMin, `Holder ≥ ${preset.holdersMin}`]);
