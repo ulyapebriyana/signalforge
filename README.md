@@ -161,10 +161,10 @@ Rute swap memakai Jupiter.
 
 | Aturan | Heart Attack | Slow Wallet | VanChu-like | Skolmbeagh-like | Yanman-like | Auzhinta-like | Swanny-like |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Market cap | $300K–$15M | $2M–$15M | $300K–$15M | $50K–$200K | $100K–$10M | $400K–$15M | $100K–$15M |
+| Market cap | **$150K**–$15M | $2M–$15M | $300K–$15M | $50K–$200K | $100K–$10M | $400K–$15M | $100K–$15M |
 | TVL minimum | $10K | $100K | $15K | $1K | $500 | $35K | $500 |
 | Momentum 1h | 20–2000% | −15–20% | 15–900% | 0–2000% | 20–200% | 0–400% | bebas |
-| Volume 1h minimum | $200K | $20K | $250K | $20K | $5K | $10K | $1K |
+| Volume 1h minimum | **$50K** | $20K | $250K | $20K | $5K | $10K | $1K |
 | **Volume 5m minimum** | **$50K** | — | — | — | — | — | — |
 | Vol/TVL minimum | 3x | 0.15x | 3x | 1x | 0.5x | 0.3x | — |
 | Fee/TVL minimum | **5%** | 0.2% | 2% | 2% | 0.5% | 1.0% | — |
@@ -174,7 +174,8 @@ Rute swap memakai Jupiter.
 | Cluster terbesar maksimum | — | — | — | — | — | 40% | — |
 | Top-10 holder | ≤35% | — | — | 10–35% | — | ≤40% | rubrik |
 | Saldo dev maksimum | 0% | — | — | 0% | — | 1% | rubrik |
-| Sniper / Insider / Bundler | ≤15% masing-masing | — | — | ≤15% masing-masing | — | — | rubrik |
+| Sniper / Insider | ≤15% masing-masing | — | — | ≤15% masing-masing | — | — | rubrik |
+| Bundler maksimum | **≤50%** | — | — | ≤15% | — | — | rubrik |
 | Holder minimum | — | 1.000 | — | — | — | 500 | — |
 | Mint authority | — | Wajib off | — | — | — | Wajib off | Wajib off |
 | Token terverifikasi | — | **Wajib** | — | — | — | — | — |
@@ -436,17 +437,27 @@ Yang benar-benar disebut sumbernya:
 - **Pemicunya lonjakan volume lima menit.** Algoritma @0xMrBeefman dibuka dengan *"say a runner
   launches and on the 5 minute I see 1M+ in trading volume."*
 - **Stage 1 selalu pemeriksaan rugpull** sebelum likuiditas dikirim — *"quickly going through
-  holders, distribution."* Itulah gate dev, sniper, insider, bundler, dan top-10 di tabel, dipinjam
-  utuh dari Skolmbeagh-like yang menuliskan checklist yang sama dalam angka.
+  holders, distribution."* Itulah gate dev, sniper, insider, dan top-10 di tabel, dipinjam utuh dari
+  Skolmbeagh-like yang menuliskan checklist yang sama dalam angka. Bundler dipinjam dari sana juga,
+  tapi ambangnya sejak itu dilonggarkan (lihat bawah).
 - **Penilaian LP Army Academy sendiri**: *"extremely high risk and more like gambling. Not
   recommended to attempt."*
 
 ### Dua hal yang perlu diketahui sebelum memakainya
 
-**Ambang $50K itu keputusan pengguna, bukan sumbernya.** @0xMrBeefman menyebut 1M. $50K dalam lima
-menit setara $600K/jam bila bertahan — sudah benar-benar runner — sedangkan candle lima menit
-bervolume 1M cukup langka sampai presetnya praktis tidak akan pernah berbunyi. Pelonggaran ini
-dicatat di komentar kode supaya tidak terbaca sebagai transkripsi.
+**Empat ambang di tabel di atas itu keputusan pengguna, bukan sumbernya**, dan masing-masing dicatat
+begitu di komentar kode supaya tidak terbaca sebagai transkripsi:
+
+- **Volume 5 menit** $50K, bukan 1M yang disebut @0xMrBeefman. $50K dalam lima menit setara
+  $600K/jam bila bertahan — sudah benar-benar runner — sedangkan candle lima menit bervolume 1M
+  cukup langka sampai presetnya praktis tidak akan pernah berbunyi.
+- **Market cap** diturunkan dari $300K ke **$150K**, sekarang di dalam pita $50K–$200K
+  Skolmbeagh-like, bukan di atasnya.
+- **Volume 1 jam** diturunkan dari $200K ke **$50K** — tidak lagi menuntut arus yang bertahan lebih
+  dari lonjakan 5 menit itu sendiri.
+- **Bundler** dilonggarkan dari 15% (angka Skolmbeagh-like) ke **50%**. Ini pelemahan nyata pada
+  pemeriksaan rugpull, bukan pembulatan — pada 50% sebuah pool bisa lolos gate ini walau separuh
+  volumenya lewat bundled buy.
 
 **Preset ini butuh `GMGN_API_KEY`.** Volume 5m, sniper, insider, dan bundler semuanya dari GMGN dan
 semuanya gagal-tertutup: tanpa kunci, preset ini diam total — persis posture Skolmbeagh-like. Kunci
@@ -457,7 +468,7 @@ itu terpasang di VPS, jadi ini hanya menggigit pada percobaan lokal.
 | Dari | Dipinjam | Tidak dipinjam |
 | --- | --- | --- |
 | VanChu-like | `baseFeeMin` 2% — pelajaran fee tier yang paling mahal di postingan itu | Batas momentum dan volume yang lebih longgar |
-| Skolmbeagh-like | Dev 0%, sniper/insider/bundler ≤15%, top-10 ≤35% | **Lantai** top-10 10%: itu menyaring supply yang tersebar ke bot pada token baru migrasi, dan runner yang sudah bergerak melewati momen itu |
+| Skolmbeagh-like | Dev 0%, sniper/insider ≤15%, top-10 ≤35%, bundler (dilonggarkan ke ≤50%, lihat atas) | **Lantai** top-10 10%: itu menyaring supply yang tersebar ke bot pada token baru migrasi, dan runner yang sudah bergerak melewati momen itu |
 
 Satu gate yang murni inferensi dan ditandai begitu di kode: **umur pool ≤24 jam**. Tidak ada sumber
 yang menyebut batas umur, tapi trigger Metlex eksplisit young-pool tier dan exit yang digambarkan

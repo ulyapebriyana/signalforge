@@ -21,18 +21,19 @@ export const PRESETS = Object.freeze({
   //     one this whole preset turns on.
   //   - Stage 1 is always a rugpull check before any liquidity moves —
   //     "quickly going through holders, distribution". That is what the dev,
-  //     sniper, insider, bundler, and top-10 gates below are, borrowed intact
-  //     from Skolmbeagh-like where the same checklist is spelled out in
-  //     numbers.
+  //     sniper, insider, bundler, and top-10 gates below are, borrowed from
+  //     Skolmbeagh-like where the same checklist is spelled out in numbers.
   //   - LP Army Academy's own verdict on the play: "extremely high risk and
   //     more like gambling. Not recommended to attempt." Hence the loosest
   //     risk ceiling in the app, and this comment.
   //
-  // `volume5mMin` is 50_000 on the user's explicit instruction, NOT the 1M
-  // @0xMrBeefman names. That is a deliberate, documented divergence: $50K in
-  // five minutes is $600K/hour sustained, already a genuine runner, while a 1M
-  // five-minute candle is rare enough that the preset would effectively never
-  // fire. The looser number is the user's call, not the source's.
+  // Four numbers were set or moved by the user's explicit instruction rather
+  // than transcribed, and each is called out again at its own gate below:
+  // `volume5mMin` (50_000, not @0xMrBeefman's 1M), `marketCapMin` (lowered
+  // from $300K to $150K), `volume1hMin` (lowered from $200K to $50K), and
+  // `bundlerPctMax` (loosened from Skolmbeagh-like's 15% to 50%). None of
+  // these are transcription errors — they are recorded here so a later reader
+  // does not mistake them for source-backed numbers.
   //
   // NEEDS `GMGN_API_KEY`. Volume 5m, sniper, insider, and bundler all come from
   // GMGN and every one of them fails closed, so without a key this preset is
@@ -44,11 +45,12 @@ export const PRESETS = Object.freeze({
     // anything Meteora exposes — Meteora stops at one hour, which is far too
     // coarse for a play measured in minutes.
     volume5mMin: 50_000,
-    // The Metlex "HEART ATTACK · RUNNER" alert that prompted this preset showed
-    // MC $1.68M. Runners live in the low millions: above Skolmbeagh-like's
-    // fresh-migration band, below the $15M the upstream candidate filter in
-    // server/index.mjs imposes anyway.
-    marketCapMin: 300_000,
+    // Lowered from the original $300K to $150K on the user's explicit
+    // instruction — inside Skolmbeagh-like's $50K–$200K band now, not above
+    // it, so a runner can qualify here earlier in its life than the first cut
+    // assumed. The Metlex "HEART ATTACK · RUNNER" alert that prompted this
+    // preset showed MC $1.68M, still comfortably inside the $150K–$15M range.
+    marketCapMin: 150_000,
     marketCapMax: 15_000_000,
     // Thin liquidity against violent flow is the entire edge, exactly as in
     // VanChu-like. The floor only excludes pools too small to take a position
@@ -58,10 +60,10 @@ export const PRESETS = Object.freeze({
     // something flat and never into something bleeding.
     momentumMin: 20,
     momentumMax: 2_000,
-    // $50K/5m sustained is $600K/h, but a spike does not have to have lasted a
-    // full hour to be tradeable — so the 1h floor sits below what the 5m gate
-    // implies rather than demanding the runner already ran for an hour.
-    volume1hMin: 200_000,
+    // Lowered from $200K to $50K on the user's explicit instruction — it no
+    // longer demands sustained flow beyond the 5m spike itself, just that the
+    // hour containing that spike wasn't otherwise dead.
+    volume1hMin: 50_000,
     volumeTvlMin: 3,
     // Stricter than VanChu-like's 2 on purpose. The Metlex alert measured
     // 129.1%/h actual on the 2% pool; the pools this play targets pay
@@ -83,7 +85,12 @@ export const PRESETS = Object.freeze({
     devBalanceMax: 0,
     sniperPctMax: 15,
     insidersPctMax: 15,
-    bundlerPctMax: 15,
+    // Loosened from Skolmbeagh-like's 15% to 50% on the user's explicit
+    // instruction. This is a real weakening of the rugpull check, not a
+    // rounding difference — at 50% a pool can clear this gate with half its
+    // volume run through bundled buys. Left in rather than argued with, but
+    // named so it reads as a deliberate choice, not an oversight.
+    bundlerPctMax: 50,
     // Only the ceiling, not Skolmbeagh-like's unusual floor. That floor exists
     // because supply spread too thin across a just-migrated token means bots
     // hold it; a runner that has already moved is past the moment that reads.

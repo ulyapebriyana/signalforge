@@ -407,6 +407,23 @@ describe("SignalForge scoring", () => {
     expect(evaluatePreset({ ...heartAttackPool, gmgnVolume5m: 50_000 }, PRESETS.heartattack).passed).toBe(true);
   });
 
+  it("holds the market cap, hourly volume, and bundler gates at their revised thresholds", () => {
+    // Lowered from $300K, $200K, and 15% respectively on the user's explicit
+    // instruction — each boundary is tested at both sides so a future revert
+    // has to be deliberate, not accidental.
+    expect(evaluatePreset({ ...heartAttackPool, marketCap: 149_999 }, PRESETS.heartattack).misses)
+      .toContain("MC ≥ $150000");
+    expect(evaluatePreset({ ...heartAttackPool, marketCap: 150_000 }, PRESETS.heartattack).passed).toBe(true);
+
+    expect(evaluatePreset({ ...heartAttackPool, volume1h: 49_999 }, PRESETS.heartattack).misses)
+      .toContain("Vol 1h ≥ $50000");
+    expect(evaluatePreset({ ...heartAttackPool, volume1h: 50_000 }, PRESETS.heartattack).passed).toBe(true);
+
+    expect(evaluatePreset({ ...heartAttackPool, gmgnBundlerPct: 50.1 }, PRESETS.heartattack).misses)
+      .toContain("Bundler ≤ 50%");
+    expect(evaluatePreset({ ...heartAttackPool, gmgnBundlerPct: 50 }, PRESETS.heartattack).passed).toBe(true);
+  });
+
   it("goes silent without a GMGN key rather than waving runners through", () => {
     // Volume 5m, sniper, insider, and bundler are all GMGN-backed. No key means
     // no reading, and no reading is not a pass — same posture as Skolmbeagh-like.
@@ -423,7 +440,7 @@ describe("SignalForge scoring", () => {
       "Vol 5m ≥ $50000",
       "Sniper ≤ 15%",
       "Insider ≤ 15%",
-      "Bundler ≤ 15%",
+      "Bundler ≤ 50%",
     ]);
   });
 
