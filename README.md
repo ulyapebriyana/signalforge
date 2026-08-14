@@ -159,34 +159,34 @@ Rute swap memakai Jupiter.
 
 ## Arti preset
 
-| Aturan | Yanman-like | Auzhinta-like | Swanny-like | VanChu-like | Skolmbeagh-like | Slow Wallet | Heart Attack |
+| Aturan | Heart Attack | Slow Wallet | VanChu-like | Skolmbeagh-like | Yanman-like | Auzhinta-like | Swanny-like |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Market cap | $100K–$10M | $400K–$15M | $100K–$15M | $300K–$15M | $50K–$200K | $2M–$15M | $300K–$15M |
-| TVL minimum | $500 | $35K | $500 | $15K | $1K | $100K | $10K |
-| Momentum 1h | 20–200% | 0–400% | bebas | 15–900% | 0–2000% | −15–20% | 20–2000% |
-| Volume 1h minimum | $5K | $10K | $1K | $250K | $20K | $20K | $200K |
-| **Volume 5m minimum** | — | — | — | — | — | — | **$50K** |
-| Vol/TVL minimum | 0.5x | 0.3x | — | 3x | 1x | 0.15x | 3x |
-| Fee/TVL minimum | 0.5% | 1.0% | — | 2% | 2% | 0.2% | **5%** |
-| Bin step | — | 50–400 | — | — | — | — | — |
-| Base fee minimum | — | 2% | — | 2% | — | — | 2% |
-| Mode fee | — | Base + quote | — | — | — | — | — |
-| Cluster terbesar maksimum | — | 40% | — | — | — | — | — |
-| Top-10 holder | — | ≤40% | rubrik | — | 10–35% | — | ≤35% |
-| Saldo dev maksimum | — | 1% | rubrik | — | 0% | — | 0% |
-| Sniper / Insider / Bundler | — | — | rubrik | — | ≤15% masing-masing | — | ≤15% masing-masing |
-| Holder minimum | — | 500 | — | — | — | 1.000 | — |
-| Mint authority | — | Wajib off | Wajib off | — | — | Wajib off | — |
-| Token terverifikasi | — | — | — | — | — | **Wajib** | — |
-| Umur pool maksimum | — | 72 jam | — | — | **30 menit** | — | 24 jam |
-| Umur pool minimum | — | — | — | — | — | **7 hari** | — |
-| Umur **token** minimum | — | — | rubrik (≥24 jam) | — | — | — | — |
-| Rubrik screening | — | — | 12 metrik, tolak merah | — | — | — | — |
-| Skor minimum | 65 | 48 | 50 | 65 | 55 | 35 | 65 |
-| Risiko maksimum | 72 | 78 | 100 | 88 | 92 | **45** | **95** |
-| Ambang Hot / Watch | 80 / 65 | 60 / 48 | 80 / 65 | 82 / 68 | 70 / 55 | 55 / 40 | 85 / 70 |
+| Market cap | $300K–$15M | $2M–$15M | $300K–$15M | $50K–$200K | $100K–$10M | $400K–$15M | $100K–$15M |
+| TVL minimum | $10K | $100K | $15K | $1K | $500 | $35K | $500 |
+| Momentum 1h | 20–2000% | −15–20% | 15–900% | 0–2000% | 20–200% | 0–400% | bebas |
+| Volume 1h minimum | $200K | $20K | $250K | $20K | $5K | $10K | $1K |
+| **Volume 5m minimum** | **$50K** | — | — | — | — | — | — |
+| Vol/TVL minimum | 3x | 0.15x | 3x | 1x | 0.5x | 0.3x | — |
+| Fee/TVL minimum | **5%** | 0.2% | 2% | 2% | 0.5% | 1.0% | — |
+| Bin step | — | — | — | — | — | 50–400 | — |
+| Base fee minimum | 2% | — | 2% | — | — | 2% | — |
+| Mode fee | — | — | — | — | — | Base + quote | — |
+| Cluster terbesar maksimum | — | — | — | — | — | 40% | — |
+| Top-10 holder | ≤35% | — | — | 10–35% | — | ≤40% | rubrik |
+| Saldo dev maksimum | 0% | — | — | 0% | — | 1% | rubrik |
+| Sniper / Insider / Bundler | ≤15% masing-masing | — | — | ≤15% masing-masing | — | — | rubrik |
+| Holder minimum | — | 1.000 | — | — | — | 500 | — |
+| Mint authority | — | Wajib off | — | — | — | Wajib off | Wajib off |
+| Token terverifikasi | — | **Wajib** | — | — | — | — | — |
+| Umur pool maksimum | 24 jam | — | — | **30 menit** | — | 72 jam | — |
+| Umur pool minimum | — | **7 hari** | — | — | — | — | — |
+| Umur **token** minimum | — | — | — | — | — | — | rubrik (≥24 jam) |
+| Rubrik screening | — | — | — | — | — | — | 12 metrik, tolak merah |
+| Skor minimum | 65 | 35 | 65 | 55 | 65 | 48 | 50 |
+| Risiko maksimum | **95** | **45** | 88 | 92 | 72 | 78 | 100 |
+| Ambang Hot / Watch | 85 / 70 | 55 / 40 | 82 / 68 | 70 / 55 | 80 / 65 | 60 / 48 | 80 / 65 |
 | Freeze authority | Wajib off | Wajib off | Wajib off | Wajib off | Wajib off | Wajib off | Wajib off |
-| Cooldown alert | 15 menit | 10 menit | 20 menit | 5 menit | 5 menit | 60 menit | **3 menit** |
+| Cooldown alert | **3 menit** | 60 menit | 5 menit | 5 menit | 15 menit | 10 menit | 20 menit |
 
 Lima dari tujuhnya rekonstruksi dari materi yang pernah dibagikan terbuka, bukan klaim bahwa ini
 strategi persis milik orang tersebut. Dua sisanya punya sumber berbeda dan dijelaskan tersendiri:

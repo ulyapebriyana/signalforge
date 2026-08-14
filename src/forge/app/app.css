@@ -966,6 +966,53 @@
   accent-color: var(--f-ember);
 }
 
+.fx-dropdown-menu--columns {
+  min-width: 240px;
+}
+
+.fx-dropdown-section {
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--f-line);
+}
+
+.fx-col-row {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  border-radius: var(--f-r-sm);
+}
+
+.fx-col-row .fx-dropdown-check {
+  flex: 1;
+}
+
+.fx-col-handle {
+  display: grid;
+  place-items: center;
+  width: 1.1rem;
+  height: 1.6rem;
+  color: var(--f-slag);
+  cursor: grab;
+}
+
+.fx-col-handle svg {
+  width: 13px;
+  height: 13px;
+}
+
+.fx-col-row:hover .fx-col-handle {
+  color: var(--f-ember);
+}
+
+.fx-col-row.is-dragging {
+  opacity: 0.4;
+}
+
+.fx-col-row.is-dragging .fx-col-handle {
+  cursor: grabbing;
+}
+
 .f-btn.is-open {
   border-color: var(--f-ember);
   color: var(--f-ember);

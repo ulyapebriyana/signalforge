@@ -6,6 +6,7 @@ import {
   Columns3,
   ExternalLink,
   Filter,
+  GripVertical,
   LayoutGrid,
   RotateCcw,
   Rows3,
@@ -130,8 +131,15 @@ function Switch({ checked, onChange, children }) {
   );
 }
 
+/**
+ * `visible` is the ordered list of active column keys — the same array that
+ * drives the table's render order, so reordering here and reordering the
+ * table are the same operation. Hidden columns carry no order of their own;
+ * showing one just appends it to the end of `visible`.
+ */
 function ColumnPicker({ visible, onChange }) {
   const [open, setOpen] = useState(false);
+  const [dragKey, setDragKey] = useState(null);
   const ref = useRef(null);
 
   useEffect(() => {
@@ -143,11 +151,29 @@ function ColumnPicker({ visible, onChange }) {
     return () => document.removeEventListener("pointerdown", onPointerDown);
   }, [open]);
 
-  const toggle = (key) => {
-    const next = visible.includes(key) ? visible.filter((item) => item !== key) : [...visible, key];
+  const persist = (next) => {
     onChange(next);
     localStorage.setItem("signalforge:columns", JSON.stringify(next));
   };
+
+  const hide = (key) => persist(visible.filter((item) => item !== key));
+  const show = (key) => persist([...visible, key]);
+
+  // Live reorder while dragging: dropping is not required, hovering a row
+  // already moves the dragged key next to it. `fromKey === toKey` is what
+  // stops this from firing on every dragover tick once the two are adjacent.
+  const reorder = (fromKey, toKey) => {
+    if (!fromKey || fromKey === toKey) return;
+    const fromIndex = visible.indexOf(fromKey);
+    const toIndex = visible.indexOf(toKey);
+    if (fromIndex === -1 || toIndex === -1) return;
+    const next = [...visible];
+    next.splice(fromIndex, 1);
+    next.splice(toIndex, 0, fromKey);
+    persist(next);
+  };
+
+  const hiddenColumns = COLUMNS.filter((column) => !visible.includes(column.key));
 
   return (
     <div className="fx-dropdown" ref={ref}>
@@ -160,18 +186,49 @@ function ColumnPicker({ visible, onChange }) {
         <Columns3 /> Kolom
       </button>
       {open ? (
-        <div className="fx-dropdown-menu" role="menu">
-          <span className="f-eyebrow">Tampilkan kolom</span>
-          {COLUMNS.map((column) => (
-            <label key={column.key} className="fx-dropdown-check">
-              <input
-                type="checkbox"
-                checked={visible.includes(column.key)}
-                onChange={() => toggle(column.key)}
-              />
-              {column.label}
-            </label>
-          ))}
+        <div className="fx-dropdown-menu fx-dropdown-menu--columns" role="menu">
+          <span className="f-eyebrow">Kolom aktif — seret buat urutkan</span>
+          {visible.map((key) => {
+            const column = COLUMNS.find((item) => item.key === key);
+            if (!column) return null;
+            return (
+              <div
+                key={key}
+                className={`fx-col-row ${dragKey === key ? "is-dragging" : ""}`}
+                draggable
+                onDragStart={(event) => {
+                  setDragKey(key);
+                  event.dataTransfer.effectAllowed = "move";
+                  event.dataTransfer.setData("text/plain", key);
+                }}
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  reorder(dragKey, key);
+                }}
+                onDrop={(event) => event.preventDefault()}
+                onDragEnd={() => setDragKey(null)}
+              >
+                <span className="fx-col-handle" aria-hidden="true">
+                  <GripVertical />
+                </span>
+                <label className="fx-dropdown-check">
+                  <input type="checkbox" checked onChange={() => hide(key)} />
+                  {column.label}
+                </label>
+              </div>
+            );
+          })}
+          {hiddenColumns.length ? (
+            <>
+              <span className="f-eyebrow fx-dropdown-section">Kolom lain</span>
+              {hiddenColumns.map((column) => (
+                <label key={column.key} className="fx-dropdown-check">
+                  <input type="checkbox" checked={false} onChange={() => show(column.key)} />
+                  {column.label}
+                </label>
+              ))}
+            </>
+          ) : null}
         </div>
       ) : null}
     </div>
@@ -332,8 +389,11 @@ export default function ScannerView({
 }) {
   const { search, tab, sort, filters, view, density, columns, filtersOpen } = state;
   const patch = (partial) => setState((current) => ({ ...current, ...partial }));
+  // Order follows `columns` itself, not COLUMNS' fixed order — that is the
+  // whole point of letting the picker reorder them. COLUMNS is only consulted
+  // for each key's label/render metadata.
   const visibleColumns = useMemo(
-    () => COLUMNS.filter((column) => columns.includes(column.key)),
+    () => columns.map((key) => COLUMNS.find((column) => column.key === key)).filter(Boolean),
     [columns],
   );
 

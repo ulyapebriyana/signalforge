@@ -107,6 +107,81 @@ export const PRESETS = Object.freeze({
     // wait five for its second alert.
     cooldownMinutes: 3,
   },
+  // Modelled on @0xVanChu's *other* wallet — the one he says takes "noticeably
+  // less time and nerves" than the Action Wallet the `vanchu` preset below
+  // reconstructs: "Bid-Ask on more proven tokens, without the constant race
+  // for new shitcoins and without the need to stare at the chart."
+  //
+  // Unlike every other preset in this file, this is NOT a reconstruction of a
+  // published checklist — he never posted one for Slow Wallet, only fragments.
+  // The one concrete trade he did share: $TOAD, Bid-Ask, range −42%, 20,000
+  // USDC deposited, ~3% return over an 11-hour hold, price staying inside a
+  // 15% band the whole time. The thresholds below are my own synthesis around
+  // those fragments, at the user's explicit request ("menurutmu kayak gimana
+  // metode screeningnya") rather than a transcription — flagged here so this
+  // preset is never mistaken for the same kind of source-backed gate as its
+  // six siblings.
+  slowwallet: {
+    id: "slowwallet",
+    label: "Slow Wallet",
+    // "Proven tokens" as opposed to the shitcoins Action Wallet chases. The
+    // upstream pipeline filter already caps candidates at $15M (see
+    // server/index.mjs), so a higher ceiling here would be decorative — same
+    // reasoning as VanChu-like's marketCapMax.
+    marketCapMin: 2_000_000,
+    marketCapMax: 15_000_000,
+    // A 20,000 USDC single-sided deposit is the one deposit size on record.
+    // The pool has to be deep enough to take that without brutal price impact,
+    // so this floor sits above every other preset's — deep liquidity is the
+    // whole point of "proven," not a side effect of it.
+    tvlMin: 100_000,
+    // The $TOAD position "traded sideways within 15% the whole" hold, and the
+    // $LUNA position he named moved 5% → 2% as it calmed — this is a preset
+    // for a token that is not doing anything violent right now. A wide bid-ask
+    // range still earns on a mild pullback, so the floor is negative; the
+    // ceiling excludes anything that has become a runner, which is what the
+    // `vanchu` preset is for.
+    momentumMin: -15,
+    momentumMax: 20,
+    // Still needs to be a real, trading pool — just not a runner. $20K/hour is
+    // enough to matter against a $100K+ TVL floor without demanding vanchu-
+    // grade turnover.
+    volume1hMin: 20_000,
+    volumeTvlMin: 0.15,
+    // Back-computed from the one trade on record: 20,000 USDC, ~3% return over
+    // 11 hours ≈ ~0.27%/hr average fee/TVL. Set a shade under that so the gate
+    // does not exclude the very trade it is modelled on.
+    feeTvlMin: 0.2,
+    requireFreezeOff: true,
+    // "Proven" implies the standard rug levers are already closed off, not
+    // merely tolerated.
+    requireMintOff: true,
+    requireVerified: true,
+    // An established community, not a just-migrated one — well above
+    // Auzhinta-like's 500, which is itself the floor for a much younger token.
+    holdersMin: 1_000,
+    // The plain inverse of Skolmbeagh-like's 0.5-hour ceiling: a pool has to
+    // have survived at least a week before it counts as "proven" rather than
+    // "still in its violent early hours."
+    ageHoursMin: 168,
+    // The lowest ceiling of any preset, and the point of the exercise — Slow
+    // Wallet exists because Action Wallet costs "adrenaline and stress."
+    // A genuinely established, verified, deep pool clears this with room to
+    // spare; nothing here is tuned to let a risky pool through the back door.
+    maxRisk: 45,
+    // The 100-point model rewards momentum and freshness, and this preset
+    // deliberately scores low on both (momentum capped at 20%, and a pool
+    // ≥168h old never earns more than 5 of the 10 freshness points, often 3).
+    // A qualifying pool lands roughly 35–55 in practice — the same shape of
+    // mismatch as Auzhinta-like, and for the same reason: reusing the 65/80
+    // ladder would gate every alert off.
+    minScore: 35,
+    hotScore: 55,
+    watchScore: 40,
+    earlyScore: 28,
+    // No reason to ping often for a position meant to sit for hours.
+    cooldownMinutes: 60,
+  },
   // Modelled on the Meteora DLMM posts of @0xVanChu, who farms one thing: a
   // token that is already running, in the highest-fee pool available, for
   // minutes to hours rather than days. The posts name ranges (−10%/−15% short
@@ -250,81 +325,6 @@ export const PRESETS = Object.freeze({
     watchScore: 55,
     earlyScore: 42,
     cooldownMinutes: 5,
-  },
-  // Modelled on @0xVanChu's *other* wallet — the one he says takes "noticeably
-  // less time and nerves" than the Action Wallet the `vanchu` preset above
-  // reconstructs: "Bid-Ask on more proven tokens, without the constant race
-  // for new shitcoins and without the need to stare at the chart."
-  //
-  // Unlike every preset above, this is NOT a reconstruction of a published
-  // checklist — he never posted one for Slow Wallet, only fragments. The one
-  // concrete trade he did share: $TOAD, Bid-Ask, range −42%, 20,000 USDC
-  // deposited, ~3% return over an 11-hour hold, price staying inside a 15%
-  // band the whole time. The thresholds below are my own synthesis around
-  // those fragments, at the user's explicit request ("menurutmu kayak gimana
-  // metode screeningnya") rather than a transcription — flagged here so this
-  // preset is never mistaken for the same kind of source-backed gate as its
-  // five siblings.
-  slowwallet: {
-    id: "slowwallet",
-    label: "Slow Wallet",
-    // "Proven tokens" as opposed to the shitcoins Action Wallet chases. The
-    // upstream pipeline filter already caps candidates at $15M (see
-    // server/index.mjs), so a higher ceiling here would be decorative — same
-    // reasoning as VanChu-like's marketCapMax.
-    marketCapMin: 2_000_000,
-    marketCapMax: 15_000_000,
-    // A 20,000 USDC single-sided deposit is the one deposit size on record.
-    // The pool has to be deep enough to take that without brutal price impact,
-    // so this floor sits above every other preset's — deep liquidity is the
-    // whole point of "proven," not a side effect of it.
-    tvlMin: 100_000,
-    // The $TOAD position "traded sideways within 15% the whole" hold, and the
-    // $LUNA position he named moved 5% → 2% as it calmed — this is a preset
-    // for a token that is not doing anything violent right now. A wide bid-ask
-    // range still earns on a mild pullback, so the floor is negative; the
-    // ceiling excludes anything that has become a runner, which is what the
-    // `vanchu` preset is for.
-    momentumMin: -15,
-    momentumMax: 20,
-    // Still needs to be a real, trading pool — just not a runner. $20K/hour is
-    // enough to matter against a $100K+ TVL floor without demanding vanchu-
-    // grade turnover.
-    volume1hMin: 20_000,
-    volumeTvlMin: 0.15,
-    // Back-computed from the one trade on record: 20,000 USDC, ~3% return over
-    // 11 hours ≈ ~0.27%/hr average fee/TVL. Set a shade under that so the gate
-    // does not exclude the very trade it is modelled on.
-    feeTvlMin: 0.2,
-    requireFreezeOff: true,
-    // "Proven" implies the standard rug levers are already closed off, not
-    // merely tolerated.
-    requireMintOff: true,
-    requireVerified: true,
-    // An established community, not a just-migrated one — well above
-    // Auzhinta-like's 500, which is itself the floor for a much younger token.
-    holdersMin: 1_000,
-    // The plain inverse of Skolmbeagh-like's 0.5-hour ceiling: a pool has to
-    // have survived at least a week before it counts as "proven" rather than
-    // "still in its violent early hours."
-    ageHoursMin: 168,
-    // The lowest ceiling of any preset, and the point of the exercise — Slow
-    // Wallet exists because Action Wallet costs "adrenaline and stress."
-    // A genuinely established, verified, deep pool clears this with room to
-    // spare; nothing here is tuned to let a risky pool through the back door.
-    maxRisk: 45,
-    // The 100-point model rewards momentum and freshness, and this preset
-    // deliberately scores low on both (momentum capped at 20%, and a pool
-    // ≥168h old never earns more than 5 of the 10 freshness points, often 3).
-    // A qualifying pool lands roughly 35–55 in practice — the same shape of
-    // mismatch as Auzhinta-like, and for the same reason: reusing the 65/80
-    // ladder would gate every alert off.
-    minScore: 35,
-    hotScore: 55,
-    watchScore: 40,
-    earlyScore: 28,
-    // No reason to ping often for a position meant to sit for hours.
-    cooldownMinutes: 60,
   },
   yanman: {
     id: "yanman",
