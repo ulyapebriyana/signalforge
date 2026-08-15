@@ -27,12 +27,14 @@ export const PRESETS = Object.freeze({
   //     more like gambling. Not recommended to attempt." Hence the loosest
   //     risk ceiling in the app, and this comment.
   //
-  // Several numbers were set or moved by the user's explicit instruction
-  // rather than transcribed, and each is called out again at its own gate
-  // below: `volume5mMin` (50_000, not @0xMrBeefman's 1M), `marketCapMin`
-  // (lowered from $300K to $150K), `volume1hMin` (lowered from $200K to $50K,
-  // then to $25K), `volumeTvlMin` (loosened from 3x to 1x), `devBalanceMax`
-  // (loosened from 0 to 10%), `ageHoursMax` (removed outright, was 24h), and
+  // Several numbers were set, moved, or removed by the user's explicit
+  // instruction rather than transcribed, and each is called out again at its
+  // own gate below: `volume5mMin` (50_000, not @0xMrBeefman's 1M),
+  // `marketCapMin` (lowered from $300K to $150K), `volume1hMin` (removed
+  // outright, was lowered from $200K to $50K to $25K before that),
+  // `volumeTvlMin` (removed outright, was loosened from 3x to 1x before
+  // that), `feeTvlMin` (removed outright, was 5%), `devBalanceMax` (loosened
+  // from 0 to 10%), `ageHoursMax` (removed outright, was 24h), and
   // `bundlerPctMax` (loosened from Skolmbeagh-like's 15% to 50%). None of
   // these are transcription errors — they are recorded here so a later reader
   // does not mistake them for source-backed numbers.
@@ -62,18 +64,12 @@ export const PRESETS = Object.freeze({
     // something flat and never into something bleeding.
     momentumMin: 20,
     momentumMax: 2_000,
-    // Lowered from $200K to $50K, then to $25K on the user's explicit
-    // instruction — it no longer demands sustained flow beyond the 5m spike
-    // itself, just that the hour containing that spike wasn't otherwise dead.
-    volume1hMin: 25_000,
-    // Loosened from 3 to 1 on the user's explicit instruction — the 5m spike
-    // gate above already does the heavy lifting on flow, so this floor only
-    // needs to rule out a pool where the hour's volume barely touches its TVL.
-    volumeTvlMin: 1,
-    // Stricter than VanChu-like's 2 on purpose. The Metlex alert measured
-    // 129.1%/h actual on the 2% pool; the pools this play targets pay
-    // extravagantly or they are not worth the range risk being taken.
-    feeTvlMin: 5,
+    // No volume1hMin, volumeTvlMin, or feeTvlMin gate, on the user's explicit
+    // instruction — each was previously set (was $25K, 1x, 5% respectively)
+    // but the user decided the 5m spike gate above already does the heavy
+    // lifting on flow and removed all three outright rather than loosen them
+    // further.
+    //
     // VanChu-like's lesson applies unchanged and is the most expensive one in
     // these posts: right token, right volume, wrong fee tier, pushed out of
     // range by one red candle. 2% is the floor because it is the lowest tier
@@ -667,9 +663,6 @@ export function evaluatePreset(pool, presetInput) {
     [pool.tvl >= preset.tvlMin, `TVL ≥ $${preset.tvlMin}`],
     [pool.priceChange1h !== null && pool.priceChange1h >= preset.momentumMin, `1h ≥ ${preset.momentumMin}%`],
     [pool.priceChange1h !== null && pool.priceChange1h <= preset.momentumMax, `1h ≤ ${preset.momentumMax}%`],
-    [pool.volume1h >= preset.volume1hMin, `Vol 1h ≥ $${preset.volume1hMin}`],
-    [pool.volumeTvl1h >= preset.volumeTvlMin, `Vol/TVL ≥ ${preset.volumeTvlMin}x`],
-    [pool.feeTvl1h >= preset.feeTvlMin, `Fee/TVL ≥ ${preset.feeTvlMin}%`],
     [!pool.isBlacklisted, "Tidak di-blacklist"],
     [!preset.requireFreezeOff || pool.freezeAuthorityDisabled, "Freeze authority off"],
   ];
@@ -678,6 +671,15 @@ export function evaluatePreset(pool, presetInput) {
   // written before these fields existed keep their exact behaviour. Each one
   // fails closed when the upstream value is missing — an unknown holder split
   // is a reason not to enter, not a reason to wave the pool through.
+  if (Number.isFinite(preset.volume1hMin)) {
+    checks.push([pool.volume1h >= preset.volume1hMin, `Vol 1h ≥ $${preset.volume1hMin}`]);
+  }
+  if (Number.isFinite(preset.volumeTvlMin)) {
+    checks.push([pool.volumeTvl1h >= preset.volumeTvlMin, `Vol/TVL ≥ ${preset.volumeTvlMin}x`]);
+  }
+  if (Number.isFinite(preset.feeTvlMin)) {
+    checks.push([pool.feeTvl1h >= preset.feeTvlMin, `Fee/TVL ≥ ${preset.feeTvlMin}%`]);
+  }
   if (Number.isFinite(preset.binStepMin)) {
     checks.push([pool.binStep >= preset.binStepMin, `Bin step ≥ ${preset.binStepMin}`]);
   }

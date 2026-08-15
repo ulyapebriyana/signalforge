@@ -407,21 +407,25 @@ describe("SignalForge scoring", () => {
     expect(evaluatePreset({ ...heartAttackPool, gmgnVolume5m: 50_000 }, PRESETS.heartattack).passed).toBe(true);
   });
 
-  it("holds the market cap, hourly volume, and bundler gates at their revised thresholds", () => {
-    // Lowered from $300K, $200K, and 15% respectively on the user's explicit
+  it("holds the market cap and bundler gates at their revised thresholds", () => {
+    // Lowered from $300K and 15% respectively on the user's explicit
     // instruction — each boundary is tested at both sides so a future revert
     // has to be deliberate, not accidental.
     expect(evaluatePreset({ ...heartAttackPool, marketCap: 149_999 }, PRESETS.heartattack).misses)
       .toContain("MC ≥ $150000");
     expect(evaluatePreset({ ...heartAttackPool, marketCap: 150_000 }, PRESETS.heartattack).passed).toBe(true);
 
-    expect(evaluatePreset({ ...heartAttackPool, volume1h: 24_999 }, PRESETS.heartattack).misses)
-      .toContain("Vol 1h ≥ $25000");
-    expect(evaluatePreset({ ...heartAttackPool, volume1h: 25_000 }, PRESETS.heartattack).passed).toBe(true);
-
     expect(evaluatePreset({ ...heartAttackPool, gmgnBundlerPct: 50.1 }, PRESETS.heartattack).misses)
       .toContain("Bundler ≤ 50%");
     expect(evaluatePreset({ ...heartAttackPool, gmgnBundlerPct: 50 }, PRESETS.heartattack).passed).toBe(true);
+  });
+
+  it("declares no hourly-volume, volume/TVL, or fee/TVL gate, on the user's explicit instruction", () => {
+    expect(PRESETS.heartattack.volume1hMin).toBeUndefined();
+    expect(PRESETS.heartattack.volumeTvlMin).toBeUndefined();
+    expect(PRESETS.heartattack.feeTvlMin).toBeUndefined();
+    expect(evaluatePreset({ ...heartAttackPool, volume1h: 1, volumeTvl1h: 0, feeTvl1h: 0 }, PRESETS.heartattack).passed)
+      .toBe(true);
   });
 
   it("goes silent without a GMGN key rather than waving runners through", () => {
