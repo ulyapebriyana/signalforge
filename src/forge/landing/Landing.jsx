@@ -278,6 +278,8 @@ function ScoreModel() {
 const PRESET_ROWS = [
   ["Market cap", (p) => `${formatUsd(p.marketCapMin)} – ${formatUsd(p.marketCapMax)}`],
   ["TVL minimum", (p) => formatUsd(p.tvlMin)],
+  ["Active TVL minimum", (p) => (Number.isFinite(p.activeTvlMin) ? formatUsd(p.activeTvlMin) : "—")],
+  ["Avg volume/menit minimum", (p) => (Number.isFinite(p.avgVolumePerMinMin) ? formatUsd(p.avgVolumePerMinMin) : "—")],
   ["Momentum 1 jam", (p) => `${p.momentumMin}% – ${p.momentumMax}%`],
   ["Volume 1 jam minimum", (p) => formatUsd(p.volume1hMin)],
   ["Volume 5 menit minimum", (p) => (Number.isFinite(p.volume5mMin) ? formatUsd(p.volume5mMin) : "—")],

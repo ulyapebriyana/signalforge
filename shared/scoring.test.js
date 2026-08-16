@@ -99,6 +99,8 @@ const heartAttackPool = {
   feeTvl1h: 129.1,
   baseFeePct: 2,
   gmgnVolume5m: 78_000,
+  activeTvl: 22_000,
+  avgVolumePerMin: 9_075,
   ageHours: 0.6,
   top10HoldersPct: 24.1,
   devBalancePct: 0,
@@ -400,24 +402,41 @@ describe("SignalForge scoring", () => {
   });
 
   it("turns on the five-minute volume trigger the user asked for", () => {
-    // $50K/5m is the whole preset. Just under it is not a near miss, it is the
+    // $40K/5m is the whole preset. Just under it is not a near miss, it is the
     // trigger not having fired.
-    expect(evaluatePreset({ ...heartAttackPool, gmgnVolume5m: 49_000 }, PRESETS.heartattack).misses)
-      .toEqual(["Vol 5m ≥ $50000"]);
-    expect(evaluatePreset({ ...heartAttackPool, gmgnVolume5m: 50_000 }, PRESETS.heartattack).passed).toBe(true);
+    expect(evaluatePreset({ ...heartAttackPool, gmgnVolume5m: 39_000 }, PRESETS.heartattack).misses)
+      .toEqual(["Vol 5m ≥ $40000"]);
+    expect(evaluatePreset({ ...heartAttackPool, gmgnVolume5m: 40_000 }, PRESETS.heartattack).passed).toBe(true);
   });
 
   it("holds the market cap and bundler gates at their revised thresholds", () => {
     // Lowered from $300K and 15% respectively on the user's explicit
     // instruction — each boundary is tested at both sides so a future revert
     // has to be deliberate, not accidental.
-    expect(evaluatePreset({ ...heartAttackPool, marketCap: 149_999 }, PRESETS.heartattack).misses)
-      .toContain("MC ≥ $150000");
-    expect(evaluatePreset({ ...heartAttackPool, marketCap: 150_000 }, PRESETS.heartattack).passed).toBe(true);
+    expect(evaluatePreset({ ...heartAttackPool, marketCap: 99_999 }, PRESETS.heartattack).misses)
+      .toContain("MC ≥ $100000");
+    expect(evaluatePreset({ ...heartAttackPool, marketCap: 100_000 }, PRESETS.heartattack).passed).toBe(true);
 
     expect(evaluatePreset({ ...heartAttackPool, gmgnBundlerPct: 50.1 }, PRESETS.heartattack).misses)
       .toContain("Bundler ≤ 50%");
     expect(evaluatePreset({ ...heartAttackPool, gmgnBundlerPct: 50 }, PRESETS.heartattack).passed).toBe(true);
+  });
+
+  it("gates on active TVL and per-minute average volume", () => {
+    // Both added on the user's explicit instruction as a narrower stand-in
+    // for the plain TVL/volume floors the preset otherwise declares none of.
+    expect(evaluatePreset({ ...heartAttackPool, activeTvl: 1_999 }, PRESETS.heartattack).misses)
+      .toContain("Active TVL ≥ $2000");
+    expect(evaluatePreset({ ...heartAttackPool, activeTvl: 2_000 }, PRESETS.heartattack).passed).toBe(true);
+
+    expect(evaluatePreset({ ...heartAttackPool, avgVolumePerMin: 999 }, PRESETS.heartattack).misses)
+      .toContain("Avg vol/menit ≥ $1000");
+    expect(evaluatePreset({ ...heartAttackPool, avgVolumePerMin: 1_000 }, PRESETS.heartattack).passed).toBe(true);
+
+    expect(evaluatePreset({ ...heartAttackPool, activeTvl: null }, PRESETS.heartattack).misses)
+      .toContain("Active TVL ≥ $2000");
+    expect(evaluatePreset({ ...heartAttackPool, avgVolumePerMin: null }, PRESETS.heartattack).misses)
+      .toContain("Avg vol/menit ≥ $1000");
   });
 
   it("declares no TVL, hourly-volume, volume/TVL, or fee/TVL gate, on the user's explicit instruction", () => {
@@ -442,7 +461,7 @@ describe("SignalForge scoring", () => {
     const { passed, misses } = evaluatePreset(noKey, PRESETS.heartattack);
     expect(passed).toBe(false);
     expect(misses).toEqual([
-      "Vol 5m ≥ $50000",
+      "Vol 5m ≥ $40000",
       "Sniper ≤ 15%",
       "Insider ≤ 15%",
       "Bundler ≤ 50%",

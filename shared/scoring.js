@@ -29,16 +29,21 @@ export const PRESETS = Object.freeze({
   //
   // Several numbers were set, moved, or removed by the user's explicit
   // instruction rather than transcribed, and each is called out again at its
-  // own gate below: `volume5mMin` (50_000, not @0xMrBeefman's 1M),
-  // `marketCapMin` (lowered from $300K to $150K), `tvlMin` (removed outright,
-  // was $10K), `volume1hMin` (removed outright, was lowered from $200K to
-  // $50K to $25K before that), `volumeTvlMin` (removed outright, was
-  // loosened from 3x to 1x before that), `feeTvlMin` (removed outright, was
-  // 5%), `baseFeeMin` (removed outright, was 2%), `devBalanceMax` (loosened
-  // from 0 to 10%), `ageHoursMax` (removed outright, was 24h), and
-  // `bundlerPctMax` (loosened from Skolmbeagh-like's 15% to 50%). None of
-  // these are transcription errors — they are recorded here so a later reader
-  // does not mistake them for source-backed numbers.
+  // own gate below: `volume5mMin` (40_000, not @0xMrBeefman's 1M),
+  // `marketCapMin` (lowered from $300K to $150K, then to $100K), `tvlMin`
+  // (removed outright, was $10K), `volume1hMin` (removed outright, was
+  // lowered from $200K to $50K to $25K before that), `volumeTvlMin` (removed
+  // outright, was loosened from 3x to 1x before that), `feeTvlMin` (removed
+  // outright, was 5%), `baseFeeMin` (removed outright, was 2%),
+  // `devBalanceMax` (loosened from 0 to 10%), `ageHoursMax` (removed
+  // outright, was 24h), and `bundlerPctMax` (loosened from Skolmbeagh-like's
+  // 15% to 50%). None of these are transcription errors — they are recorded
+  // here so a later reader does not mistake them for source-backed numbers.
+  //
+  // `activeTvlMin` ($2,000) and `avgVolumePerMinMin` ($1,000) are new gates
+  // added on the user's explicit instruction, on the active-TVL and
+  // per-minute flow fields the discovery API's analytics block already
+  // surfaced (see `normalizePool` below) but that nothing gated on until now.
   //
   // NEEDS `GMGN_API_KEY`. Volume 5m, sniper, insider, and bundler all come from
   // GMGN and every one of them fails closed, so without a key this preset is
@@ -49,13 +54,13 @@ export const PRESETS = Object.freeze({
     // The gate the whole preset turns on. GMGN's `price.volume_5m`, finer than
     // anything Meteora exposes — Meteora stops at one hour, which is far too
     // coarse for a play measured in minutes.
-    volume5mMin: 50_000,
-    // Lowered from the original $300K to $150K on the user's explicit
-    // instruction — inside Skolmbeagh-like's $50K–$200K band now, not above
-    // it, so a runner can qualify here earlier in its life than the first cut
+    volume5mMin: 40_000,
+    // Lowered from the original $300K to $150K, then to $100K, on the user's
+    // explicit instruction — below Skolmbeagh-like's $50K–$200K floor now, so
+    // a runner can qualify here even earlier in its life than the second cut
     // assumed. The Metlex "HEART ATTACK · RUNNER" alert that prompted this
-    // preset showed MC $1.68M, still comfortably inside the $150K–$15M range.
-    marketCapMin: 150_000,
+    // preset showed MC $1.68M, still comfortably inside the $100K–$15M range.
+    marketCapMin: 100_000,
     marketCapMax: 15_000_000,
     // "Ripping upward with almost no corrections." Entry is never into
     // something flat and never into something bleeding.
@@ -68,6 +73,13 @@ export const PRESETS = Object.freeze({
     // four outright rather than loosen them further. Thin liquidity against
     // violent flow was the original rationale for the TVL floor, exactly as
     // in VanChu-like, but it no longer gates here.
+    //
+    // Active TVL and per-minute average volume, added on the user's explicit
+    // instruction as a narrower replacement for the plain TVL/volume floors
+    // above: active-bin liquidity and flow-per-minute read closer to what a
+    // runner needs right now than the pool-wide, per-hour figures did.
+    activeTvlMin: 2_000,
+    avgVolumePerMinMin: 1_000,
     //
     // No baseFeeMin gate either, on the same explicit instruction. VanChu-like's
     // fee-tier lesson — right token, right volume, wrong fee tier, pushed out
@@ -673,6 +685,23 @@ export function evaluatePreset(pool, presetInput) {
   }
   if (Number.isFinite(preset.volume1hMin)) {
     checks.push([pool.volume1h >= preset.volume1hMin, `Vol 1h ≥ $${preset.volume1hMin}`]);
+  }
+  // Liquidity actually sitting in the active bin, not `tvl`'s count of every
+  // bin in the pool. Only the discovery API reports it, so like every other
+  // analytics-only field it fails closed when that call didn't return one.
+  if (Number.isFinite(preset.activeTvlMin)) {
+    checks.push([
+      Number.isFinite(pool.activeTvl) && pool.activeTvl >= preset.activeTvlMin,
+      `Active TVL ≥ $${preset.activeTvlMin}`,
+    ]);
+  }
+  // Flow per minute rather than per hour, from the same discovery-API
+  // analytics block as activeTvl above.
+  if (Number.isFinite(preset.avgVolumePerMinMin)) {
+    checks.push([
+      Number.isFinite(pool.avgVolumePerMin) && pool.avgVolumePerMin >= preset.avgVolumePerMinMin,
+      `Avg vol/menit ≥ $${preset.avgVolumePerMinMin}`,
+    ]);
   }
   if (Number.isFinite(preset.volumeTvlMin)) {
     checks.push([pool.volumeTvl1h >= preset.volumeTvlMin, `Vol/TVL ≥ ${preset.volumeTvlMin}x`]);
