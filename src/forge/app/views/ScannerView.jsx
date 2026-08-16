@@ -38,15 +38,23 @@ export const COLUMNS = [
   { key: "priceChange1h", label: "1j", locked: false },
   { key: "trend", label: "Tren", sortable: false },
   { key: "tvl", label: "TVL" },
+  // Liquidity actually sitting in the active bin, versus TVL's count of every
+  // bin in the pool. From the discovery API, so null (not 0) when that call
+  // failed.
+  { key: "activeTvl", label: "Active TVL" },
   { key: "volume1h", label: "Vol 1j" },
+  { key: "avgVolumePerMin", label: "Avg Vol/m" },
   // Five-minute flow, from GMGN. Meteora stops at one hour, which is far too
   // coarse for the minutes-scale plays — a runner's 5m volume is the entry
   // signal itself, not a supporting detail.
   { key: "gmgnVolume5m", label: "Vol 5m" },
   { key: "gmgnSwaps5m", label: "Swap 5m" },
   { key: "volumeTvl1h", label: "Vol/TVL" },
+  { key: "volumeActiveTvl1h", label: "Vol/Active TVL" },
   { key: "totalFees1h", label: "Fee 1j" },
+  { key: "avgFeePerMin", label: "Avg Fee/m" },
   { key: "feeTvl1h", label: "Fee/TVL" },
+  { key: "feeActiveTvl1h", label: "Fee/Active TVL" },
   { key: "feeVelocity", label: "Fee tren", sortable: false },
   { key: "risk", label: "Risiko" },
   { key: "top10HoldersPct", label: "Top-10" },
@@ -55,6 +63,7 @@ export const COLUMNS = [
   { key: "rugCheckScore", label: "RugCheck" },
   { key: "organicScore", label: "Organic" },
   { key: "swaps1h", label: "Swap" },
+  { key: "avgSwapsPerMin", label: "Avg Swap/m" },
   { key: "traders1h", label: "Trader" },
   { key: "totalLps", label: "LP" },
   { key: "ageHours", label: "Umur" },
@@ -243,8 +252,16 @@ function cellFor(key, pool) {
       return <Spark values={pool.sparkline} score={pool.score} width={72} height={22} />;
     case "tvl":
       return <span className="f-num">{formatUsd(pool.tvl)}</span>;
+    case "activeTvl":
+      return Number.isFinite(pool.activeTvl)
+        ? <span className="f-num">{formatUsd(pool.activeTvl)}</span>
+        : <span className="fx-na">—</span>;
     case "volume1h":
       return <span className="f-num">{formatUsd(pool.volume1h)}</span>;
+    case "avgVolumePerMin":
+      return Number.isFinite(pool.avgVolumePerMin)
+        ? <span className="f-num">{formatUsd(pool.avgVolumePerMin)}</span>
+        : <span className="fx-na">—</span>;
     case "gmgnVolume5m":
       return Number.isFinite(pool.gmgnVolume5m)
         ? <span className="f-num">{formatUsd(pool.gmgnVolume5m)}</span>
@@ -253,6 +270,10 @@ function cellFor(key, pool) {
       return <span className="f-num">{optionalNumber(pool.gmgnSwaps5m)}</span>;
     case "volumeTvl1h":
       return <span className="f-num">{pool.volumeTvl1h.toFixed(2)}x</span>;
+    case "volumeActiveTvl1h":
+      return Number.isFinite(pool.volumeActiveTvl1h)
+        ? <span className="f-num">{pool.volumeActiveTvl1h.toFixed(2)}x</span>
+        : <span className="fx-na">—</span>;
     case "totalFees1h":
       return (
         <span className="fx-cell-stack">
@@ -262,8 +283,16 @@ function cellFor(key, pool) {
           </small>
         </span>
       );
+    case "avgFeePerMin":
+      return Number.isFinite(pool.avgFeePerMin)
+        ? <span className="f-num">{formatUsd(pool.avgFeePerMin)}</span>
+        : <span className="fx-na">—</span>;
     case "feeTvl1h":
       return <span className="f-num">{pool.feeTvl1h.toFixed(2)}%</span>;
+    case "feeActiveTvl1h":
+      return Number.isFinite(pool.feeActiveTvl1h)
+        ? <span className="f-num">{pool.feeActiveTvl1h.toFixed(2)}%</span>
+        : <span className="fx-na">—</span>;
     case "feeVelocity":
       return <FeeVelocityCell velocity={pool.feeVelocity} />;
     case "risk":
@@ -285,6 +314,8 @@ function cellFor(key, pool) {
       return <OrganicChip pool={pool} />;
     case "swaps1h":
       return <span className="f-num">{optionalNumber(pool.swaps1h)}</span>;
+    case "avgSwapsPerMin":
+      return <span className="f-num">{optionalNumber(pool.avgSwapsPerMin)}</span>;
     case "traders1h":
       return <span className="f-num">{optionalNumber(pool.traders1h)}</span>;
     case "totalLps":

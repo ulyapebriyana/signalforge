@@ -420,11 +420,12 @@ describe("SignalForge scoring", () => {
     expect(evaluatePreset({ ...heartAttackPool, gmgnBundlerPct: 50 }, PRESETS.heartattack).passed).toBe(true);
   });
 
-  it("declares no hourly-volume, volume/TVL, or fee/TVL gate, on the user's explicit instruction", () => {
+  it("declares no TVL, hourly-volume, volume/TVL, or fee/TVL gate, on the user's explicit instruction", () => {
+    expect(PRESETS.heartattack.tvlMin).toBeUndefined();
     expect(PRESETS.heartattack.volume1hMin).toBeUndefined();
     expect(PRESETS.heartattack.volumeTvlMin).toBeUndefined();
     expect(PRESETS.heartattack.feeTvlMin).toBeUndefined();
-    expect(evaluatePreset({ ...heartAttackPool, volume1h: 1, volumeTvl1h: 0, feeTvl1h: 0 }, PRESETS.heartattack).passed)
+    expect(evaluatePreset({ ...heartAttackPool, tvl: 0, volume1h: 1, volumeTvl1h: 0, feeTvl1h: 0 }, PRESETS.heartattack).passed)
       .toBe(true);
   });
 
@@ -460,9 +461,9 @@ describe("SignalForge scoring", () => {
       .toContain("Sniper ≤ 15%");
   });
 
-  it("keeps VanChu-like's fee tier lesson, the most expensive one in the posts", () => {
-    expect(evaluatePreset({ ...heartAttackPool, baseFeePct: 1 }, PRESETS.heartattack).misses)
-      .toContain("Base fee ≥ 2%");
+  it("declares no base fee gate, on the user's explicit instruction", () => {
+    expect(PRESETS.heartattack.baseFeeMin).toBeUndefined();
+    expect(evaluatePreset({ ...heartAttackPool, baseFeePct: 1 }, PRESETS.heartattack).passed).toBe(true);
   });
 
   it("does not borrow Skolmbeagh-like's top-10 floor", () => {
@@ -619,6 +620,12 @@ describe("SignalForge scoring", () => {
       total_lps: 42,
       swap_count: 180,
       unique_traders: 73,
+      active_tvl: 8_000,
+      fee_active_tvl_ratio: 2.5,
+      volume_active_tvl_ratio: 3.125,
+      avg_volume: 416.6,
+      avg_fee: 3.3,
+      avg_swap_count: 3,
       token_x: {
         address: "token",
         top_holders_pct: 27.5,
@@ -653,6 +660,12 @@ describe("SignalForge scoring", () => {
     expect(normalized.totalFees1h).toBe(220);
     expect(normalized.lpFees1h).toBe(200);
     expect(normalized.protocolFees1h).toBe(20);
+    expect(normalized.activeTvl).toBe(8_000);
+    expect(normalized.feeActiveTvl1h).toBe(2.5);
+    expect(normalized.volumeActiveTvl1h).toBe(3.125);
+    expect(normalized.avgVolumePerMin).toBe(416.6);
+    expect(normalized.avgFeePerMin).toBe(3.3);
+    expect(normalized.avgSwapsPerMin).toBe(3);
   });
 
   it("keeps optional analytics empty when discovery data is unavailable", () => {
@@ -670,6 +683,12 @@ describe("SignalForge scoring", () => {
     expect(normalized.totalLps).toBeNull();
     expect(normalized.swaps1h).toBeNull();
     expect(normalized.traders1h).toBeNull();
+    expect(normalized.activeTvl).toBeNull();
+    expect(normalized.feeActiveTvl1h).toBeNull();
+    expect(normalized.volumeActiveTvl1h).toBeNull();
+    expect(normalized.avgVolumePerMin).toBeNull();
+    expect(normalized.avgFeePerMin).toBeNull();
+    expect(normalized.avgSwapsPerMin).toBeNull();
     expect(normalized.top10HoldersPct).toBeNull();
     expect(normalized.devBalancePct).toBeNull();
     expect(normalized.jupShieldStatus).toBeNull();

@@ -30,10 +30,11 @@ export const PRESETS = Object.freeze({
   // Several numbers were set, moved, or removed by the user's explicit
   // instruction rather than transcribed, and each is called out again at its
   // own gate below: `volume5mMin` (50_000, not @0xMrBeefman's 1M),
-  // `marketCapMin` (lowered from $300K to $150K), `volume1hMin` (removed
-  // outright, was lowered from $200K to $50K to $25K before that),
-  // `volumeTvlMin` (removed outright, was loosened from 3x to 1x before
-  // that), `feeTvlMin` (removed outright, was 5%), `devBalanceMax` (loosened
+  // `marketCapMin` (lowered from $300K to $150K), `tvlMin` (removed outright,
+  // was $10K), `volume1hMin` (removed outright, was lowered from $200K to
+  // $50K to $25K before that), `volumeTvlMin` (removed outright, was
+  // loosened from 3x to 1x before that), `feeTvlMin` (removed outright, was
+  // 5%), `baseFeeMin` (removed outright, was 2%), `devBalanceMax` (loosened
   // from 0 to 10%), `ageHoursMax` (removed outright, was 24h), and
   // `bundlerPctMax` (loosened from Skolmbeagh-like's 15% to 50%). None of
   // these are transcription errors — they are recorded here so a later reader
@@ -56,25 +57,22 @@ export const PRESETS = Object.freeze({
     // preset showed MC $1.68M, still comfortably inside the $150K–$15M range.
     marketCapMin: 150_000,
     marketCapMax: 15_000_000,
-    // Thin liquidity against violent flow is the entire edge, exactly as in
-    // VanChu-like. The floor only excludes pools too small to take a position
-    // at all; the same Metlex alert's working pool held $83.3K.
-    tvlMin: 10_000,
     // "Ripping upward with almost no corrections." Entry is never into
     // something flat and never into something bleeding.
     momentumMin: 20,
     momentumMax: 2_000,
-    // No volume1hMin, volumeTvlMin, or feeTvlMin gate, on the user's explicit
-    // instruction — each was previously set (was $25K, 1x, 5% respectively)
-    // but the user decided the 5m spike gate above already does the heavy
-    // lifting on flow and removed all three outright rather than loosen them
-    // further.
+    // No tvlMin, volume1hMin, volumeTvlMin, or feeTvlMin gate, on the user's
+    // explicit instruction — each was previously set (tvlMin was $10K; the
+    // other three were $25K, 1x, 5% respectively) but the user decided the 5m
+    // spike gate above already does the heavy lifting on flow and removed all
+    // four outright rather than loosen them further. Thin liquidity against
+    // violent flow was the original rationale for the TVL floor, exactly as
+    // in VanChu-like, but it no longer gates here.
     //
-    // VanChu-like's lesson applies unchanged and is the most expensive one in
-    // these posts: right token, right volume, wrong fee tier, pushed out of
-    // range by one red candle. 2% is the floor because it is the lowest tier
-    // he is on record entering deliberately.
-    baseFeeMin: 2,
+    // No baseFeeMin gate either, on the same explicit instruction. VanChu-like's
+    // fee-tier lesson — right token, right volume, wrong fee tier, pushed out
+    // of range by one red candle — was the reason for the earlier 2% floor,
+    // but the user removed it outright rather than loosen it further.
     // No age gate, on the user's explicit instruction. The earlier 24h ceiling
     // was an inference rather than a stated rule — no source names a maximum
     // age — and the user removed it outright rather than widen it further.
@@ -660,7 +658,6 @@ export function evaluatePreset(pool, presetInput) {
   const checks = [
     [pool.marketCap >= preset.marketCapMin, `MC ≥ $${preset.marketCapMin}`],
     [pool.marketCap <= preset.marketCapMax, `MC ≤ $${preset.marketCapMax}`],
-    [pool.tvl >= preset.tvlMin, `TVL ≥ $${preset.tvlMin}`],
     [pool.priceChange1h !== null && pool.priceChange1h >= preset.momentumMin, `1h ≥ ${preset.momentumMin}%`],
     [pool.priceChange1h !== null && pool.priceChange1h <= preset.momentumMax, `1h ≤ ${preset.momentumMax}%`],
     [!pool.isBlacklisted, "Tidak di-blacklist"],
@@ -671,6 +668,9 @@ export function evaluatePreset(pool, presetInput) {
   // written before these fields existed keep their exact behaviour. Each one
   // fails closed when the upstream value is missing — an unknown holder split
   // is a reason not to enter, not a reason to wave the pool through.
+  if (Number.isFinite(preset.tvlMin)) {
+    checks.push([pool.tvl >= preset.tvlMin, `TVL ≥ $${preset.tvlMin}`]);
+  }
   if (Number.isFinite(preset.volume1hMin)) {
     checks.push([pool.volume1h >= preset.volume1hMin, `Vol 1h ≥ $${preset.volume1hMin}`]);
   }
@@ -850,6 +850,20 @@ export function normalizePool(raw, momentum = {}, analytics = {}, rugCheck = nul
     totalFees1h: lpFees1h + protocolFees1h,
     feeTvl1h: number(raw.fee_tvl_ratio?.["1h"]),
     volumeTvl1h: tvl > 0 ? volume1h / tvl : 0,
+    // Liquidity actually sitting in the active bin, versus `tvl`'s count of
+    // every bin in the pool. Only the discovery API reports it, so — like
+    // totalLps/swaps1h below — this stays null rather than 0 when that call
+    // failed, so a missing reading never masquerades as an empty pool.
+    activeTvl: optionalNumber(analytics.active_tvl),
+    feeActiveTvl1h: optionalNumber(analytics.fee_active_tvl_ratio),
+    volumeActiveTvl1h: optionalNumber(analytics.volume_active_tvl_ratio),
+    // The discovery API's own volume/fee/swap counts divided by the request's
+    // 1h timeframe, i.e. flow per minute rather than per hour — useful for
+    // comparing pools regardless of how long each has been trading within
+    // that window.
+    avgVolumePerMin: optionalNumber(analytics.avg_volume),
+    avgFeePerMin: optionalNumber(analytics.avg_fee),
+    avgSwapsPerMin: optionalNumber(analytics.avg_swap_count),
     binStep: number(raw.pool_config?.bin_step),
     baseFeePct: number(raw.pool_config?.base_fee_pct),
     dynamicFeePct: number(raw.dynamic_fee_pct),
