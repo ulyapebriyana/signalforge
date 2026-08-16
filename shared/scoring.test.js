@@ -99,8 +99,6 @@ const heartAttackPool = {
   feeTvl1h: 129.1,
   baseFeePct: 2,
   gmgnVolume5m: 78_000,
-  activeTvl: 22_000,
-  avgVolumePerMin: 9_075,
   ageHours: 0.6,
   top10HoldersPct: 24.1,
   devBalancePct: 0,
@@ -422,21 +420,13 @@ describe("SignalForge scoring", () => {
     expect(evaluatePreset({ ...heartAttackPool, gmgnBundlerPct: 50 }, PRESETS.heartattack).passed).toBe(true);
   });
 
-  it("gates on active TVL and per-minute average volume", () => {
-    // Both added on the user's explicit instruction as a narrower stand-in
-    // for the plain TVL/volume floors the preset otherwise declares none of.
-    expect(evaluatePreset({ ...heartAttackPool, activeTvl: 1_999 }, PRESETS.heartattack).misses)
-      .toContain("Active TVL ≥ $2000");
-    expect(evaluatePreset({ ...heartAttackPool, activeTvl: 2_000 }, PRESETS.heartattack).passed).toBe(true);
-
-    expect(evaluatePreset({ ...heartAttackPool, avgVolumePerMin: 999 }, PRESETS.heartattack).misses)
-      .toContain("Avg vol/menit ≥ $1000");
-    expect(evaluatePreset({ ...heartAttackPool, avgVolumePerMin: 1_000 }, PRESETS.heartattack).passed).toBe(true);
-
-    expect(evaluatePreset({ ...heartAttackPool, activeTvl: null }, PRESETS.heartattack).misses)
-      .toContain("Active TVL ≥ $2000");
-    expect(evaluatePreset({ ...heartAttackPool, avgVolumePerMin: null }, PRESETS.heartattack).misses)
-      .toContain("Avg vol/menit ≥ $1000");
+  it("declares no active TVL or avg volume/min gate, on the user's explicit instruction", () => {
+    // Added briefly, then removed by the same explicit instruction — the
+    // preset stays without a narrower TVL/volume floor.
+    expect(PRESETS.heartattack.activeTvlMin).toBeUndefined();
+    expect(PRESETS.heartattack.avgVolumePerMinMin).toBeUndefined();
+    expect(evaluatePreset({ ...heartAttackPool, activeTvl: 0, avgVolumePerMin: 0 }, PRESETS.heartattack).passed)
+      .toBe(true);
   });
 
   it("declares no TVL, hourly-volume, volume/TVL, or fee/TVL gate, on the user's explicit instruction", () => {

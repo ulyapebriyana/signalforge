@@ -18,8 +18,6 @@ const gate = (value, format) => (Number.isFinite(value) ? format(value) : NONE);
 const GATE_ROWS = [
   ["Market cap", (p) => `${formatUsd(p.marketCapMin)} – ${formatUsd(p.marketCapMax)}`],
   ["TVL minimum", (p) => formatUsd(p.tvlMin)],
-  ["Active TVL minimum", (p) => gate(p.activeTvlMin, formatUsd)],
-  ["Avg volume/menit minimum", (p) => gate(p.avgVolumePerMinMin, formatUsd)],
   ["Momentum 1 jam", (p) => `${p.momentumMin}% – ${p.momentumMax}%`],
   ["Volume 1 jam minimum", (p) => gate(p.volume1hMin, formatUsd)],
   ["Volume 5 menit minimum", (p) => gate(p.volume5mMin, formatUsd)],
