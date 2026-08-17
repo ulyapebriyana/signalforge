@@ -10,6 +10,7 @@ import {
   X,
 } from "lucide-react";
 import { VELOCITY_LABEL } from "../../../../shared/feeVelocity.js";
+import { BURST_LABEL, burstBand, PHASE_META, projectFees } from "../../../../shared/marketRead.js";
 import { rubricReport, rubricTally, SWANNY_GMGN_KEYS } from "../../../../shared/swannyRubric.js";
 import { PRESETS, poolTier } from "../../../../shared/scoring.js";
 import { formatAge, formatPercent, formatUsd } from "../../../lib/format.js";
@@ -18,11 +19,19 @@ import { RiskDial, ScoreRadar, Spark } from "./charts.jsx";
 import {
   ConcentrationValue,
   humanizeType,
+  ImpactCell,
   JupShieldChip,
   momentumTone,
   optionalNumber,
   OrganicChip,
+  PhaseChip,
+  PHASE_TONE,
+  PoolBurstCell,
   RugCheckChip,
+  TokenBurstCell,
+  TurnoverCell,
+  VenueShareCell,
+  YieldCell,
 } from "./bits.jsx";
 
 const RUBRIC_FORMAT = {
@@ -129,27 +138,228 @@ function FeeVelocityPanel({ velocity }) {
   );
 }
 
-const METRICS = [
-  ["TVL", (pool) => formatUsd(pool.tvl)],
-  ["Active TVL", (pool) => (Number.isFinite(pool.activeTvl) ? formatUsd(pool.activeTvl) : "—")],
-  ["Volume 5m", (pool) => (Number.isFinite(pool.gmgnVolume5m) ? formatUsd(pool.gmgnVolume5m) : "—")],
-  ["Swap 5m", (pool) => optionalNumber(pool.gmgnSwaps5m)],
-  ["Volume 1j", (pool) => formatUsd(pool.volume1h)],
-  ["Avg Vol/m", (pool) => (Number.isFinite(pool.avgVolumePerMin) ? formatUsd(pool.avgVolumePerMin) : "—")],
-  ["Volume 24j", (pool) => formatUsd(pool.volume24h)],
-  ["Market cap", (pool) => formatUsd(pool.marketCap)],
-  ["Vol/TVL", (pool) => `${pool.volumeTvl1h.toFixed(2)}x`],
-  ["Vol/Active TVL", (pool) => (Number.isFinite(pool.volumeActiveTvl1h) ? `${pool.volumeActiveTvl1h.toFixed(2)}x` : "—")],
-  ["Fee/TVL", (pool) => `${pool.feeTvl1h.toFixed(2)}%`],
-  ["Fee/Active TVL", (pool) => (Number.isFinite(pool.feeActiveTvl1h) ? `${pool.feeActiveTvl1h.toFixed(2)}%` : "—")],
-  ["Avg Fee/m", (pool) => (Number.isFinite(pool.avgFeePerMin) ? formatUsd(pool.avgFeePerMin) : "—")],
-  ["Holder", (pool) => optionalNumber(pool.holders)],
-  ["Total LP", (pool) => optionalNumber(pool.totalLps)],
-  ["Swap 1j", (pool) => optionalNumber(pool.swaps1h)],
-  ["Avg Swap/m", (pool) => optionalNumber(pool.avgSwapsPerMin)],
-  ["Trader 1j", (pool) => optionalNumber(pool.traders1h)],
-  ["Umur pool", (pool) => formatAge(pool.ageHours)],
-  ["Harga", (pool) => (pool.currentPrice ? formatUsd(pool.currentPrice, false) : "—")],
+/** Position sizes the fee projection can be read at, in USD. */
+const PROJECTION_SIZES = [500, 1_000, 5_000];
+
+/**
+ * The projection routinely lands in cents, and the shared formatter stops at one
+ * decimal below $100 — which rendered a real $0.0026/minute as "$0.0" and made
+ * every quiet pool look like it paid nothing at all. Small amounts get the
+ * digits they need; anything from a dollar up hands back to the shared one.
+ */
+const formatMoney = (value) => {
+  if (!Number.isFinite(value)) return "—";
+  if (Math.abs(value) >= 1) return formatUsd(value, false);
+  if (Math.abs(value) >= 0.01) return `$${value.toFixed(3)}`;
+  return `$${value.toFixed(5)}`;
+};
+
+/** How long a hold each preset is written around, for the projection's second figure. */
+const HOLD_MINUTES = { heartattack: 10, skolmbeagh: 45, vanchu: 60, auzhinta: 180, swanny: 60, yanman: 60, slowwallet: 660 };
+
+/**
+ * The market read, as the panel the drawer opens on.
+ *
+ * Everything below this in the drawer answers "what is this pool" — the score
+ * radar, the rubric, the security rows. This one answers "is it running, what
+ * does being in range pay per minute, and what breaks the range", which is the
+ * only question a position measured in minutes has time for. It is first for
+ * that reason, ahead of the score.
+ */
+function MarketReadPanel({ pool, preset }) {
+  const [size, setSize] = useState(1_000);
+  const phase = pool.phase ?? "unknown";
+  const meta = PHASE_META[phase];
+  const minutes = HOLD_MINUTES[preset] ?? 60;
+  const projected = projectFees(pool, size, minutes);
+  const tokenBand = pool.tokenBurstBand ?? burstBand(pool.tokenBurst);
+  const poolBand = pool.poolBurstBand ?? burstBand(pool.poolBurst);
+
+  return (
+    <div className={`fx-read fx-read--${PHASE_TONE[meta.tone]}`}>
+      <div className="fx-read-head">
+        <PhaseChip phase={phase} size="lg" />
+        <div>
+          <p className="fx-read-blurb">{meta.blurb}</p>
+          <p className="fx-read-action">{meta.action}</p>
+        </div>
+      </div>
+
+      <dl className="fx-read-grid">
+        <div>
+          <dt>Burst token (1m vs 5m)</dt>
+          <dd>
+            <TokenBurstCell pool={pool} />
+            <small>{BURST_LABEL[tokenBand]} · seluruh venue</small>
+          </dd>
+        </div>
+        <div>
+          <dt>Burst pool (1j vs harian)</dt>
+          <dd>
+            <PoolBurstCell pool={pool} />
+            <small>{BURST_LABEL[poolBand]} · pool ini saja</small>
+          </dd>
+        </div>
+        <div>
+          <dt>Porsi venue</dt>
+          <dd>
+            <VenueShareCell pool={pool} />
+            <small>
+              {Number.isFinite(pool.venueShare)
+                ? "perkiraan aliran token yang lewat sini"
+                : "butuh volume token 5m"}
+            </small>
+          </dd>
+        </div>
+        <div>
+          <dt>Fee per menit</dt>
+          <dd>
+            <YieldCell pool={pool} />
+            <small>
+              {Number.isFinite(pool.minutesTo1Pct)
+                ? `1% tiap ~${Math.round(pool.minutesTo1Pct)} menit`
+                : "atas TVL pool"}
+            </small>
+          </dd>
+        </div>
+        <div>
+          <dt>Yang mematahkan range</dt>
+          <dd>
+            <ImpactCell pool={pool} />
+            <small>
+              {Number.isFinite(pool.avgTradeSize)
+                ? `1 trade rata-rata ${formatUsd(pool.avgTradeSize)}`
+                : "geseran TVL per trade"}
+            </small>
+          </dd>
+        </div>
+        <div>
+          <dt>Putaran TVL</dt>
+          <dd>
+            <TurnoverCell pool={pool} />
+            <small>kali per menit</small>
+          </dd>
+        </div>
+        <div>
+          <dt>Momentum 1 jam</dt>
+          <dd>
+            <span className={`f-num ${momentumTone(pool.priceChange1h)}`}>{formatPercent(pool.priceChange1h)}</span>
+            <small>umur pool {formatAge(pool.ageHours)}</small>
+          </dd>
+        </div>
+        <div>
+          <dt>TVL</dt>
+          <dd>
+            <span className="f-num">{formatUsd(pool.tvl)}</span>
+            <small>vol 1j {formatUsd(pool.volume1h)}</small>
+          </dd>
+        </div>
+      </dl>
+
+      {/* A rate is abstract until it is money. This turns fee/active-TVL into
+          what a position of a stated size collects, at the rate showing right
+          now — a projection of the present, not a forecast; the rate is exactly
+          what decays once the runner tops out. */}
+      <div className="fx-read-project">
+        <div className="fx-read-project-head">
+          <span className="f-eyebrow">Proyeksi pada rate sekarang</span>
+          <div className="fx-read-sizes" role="group" aria-label="Ukuran posisi">
+            {PROJECTION_SIZES.map((option) => (
+              <button
+                key={option}
+                type="button"
+                className={size === option ? "is-active" : ""}
+                aria-pressed={size === option}
+                onClick={() => setSize(option)}
+              >
+                {formatUsd(option)}
+              </button>
+            ))}
+          </div>
+        </div>
+        {projected ? (
+          <p>
+            Posisi <strong>{formatUsd(size)}</strong> mengumpulkan{" "}
+            <strong className="f-num">{formatMoney(projected.perMinute)}</strong> per menit —{" "}
+            <strong className="f-num">{formatMoney(projected.overHold)}</strong> kalau dipegang{" "}
+            {minutes} menit. Dihitung dari fee/TVL pool, jadi ini rata-rata seluruh pool, bukan
+            bonus range ketat. Rate-nya ikut turun begitu fase berubah.
+          </p>
+        ) : (
+          <p className="fx-read-project-empty">
+            Fee/TVL belum terbaca untuk pool ini, jadi tidak ada yang bisa diproyeksikan.
+          </p>
+        )}
+      </div>
+
+      {pool.poolBurstIsYoung ? (
+        <p className="fx-read-caveat">
+          Pool ini belum genap sehari. Jendela harian sudah dipotong ke umur aslinya, tapi sampelnya
+          tetap pendek — perlakukan burst pool sebagai indikasi, bukan pengukuran.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+const usdOrDash = (value) => (Number.isFinite(value) ? formatUsd(value) : "—");
+const xOrDash = (value, digits = 2) => (Number.isFinite(value) ? `${value.toFixed(digits)}x` : "—");
+const pctOrDash = (value, digits = 2) => (Number.isFinite(value) ? `${value.toFixed(digits)}%` : "—");
+
+/**
+ * The raw reference table, grouped by timescale rather than by source. Per-minute
+ * and five-minute readings come first because they are the ones a short hold is
+ * decided on; the hourly and lifetime figures are context underneath them.
+ */
+const METRIC_GROUPS = [
+  // Grouped by scope as well as timescale, because the token figures and the
+  // pool figures come from different APIs and describe different things — GMGN
+  // measures the token across every venue, Meteora measures this pool. Mixing
+  // them in one list is what made a ratio across the two look reasonable.
+  ["Token — seluruh venue (GMGN)", [
+    ["Volume token 1m", (pool) => usdOrDash(pool.gmgnVolume1m)],
+    ["Volume token 5m", (pool) => usdOrDash(pool.gmgnVolume5m)],
+    ["Swap token 5m", (pool) => optionalNumber(pool.gmgnSwaps5m)],
+    ["Burst token", (pool) => xOrDash(pool.tokenBurst)],
+    ["Porsi venue (est.)", (pool) => (Number.isFinite(pool.venueShare) ? `${(pool.venueShare * 100).toFixed(1)}%` : "—")],
+    // Already on the payload and, until now, shown nowhere outside the
+    // Swanny rubric's own rows.
+    ["Fresh wallet", (pool) => pctOrDash(pool.gmgnFreshWalletPct, 1)],
+    ["Top-10 (GMGN)", (pool) => pctOrDash(pool.gmgnTop10Pct, 1)],
+    ["Holder (GMGN)", (pool) => optionalNumber(pool.gmgnHolders)],
+  ]],
+  ["Pool — per menit", [
+    ["Burst pool", (pool) => xOrDash(pool.poolBurst)],
+    ["Fee/menit", (pool) => pctOrDash(pool.feePerMinPct, 3)],
+    ["Waktu ke 1%", (pool) => (Number.isFinite(pool.minutesTo1Pct) ? `${Math.round(pool.minutesTo1Pct)}m` : "—")],
+    ["Putaran TVL/menit", (pool) => xOrDash(pool.poolTurnover, 3)],
+    ["Avg Vol/m", (pool) => usdOrDash(pool.avgVolumePerMin)],
+    ["Avg Fee/m", (pool) => usdOrDash(pool.avgFeePerMin)],
+    ["Trade rata-rata", (pool) => usdOrDash(pool.avgTradeSize)],
+    ["Impact per trade", (pool) => (Number.isFinite(pool.tradeImpact) ? `${(pool.tradeImpact * 100).toFixed(2)}%` : "—")],
+  ]],
+  ["Pool — per jam & seterusnya", [
+    ["TVL", (pool) => formatUsd(pool.tvl)],
+    ["Volume 1j", (pool) => formatUsd(pool.volume1h)],
+    ["Volume 24j", (pool) => formatUsd(pool.volume24h)],
+    ["Vol/TVL", (pool) => `${pool.volumeTvl1h.toFixed(2)}x`],
+    ["Fee/TVL", (pool) => `${pool.feeTvl1h.toFixed(2)}%`],
+    ["Swap 1j", (pool) => optionalNumber(pool.swaps1h)],
+    ["Trader 1j", (pool) => optionalNumber(pool.traders1h)],
+    ["Market cap", (pool) => formatUsd(pool.marketCap)],
+    ["Holder", (pool) => optionalNumber(pool.holders)],
+    ["Total LP", (pool) => optionalNumber(pool.totalLps)],
+    ["Umur pool", (pool) => formatAge(pool.ageHours)],
+    ["Harga", (pool) => (pool.currentPrice ? formatUsd(pool.currentPrice, false) : "—")],
+  ]],
+  // Kept because the fields exist upstream, but reported as what they measured
+  // rather than as active-bin depth — see the note in shared/marketRead.js.
+  ["Active TVL (discovery API)", [
+    ["Active TVL", (pool) => usdOrDash(pool.activeTvl)],
+    ["Share vs TVL", (pool) => (Number.isFinite(pool.activeShare) ? `${(pool.activeShare * 100).toFixed(0)}%` : "—")],
+    ["Fee/Active TVL", (pool) => pctOrDash(pool.feeActiveTvl1h)],
+    ["Vol/Active TVL", (pool) => xOrDash(pool.volumeActiveTvl1h)],
+  ]],
 ];
 
 export default function PoolDrawer({
@@ -228,6 +438,11 @@ export default function PoolDrawer({
         </header>
 
         <div className="fx-drawer-body" ref={panelRef}>
+          <section className="fx-drawer-section">
+            <h3>Baca pasar</h3>
+            <MarketReadPanel pool={pool} preset={preset} />
+          </section>
+
           <section className="fx-drawer-gauges">
             <ScoreRadar breakdown={pool.scoreBreakdown} score={pool.score} />
             <div className="fx-drawer-gauge-side">
@@ -356,14 +571,19 @@ export default function PoolDrawer({
 
           <section className="fx-drawer-section">
             <h3>Angka pool</h3>
-            <dl className="fx-metric-grid">
-              {METRICS.map(([label, read]) => (
-                <div key={label}>
-                  <dt>{label}</dt>
-                  <dd className="f-num">{read(pool)}</dd>
-                </div>
-              ))}
-            </dl>
+            {METRIC_GROUPS.map(([title, metrics]) => (
+              <div className="fx-metric-group" key={title}>
+                <span className="f-eyebrow">{title}</span>
+                <dl className="fx-metric-grid">
+                  {metrics.map(([label, read]) => (
+                    <div key={label}>
+                      <dt>{label}</dt>
+                      <dd className="f-num">{read(pool)}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+            ))}
           </section>
 
           {pool.richerSiblingPool ? (

@@ -1,4 +1,5 @@
 import { emptyGmgnFields } from "./gmgn.js";
+import { deriveMarketRead } from "./marketRead.js";
 import { bandOf, gateLabel, SWANNY_RUBRIC } from "./swannyRubric.js";
 
 export const PRESETS = Object.freeze({
@@ -43,6 +44,15 @@ export const PRESETS = Object.freeze({
   // NEEDS `GMGN_API_KEY`. Volume 5m, sniper, insider, and bundler all come from
   // GMGN and every one of them fails closed, so without a key this preset is
   // silent — the same posture as Skolmbeagh-like.
+  //
+  // The gates below are only half of what makes this preset usable. The other
+  // half is the view: ScannerView gives Heart Attack its own default columns and
+  // opens sorted by token burst rather than by score, because a play worked in
+  // minutes is decided on the rate the token is running at right now, not on a
+  // 100-point model built around a whole hour. Nothing in that view is a gate —
+  // it changes what you see first, never what qualifies — which is why it was
+  // added here rather than as yet another threshold on a preset the user has
+  // spent several commits deliberately loosening.
   heartattack: {
     id: "heartattack",
     label: "Heart Attack",
@@ -919,6 +929,13 @@ export function normalizePool(raw, momentum = {}, analytics = {}, rugCheck = nul
     sparkline: Array.isArray(momentum.sparkline) ? momentum.sparkline : [],
   };
 
+  // Derived rate figures — burst, active-bin depth, per-minute yield. Folded in
+  // here rather than computed at render time so every one of them is a sortable
+  // column and a filterable field like any upstream number. Phase is not folded
+  // in here: it also reads fee velocity, which only exists once the server has
+  // sampled the pool across scans, so it is attached alongside that.
+  const marketRead = deriveMarketRead(normalized);
+
   const score = calculateScore(normalized);
   const risk = calculateRisk(normalized);
   // Payload-level default only. Anything rendering against a chosen preset
@@ -927,6 +944,7 @@ export function normalizePool(raw, momentum = {}, analytics = {}, rugCheck = nul
 
   return {
     ...normalized,
+    ...marketRead,
     score: score.total,
     scoreBreakdown: score.breakdown,
     risk: risk.value,

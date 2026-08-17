@@ -2177,12 +2177,14 @@
   color: var(--f-scorch);
 }
 
+/* Same trick as .fx-tiles: the rules live on the cells, not in the gaps, so a
+   half-filled last row leaves clean empty space instead of a stray block of
+   line colour. These grids are auto-fit and their groups hold odd counts, so a
+   partial final row is the normal case rather than the exception. */
 .fx-metric-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
-  gap: 1px;
   margin: 0;
-  background: var(--f-line);
   border: 1px solid var(--f-line);
   border-radius: var(--f-r);
   overflow: hidden;
@@ -2191,6 +2193,7 @@
 .fx-metric-grid > div {
   padding: 0.55rem 0.7rem;
   background: var(--f-iron-900);
+  box-shadow: 1px 0 0 var(--f-line), 0 1px 0 var(--f-line);
 }
 
 .fx-metric-grid dt {
@@ -3280,4 +3283,497 @@
 .fx-zap-sigs svg {
   width: 11px;
   height: 11px;
+}
+
+/* ===========================================================================
+   Market read — the pool's condition right now.
+
+   These are the styles for everything the redesign added: phase, burst, the
+   per-minute yield figures, and the market strip above the scanner table. The
+   tone families reuse the app's existing palette rather than inventing a new
+   one — accent for "running hot", quench for healthy, caution for turning,
+   scorch for gone — so a rate reading never shouts louder than a risk flag.
+   =========================================================================== */
+
+/* --- phase ----------------------------------------------------------------- */
+
+.fx-phase {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  background: color-mix(in srgb, currentColor 10%, transparent);
+}
+
+.fx-phase svg {
+  width: 12px;
+  height: 12px;
+}
+
+.fx-phase--sm {
+  padding: 2px 7px;
+  font-size: 10px;
+}
+
+.fx-phase--lg {
+  padding: 5px 11px;
+  font-size: 13px;
+}
+
+.fx-phase--lg svg {
+  width: 14px;
+  height: 14px;
+}
+
+.fx-phase--ignite {
+  color: var(--f-ember);
+}
+
+.fx-phase--run {
+  color: var(--f-quench);
+}
+
+.fx-phase--turn {
+  color: var(--f-caution);
+}
+
+.fx-phase--gone {
+  color: var(--f-scorch);
+}
+
+.fx-phase--unread {
+  color: var(--f-faint);
+}
+
+/* --- burst ----------------------------------------------------------------- */
+
+.fx-burst {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.fx-burst svg {
+  width: 13px;
+  height: 13px;
+}
+
+/* The asterisk marks a pool under an hour old, whose 1h volume is its whole
+   life and therefore flatters the ratio. */
+.fx-burst-young {
+  font-style: normal;
+  color: var(--f-faint);
+}
+
+.fx-burst--erupting {
+  color: var(--f-ember);
+  text-shadow: 0 0 12px color-mix(in srgb, var(--f-ember) 45%, transparent);
+}
+
+.fx-burst--accelerating {
+  color: var(--f-quench);
+}
+
+.fx-burst--holding {
+  color: var(--f-ash);
+}
+
+.fx-burst--cooling {
+  color: var(--f-caution);
+}
+
+.fx-burst--dying {
+  color: var(--f-scorch);
+}
+
+/* --- rate values ----------------------------------------------------------- */
+
+.fx-rate {
+  display: inline-flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 2px;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.fx-rate small {
+  font-size: 0.6875rem;
+  font-weight: 400;
+  color: var(--f-faint);
+}
+
+.fx-rate--strong {
+  color: var(--f-ember);
+}
+
+.fx-rate--good {
+  color: var(--f-quench);
+}
+
+.fx-rate--thin {
+  color: var(--f-ash);
+}
+
+.fx-rate--flat {
+  color: var(--f-faint);
+}
+
+/* --- market strip ---------------------------------------------------------- */
+
+.fx-market {
+  display: grid;
+  grid-template-columns: minmax(200px, 1.1fr) auto minmax(200px, 1fr);
+  align-items: center;
+  gap: 1.25rem;
+  padding: 0.85rem 1.1rem;
+  margin-bottom: 0.9rem;
+  border: 1px solid var(--f-line);
+  border-left: 2px solid var(--f-faint);
+  border-radius: var(--f-r-lg);
+  background: var(--f-iron-950);
+}
+
+.fx-market--panas {
+  border-left-color: var(--f-ember);
+}
+
+.fx-market--aktif {
+  border-left-color: var(--f-quench);
+}
+
+.fx-market--tipis {
+  border-left-color: var(--f-caution);
+}
+
+.fx-market-verdict strong {
+  display: block;
+  font-family: var(--f-display);
+  font-size: 1.35rem;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  line-height: 1.15;
+  margin: 0.15rem 0 0.2rem;
+}
+
+.fx-market-verdict p {
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--f-slag);
+}
+
+/* Sized to its buttons, never stretched: in the stacked layout the grid column
+   is full width, and a bordered box spanning it with five small buttons huddled
+   at one end reads as a rendering fault rather than a control group. */
+.fx-market-phases {
+  display: flex;
+  justify-self: start;
+  width: fit-content;
+  gap: 1px;
+  background: var(--f-line);
+  border: 1px solid var(--f-line);
+  border-radius: var(--f-r);
+  overflow: hidden;
+}
+
+.fx-market-phase {
+  display: grid;
+  gap: 1px;
+  min-width: 62px;
+  padding: 0.45rem 0.6rem;
+  border: 0;
+  border-top: 2px solid transparent;
+  background: var(--f-iron-900);
+  color: var(--f-ash);
+  cursor: pointer;
+  text-align: center;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.fx-market-phase:hover {
+  background: var(--f-hover);
+}
+
+.fx-market-phase .f-num {
+  font-size: 1.05rem;
+  font-weight: 600;
+  line-height: 1.1;
+}
+
+.fx-market-phase small {
+  font-size: 0.625rem;
+  color: var(--f-slag);
+}
+
+.fx-market-phase--hot {
+  border-top-color: var(--f-ember);
+}
+
+.fx-market-phase--good {
+  border-top-color: var(--f-quench);
+}
+
+.fx-market-phase--warn {
+  border-top-color: var(--f-caution);
+}
+
+.fx-market-phase--bad {
+  border-top-color: var(--f-scorch);
+}
+
+.fx-market-phase.is-active {
+  background: var(--f-raised);
+}
+
+.fx-market-phase.is-active .f-num {
+  color: var(--f-bone);
+}
+
+.fx-market-phase.is-active small {
+  color: var(--f-ash);
+}
+
+.fx-market-rates {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.9rem;
+  margin: 0;
+}
+
+.fx-market-rates dt {
+  font-size: 0.6875rem;
+  color: var(--f-slag);
+  margin-bottom: 0.15rem;
+}
+
+.fx-market-rates dd {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.fx-market-rates em {
+  font-style: normal;
+  font-weight: 400;
+  font-size: 0.6875rem;
+  color: var(--f-faint);
+}
+
+@media (max-width: 1080px) {
+  .fx-market {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.85rem;
+  }
+
+  .fx-market-phases {
+    justify-content: start;
+  }
+}
+
+/* --- drawer: market read panel --------------------------------------------- */
+
+.fx-read {
+  display: grid;
+  gap: 0.9rem;
+  padding: 0.9rem;
+  border: 1px solid var(--f-line);
+  border-left-width: 2px;
+  border-radius: var(--f-r);
+  background: var(--f-raised);
+}
+
+.fx-read--ignite {
+  border-left-color: var(--f-ember);
+}
+
+.fx-read--run {
+  border-left-color: var(--f-quench);
+}
+
+.fx-read--turn {
+  border-left-color: var(--f-caution);
+}
+
+.fx-read--gone {
+  border-left-color: var(--f-scorch);
+}
+
+.fx-read--unread {
+  border-left-color: var(--f-faint);
+}
+
+.fx-read-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.7rem;
+}
+
+.fx-read-blurb {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--f-bone);
+}
+
+.fx-read-action {
+  margin: 0.25rem 0 0;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--f-slag);
+}
+
+/* Two fixed columns rather than auto-fit: the panel holds eight readings, and
+   auto-fit landed on three, leaving a stray empty cell whose line-coloured
+   background read as a broken tile. Eight into two is four clean rows. */
+.fx-read-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  margin: 0;
+  background: var(--f-line);
+  border: 1px solid var(--f-line);
+  border-radius: var(--f-r);
+  overflow: hidden;
+}
+
+.fx-read-grid > div {
+  padding: 0.55rem 0.7rem;
+  background: var(--f-iron-900);
+}
+
+.fx-read-grid dt {
+  font-size: 0.6875rem;
+  color: var(--f-slag);
+  margin-bottom: 0.25rem;
+}
+
+.fx-read-grid dd {
+  display: grid;
+  gap: 0.1rem;
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+/* The cells inside reuse the table's right-aligned rate components; in a
+   definition list they should read left-aligned like the label above them. */
+.fx-read-grid dd .fx-burst,
+.fx-read-grid dd .fx-rate,
+.fx-read-grid dd .fx-conc,
+.fx-read-grid dd .fx-cell-stack {
+  justify-content: flex-start;
+  text-align: left;
+}
+
+.fx-read-grid dd > small {
+  font-size: 0.6875rem;
+  font-weight: 400;
+  color: var(--f-faint);
+  line-height: 1.4;
+}
+
+.fx-read-project {
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--f-line);
+  border-radius: var(--f-r);
+  background: var(--f-iron-900);
+}
+
+.fx-read-project-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.fx-read-sizes {
+  display: flex;
+  gap: 1px;
+  background: var(--f-line);
+  border: 1px solid var(--f-line);
+  border-radius: var(--f-r-sm);
+  overflow: hidden;
+}
+
+.fx-read-sizes button {
+  padding: 0.2rem 0.5rem;
+  border: 0;
+  background: var(--f-iron-850);
+  color: var(--f-slag);
+  font-family: var(--f-mono);
+  font-size: 0.6875rem;
+  cursor: pointer;
+}
+
+.fx-read-sizes button:hover {
+  background: var(--f-hover);
+}
+
+.fx-read-sizes button.is-active {
+  background: var(--f-raised);
+  color: var(--f-bone);
+}
+
+.fx-read-project p {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  color: var(--f-ash);
+}
+
+.fx-read-project strong {
+  color: var(--f-bone);
+}
+
+.fx-read-project-empty {
+  color: var(--f-slag);
+}
+
+.fx-read-caveat {
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--f-faint);
+}
+
+/* --- drawer: grouped metric reference --------------------------------------- */
+
+.fx-metric-group + .fx-metric-group {
+  margin-top: 0.85rem;
+}
+
+.fx-metric-group > .f-eyebrow {
+  display: block;
+  margin-bottom: 0.35rem;
+}
+
+/* --- scanner card: phase row ------------------------------------------------ */
+
+.fx-card-phase {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.5rem 0;
+  border-top: 1px solid var(--f-line);
+  border-bottom: 1px solid var(--f-line);
+}
+
+/* --- overview: burst movers -------------------------------------------------- */
+
+/* Four children rather than the momentum mover's five: no sparkline, and the
+   phase chip and burst reading take the place of score + price change. */
+.fx-mover--burst {
+  grid-template-columns: 3px minmax(0, 1fr) auto auto;
 }

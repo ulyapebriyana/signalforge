@@ -38,7 +38,12 @@ Pemilihan bundel terjadi di `src/main.jsx` sebelum salah satu stylesheet dimuat,
   **Skolmbeagh-like**, **Slow Wallet**, dan **Heart Attack** dengan aturan yang transparan.
 - Score 0–100: momentum 25, fee efficiency 25, volume quality 20, security 20, freshness 10.
 - **Kecepatan fee**: fee/TVL direkam tiap scan, lalu dibandingkan dengan puncaknya dalam jendela 45 menit.
-- **Volume 5 menit** dari GMGN sebagai kolom scanner. Meteora berhenti di 1 jam, terlalu kasar untuk play berskala menit — di situ volume 5 menit adalah sinyal entry-nya sendiri, bukan pelengkap.
+- **Baca pasar** (`shared/marketRead.js`): angka laju, bukan angka stok. Fase pool (Menyala /
+  Jalan / Puncak / Meredup / Mati), dua burst yang tidak boleh dicampur, fee per menit, waktu
+  ke 1%, impact per trade, dan porsi venue. Lihat [Baca pasar](#baca-pasar) di bawah.
+- **Kolom scanner mengikuti preset**. Tiap preset membuka tabel dan urutan yang berbeda karena
+  skala waktunya berbeda; Heart Attack membuka pada burst, bukan skor. Pilihan kolom disimpan
+  per preset, jadi menata tabel Heart Attack tidak ikut mengubah tabel Slow Wallet.
 - Notifikasi berbunyi **berbeda per preset**, jadi bunyinya sendiri sudah memberi tahu gate mana yang lolos.
 - Risk score 0–100 dengan flag freeze authority, blacklist, verifikasi, TVL tipis, usia pool, dan data holder yang belum tersedia.
 - Pencarian, filter angka, tab Hot/Watch/Skipped, panel inspeksi, tautan ke Meteora.
@@ -253,6 +258,65 @@ paling tinggi” kalau satu token punya beberapa pool. Meteora rutin melisting t
 beberapa bin step, dan scanner menampilkannya sebagai baris terpisah. Server menandai baris yang
 kalah lewat `richerSiblingPool`, dan panel detail menunjukkan pool mana yang seharusnya diambil.
 Ini dilaporkan, bukan digate — pool yang lebih lemah itu pilihan yang lebih buruk, bukan berbahaya.
+
+## Baca pasar
+
+Semua yang ditampilkan screener ini sebelumnya adalah angka **stok**: TVL, volume 1 jam, fee/TVL
+1 jam. Semuanya menggambarkan jam yang sudah selesai. Posisi DLMM berskala menit tidak dibuka atas
+jam yang barusan lewat, tapi atas laju yang sedang berjalan. `shared/marketRead.js` menurunkan
+angka laju itu dari data yang sudah ada di payload — tidak ada panggilan upstream baru.
+
+### Dua burst, dan kenapa tidak boleh dicampur
+
+Ini kesalahan yang paling mudah dibuat dan paling mahal, jadi dicatat di sini dan di kepala modulnya:
+
+- **`volume_1m` / `volume_5m` dari GMGN adalah volume TOKEN di seluruh venue**, bukan volume pool
+  ini. Pada satu scan nyata, sebuah token mencatat volume 5 menit $105K sementara pool DLMM-nya
+  hanya $2,8K sepanjang jam — tokennya ramai di tempat lain.
+- Karena itu angka GMGN hanya boleh dibandingkan dengan angka GMGN, dan angka Meteora hanya dengan
+  angka Meteora.
+
+| Kolom | Rumus | Cakupan |
+| --- | --- | --- |
+| **Burst token** | `volume_1m ÷ (volume_5m ÷ 5)` | Token, seluruh venue (GMGN) |
+| **Burst pool** | pace 1 jam ÷ pace hariannya | Pool ini saja (Meteora) |
+
+Jendela harian pada burst pool **dipotong ke umur asli pool**. Pool berumur 2 jam punya “volume 24
+jam” yang isinya 2 jam; membaginya dengan 1.440 menit membuat satu pool nyata terbaca 5,13x padahal
+sebenarnya 0,45x — dari melambat jadi seolah meledak.
+
+### Angka laju lainnya
+
+| Kolom | Arti |
+| --- | --- |
+| **Fee/mnt** | `fee/TVL 1 jam ÷ 60`. Satuan yang benar-benar dipakai hold berskala menit. |
+| **Waktu ke 1%** | `60 ÷ fee/TVL`. Berapa menit modal di pool ini butuh untuk mencetak 1%. |
+| **Impact/trade** | Trade rata-rata sebagai porsi TVL. Begini range ketat mati: bukan oleh tren, tapi oleh market order tunggal yang menyeret harga melewati bin. |
+| **Putaran TVL** | Berapa kali TVL pool diputar penuh tiap menit. |
+| **Porsi venue** | Perkiraan porsi aliran token yang lewat pool ini. Volume token per jam diekstrapolasi dari jendela 5 menit, jadi ini estimasi — tapi jaraknya jauh lebih lebar daripada galat estimasinya. Satu scan menemukan pool yang hanya membawa 0,2% aliran tokennya sendiri. |
+
+### Fase
+
+Satu kata untuk kondisi pool saat ini, dipakai di strip Kondisi pasar, kolom **Fase**, kartu, dan
+panel **Baca pasar**: **Menyala**, **Jalan**, **Puncak**, **Meredup**, **Mati**, atau belum terbaca.
+
+Dua saksi yang berdiri sendiri: burst (aliran) dan `feeVelocity` (peluruhan fee). Keduanya bisa
+berbeda pendapat — aliran bisa naik lagi di pool yang fee-nya sudah kolaps — dan **pembacaan yang
+lebih buruk yang menang**. Posisi ditutup pada tanda pertama mesinnya berhenti, bukan pada tanda
+terakhir dia masih jalan.
+
+Strip **Kondisi pasar** di atas tabel membaca seluruh scan sebagai satu pasar (Panas / Aktif /
+Tipis / Sepi). Daftar yang diurutkan selalu punya baris teratas, jadi screener yang cuma menyortir
+tidak pernah bisa bilang “tidak ada yang berlari” — dia hanya menaruh yang paling tidak mati di
+atas. Angka fase di strip itu juga filter: klik untuk menyaring tabel.
+
+### Catatan tentang Active TVL
+
+`active_tvl` dari discovery API **bukan** likuiditas di bin aktif. Diukur pada scan nyata, nilainya
+berada antara 0,62x dan 1,01x TVL pool — kadang sedikit di atasnya, yang tidak mungkin untuk sebuah
+subset. `fee_active_tvl_ratio ÷ fee_tvl_ratio` persis sama dengan `tvl ÷ active_tvl`, jadi keduanya
+hanya membawa satu fakta. Field-nya tetap ditampilkan apa adanya di grup terpisah panel detail,
+tapi tidak ada pembacaan utama yang dibangun di atasnya, dan tidak ada label “in-range” di mana pun.
 
 ## Kecepatan fee
 

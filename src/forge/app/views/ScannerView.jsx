@@ -17,84 +17,255 @@ import {
   TriangleAlert,
   X,
 } from "lucide-react";
+import { MARKET_CONDITION_META, PHASE_META, readMarket } from "../../../../shared/marketRead.js";
 import { PRESETS, poolTier } from "../../../../shared/scoring.js";
 import { formatAge, formatPercent, formatUsd } from "../../../lib/format.js";
 import { heatVars, riskBand, riskLabel } from "../../lib/heat.js";
 import { Spark } from "../components/charts.jsx";
 import {
+  ActiveDepthCell,
+  BurstCell,
+  ClockCell,
   ConcentrationValue,
   FeeVelocityCell,
   EmptyState,
   HeatBadge,
+  ImpactCell,
   JupShieldChip,
   momentumTone,
   optionalNumber,
   OrganicChip,
+  PhaseChip,
   PoolAvatar,
+  PoolBurstCell,
   RugCheckChip,
+  TokenBurstCell,
+  TurnoverCell,
+  Unread,
+  VenueShareCell,
+  YieldCell,
 } from "../components/bits.jsx";
 
+/**
+ * Columns are grouped by the question they answer, and the groups are ordered
+ * the way a pool is actually judged: what is it doing right now (rate), what is
+ * it worth to be in range (yield), how big is the thing (size), and can it hurt
+ * you (safety). The old list opened with stock figures — TVL, hourly volume —
+ * which describe an hour that already finished.
+ */
+export const COLUMN_GROUPS = Object.freeze({
+  rate: "Kondisi sekarang",
+  yield: "Hasil per menit",
+  size: "Ukuran & aliran",
+  safety: "Keamanan",
+});
+
 export const COLUMNS = [
-  { key: "priceChange1h", label: "1j", locked: false },
-  { key: "trend", label: "Tren", sortable: false },
-  { key: "tvl", label: "TVL" },
-  // Liquidity actually sitting in the active bin, versus TVL's count of every
-  // bin in the pool. From the discovery API, so null (not 0) when that call
-  // failed.
-  { key: "activeTvl", label: "Active TVL" },
-  { key: "volume1h", label: "Vol 1j" },
-  { key: "avgVolumePerMin", label: "Avg Vol/m" },
-  // Five-minute flow, from GMGN. Meteora stops at one hour, which is far too
-  // coarse for the minutes-scale plays — a runner's 5m volume is the entry
-  // signal itself, not a supporting detail.
-  { key: "gmgnVolume5m", label: "Vol 5m" },
-  { key: "gmgnSwaps5m", label: "Swap 5m" },
-  { key: "volumeTvl1h", label: "Vol/TVL" },
-  { key: "volumeActiveTvl1h", label: "Vol/Active TVL" },
-  { key: "totalFees1h", label: "Fee 1j" },
-  { key: "avgFeePerMin", label: "Avg Fee/m" },
-  { key: "feeTvl1h", label: "Fee/TVL" },
-  { key: "feeActiveTvl1h", label: "Fee/Active TVL" },
-  { key: "feeVelocity", label: "Fee tren", sortable: false },
-  { key: "risk", label: "Risiko" },
-  { key: "top10HoldersPct", label: "Top-10" },
-  { key: "devBalancePct", label: "Dev" },
-  { key: "jupShieldRank", label: "JupShield" },
-  { key: "rugCheckScore", label: "RugCheck" },
-  { key: "organicScore", label: "Organic" },
-  { key: "swaps1h", label: "Swap" },
-  { key: "avgSwapsPerMin", label: "Avg Swap/m" },
-  { key: "traders1h", label: "Trader" },
-  { key: "totalLps", label: "LP" },
-  { key: "ageHours", label: "Umur" },
+  // --- rate: the pool at this minute ---------------------------------------
+  { key: "phase", label: "Fase", group: "rate", sortable: false },
+  // The token's last minute against its last five. GMGN on both sides, and
+  // token-wide on both sides — see shared/marketRead.js for why a GMGN figure
+  // may never be divided by a Meteora one.
+  { key: "tokenBurst", label: "Burst token", group: "rate" },
+  // This pool's hour against its own daily pace, Meteora on both sides.
+  { key: "poolBurst", label: "Burst pool", group: "rate" },
+  { key: "feeVelocity", label: "Fee tren", group: "rate", sortable: false },
+  { key: "priceChange1h", label: "1j", group: "rate" },
+  { key: "trend", label: "Tren", group: "rate", sortable: false },
+  { key: "gmgnVolume1m", label: "Vol token 1m", group: "rate" },
+  { key: "gmgnVolume5m", label: "Vol token 5m", group: "rate" },
+  { key: "gmgnSwaps5m", label: "Swap token 5m", group: "rate" },
+
+  // --- yield: what the pool pays, per minute -------------------------------
+  { key: "feePerMinPct", label: "Fee/mnt", group: "yield" },
+  { key: "minutesTo1Pct", label: "Waktu ke 1%", group: "yield" },
+  { key: "feeTvl1h", label: "Fee/TVL", group: "yield" },
+  { key: "totalFees1h", label: "Fee 1j", group: "yield" },
+  { key: "avgFeePerMin", label: "Avg Fee/m", group: "yield" },
+  { key: "feeActiveTvl1h", label: "Fee/Active TVL", group: "yield" },
+
+  // --- size: the pool and the flow through it ------------------------------
+  // The share of the token's own flow this pool carries — the reading that
+  // catches a pool that looks busy while the token trades somewhere else.
+  { key: "venueShare", label: "Porsi venue", group: "size" },
+  { key: "poolTurnover", label: "Putaran TVL", group: "size" },
+  { key: "tradeImpact", label: "Impact/trade", group: "size" },
+  { key: "tvl", label: "TVL", group: "size" },
+  { key: "volume1h", label: "Vol 1j", group: "size" },
+  { key: "volume24h", label: "Vol 24j", group: "size" },
+  { key: "avgVolumePerMin", label: "Avg Vol/m", group: "size" },
+  { key: "volumeTvl1h", label: "Vol/TVL", group: "size" },
+  { key: "activeTvl", label: "Active TVL", group: "size" },
+  { key: "swaps1h", label: "Swap", group: "size" },
+  { key: "avgSwapsPerMin", label: "Avg Swap/m", group: "size" },
+  { key: "traders1h", label: "Trader", group: "size" },
+  { key: "totalLps", label: "LP", group: "size" },
+  { key: "ageHours", label: "Umur", group: "size" },
+
+  // --- safety ---------------------------------------------------------------
+  { key: "risk", label: "Risiko", group: "safety" },
+  { key: "top10HoldersPct", label: "Top-10", group: "safety" },
+  { key: "devBalancePct", label: "Dev", group: "safety" },
+  { key: "jupShieldRank", label: "JupShield", group: "safety" },
+  { key: "rugCheckScore", label: "RugCheck", group: "safety" },
+  { key: "organicScore", label: "Organic", group: "safety" },
 ];
 
-const DEFAULT_COLUMNS = [
+const GENERAL_COLUMNS = [
+  "phase",
+  "tokenBurst",
+  "poolBurst",
+  "feeVelocity",
   "priceChange1h",
   "trend",
+  "feePerMinPct",
+  "feeTvl1h",
   "tvl",
   "volume1h",
-  "gmgnVolume5m",
   "volumeTvl1h",
-  "totalFees1h",
-  "feeTvl1h",
-  "feeVelocity",
   "risk",
   "top10HoldersPct",
-  "jupShieldRank",
   "rugCheckScore",
   "ageHours",
 ];
 
-export const defaultColumnKeys = () => {
-  try {
-    const saved = JSON.parse(localStorage.getItem("signalforge:columns") || "null");
-    if (Array.isArray(saved) && saved.length) return saved.filter((key) => COLUMNS.some((column) => column.key === key));
-  } catch {
-    // A malformed preference falls back to the default column set.
-  }
-  return DEFAULT_COLUMNS;
+/**
+ * Each preset shows the columns its own play is decided on.
+ *
+ * The sharpest case is Heart Attack. It is worked in minutes, so an hourly
+ * column tells you about a window three times longer than the whole hold: what
+ * decides it is burst, the per-minute fee on in-range capital, how deep the
+ * active bin is, and how hard a single trade shoves through it. Hourly TVL and
+ * volume are still one click away in the picker; they are simply not what the
+ * default view leads with any more.
+ *
+ * Anything not listed here falls back to GENERAL_COLUMNS.
+ */
+const PRESET_COLUMNS = {
+  heartattack: [
+    "phase",
+    "tokenBurst",
+    "poolBurst",
+    "gmgnVolume5m",
+    "venueShare",
+    "feePerMinPct",
+    "minutesTo1Pct",
+    "tradeImpact",
+    "feeVelocity",
+    "priceChange1h",
+    "tvl",
+    "risk",
+    "top10HoldersPct",
+    "ageHours",
+  ],
+  vanchu: [
+    "phase",
+    "tokenBurst",
+    "poolBurst",
+    "feeVelocity",
+    "priceChange1h",
+    "feePerMinPct",
+    "feeTvl1h",
+    "venueShare",
+    "volumeTvl1h",
+    "volume1h",
+    "tvl",
+    "risk",
+    "ageHours",
+  ],
+  skolmbeagh: [
+    "ageHours",
+    "phase",
+    "tokenBurst",
+    "gmgnVolume5m",
+    "feePerMinPct",
+    "feeTvl1h",
+    "tvl",
+    "top10HoldersPct",
+    "devBalancePct",
+    "risk",
+    "rugCheckScore",
+  ],
+  auzhinta: [
+    "feeVelocity",
+    "phase",
+    "feePerMinPct",
+    "feeTvl1h",
+    "poolBurst",
+    "priceChange1h",
+    "trend",
+    "tvl",
+    "volumeTvl1h",
+    "risk",
+    "top10HoldersPct",
+    "rugCheckScore",
+    "ageHours",
+  ],
+  slowwallet: [
+    "priceChange1h",
+    "trend",
+    "feeVelocity",
+    "feePerMinPct",
+    "feeTvl1h",
+    "tvl",
+    "volume1h",
+    "volume24h",
+    "volumeTvl1h",
+    "risk",
+    "jupShieldRank",
+    "rugCheckScore",
+    "organicScore",
+    "ageHours",
+  ],
+  swanny: [
+    "phase",
+    "priceChange1h",
+    "trend",
+    "risk",
+    "top10HoldersPct",
+    "devBalancePct",
+    "jupShieldRank",
+    "rugCheckScore",
+    "organicScore",
+    "tvl",
+    "volume1h",
+    "feeTvl1h",
+    "ageHours",
+  ],
 };
+
+const columnKey = (presetId) => `signalforge:columns:${presetId}`;
+
+/**
+ * Saved choices are per preset, because the presets no longer want the same
+ * table. A single global list is why every preset used to open on the same
+ * hourly columns regardless of the timescale it trades on.
+ */
+export const defaultColumnKeys = (presetId) => {
+  try {
+    const saved = JSON.parse(localStorage.getItem(columnKey(presetId)) || "null");
+    if (Array.isArray(saved) && saved.length) {
+      const kept = saved.filter((key) => COLUMNS.some((column) => column.key === key));
+      if (kept.length) return kept;
+    }
+  } catch {
+    // A malformed preference falls back to the preset's default column set.
+  }
+  return PRESET_COLUMNS[presetId] || GENERAL_COLUMNS;
+};
+
+/**
+ * Where each preset opens its sort.
+ *
+ * Score answers "how good is this pool by the 100-point model", which is the
+ * right lead for the slower presets. It is the wrong lead for a play held for
+ * minutes: there, the pool that matters is the one accelerating hardest right
+ * now, and that is burst.
+ */
+export const defaultSort = (presetId) =>
+  presetId === "heartattack"
+    ? { key: "tokenBurst", direction: "desc" }
+    : { key: "score", direction: "desc" };
 
 const TABS = [
   ["all", "Semua"],
@@ -146,7 +317,7 @@ function Switch({ checked, onChange, children }) {
  * table are the same operation. Hidden columns carry no order of their own;
  * showing one just appends it to the end of `visible`.
  */
-function ColumnPicker({ visible, onChange }) {
+function ColumnPicker({ visible, onChange, preset }) {
   const [open, setOpen] = useState(false);
   const [dragKey, setDragKey] = useState(null);
   const ref = useRef(null);
@@ -160,9 +331,11 @@ function ColumnPicker({ visible, onChange }) {
     return () => document.removeEventListener("pointerdown", onPointerDown);
   }, [open]);
 
+  // Saved against the preset, so tuning the Heart Attack table does not silently
+  // rewrite the one Slow Wallet opens on.
   const persist = (next) => {
     onChange(next);
-    localStorage.setItem("signalforge:columns", JSON.stringify(next));
+    localStorage.setItem(`signalforge:columns:${preset}`, JSON.stringify(next));
   };
 
   const hide = (key) => persist(visible.filter((item) => item !== key));
@@ -227,17 +400,21 @@ function ColumnPicker({ visible, onChange }) {
               </div>
             );
           })}
-          {hiddenColumns.length ? (
-            <>
-              <span className="f-eyebrow fx-dropdown-section">Kolom lain</span>
-              {hiddenColumns.map((column) => (
-                <label key={column.key} className="fx-dropdown-check">
-                  <input type="checkbox" checked={false} onChange={() => show(column.key)} />
-                  {column.label}
-                </label>
-              ))}
-            </>
-          ) : null}
+          {Object.entries(COLUMN_GROUPS).map(([group, title]) => {
+            const inGroup = hiddenColumns.filter((column) => column.group === group);
+            if (!inGroup.length) return null;
+            return (
+              <div key={group}>
+                <span className="f-eyebrow fx-dropdown-section">{title}</span>
+                {inGroup.map((column) => (
+                  <label key={column.key} className="fx-dropdown-check">
+                    <input type="checkbox" checked={false} onChange={() => show(column.key)} />
+                    {column.label}
+                  </label>
+                ))}
+              </div>
+            );
+          })}
         </div>
       ) : null}
     </div>
@@ -246,26 +423,52 @@ function ColumnPicker({ visible, onChange }) {
 
 function cellFor(key, pool) {
   switch (key) {
+    // --- rate ---------------------------------------------------------------
+    case "phase":
+      return <PhaseChip phase={pool.phase} size="sm" />;
+    case "tokenBurst":
+      return <TokenBurstCell pool={pool} />;
+    case "poolBurst":
+      return <PoolBurstCell pool={pool} />;
+    case "gmgnVolume1m":
+      return Number.isFinite(pool.gmgnVolume1m)
+        ? <span className="f-num">{formatUsd(pool.gmgnVolume1m)}</span>
+        : <Unread why="Butuh GMGN_API_KEY" />;
+
+    // --- yield --------------------------------------------------------------
+    case "feePerMinPct":
+      return <YieldCell pool={pool} />;
+    case "minutesTo1Pct":
+      return <ClockCell pool={pool} />;
+
+    // --- size ---------------------------------------------------------------
+    case "venueShare":
+      return <VenueShareCell pool={pool} />;
+    case "poolTurnover":
+      return <TurnoverCell pool={pool} />;
+    case "tradeImpact":
+      return <ImpactCell pool={pool} />;
+    case "activeTvl":
+      return <ActiveDepthCell pool={pool} />;
+    case "volume24h":
+      return <span className="f-num">{formatUsd(pool.volume24h)}</span>;
+
     case "priceChange1h":
       return <span className={`f-num ${momentumTone(pool.priceChange1h)}`}>{formatPercent(pool.priceChange1h)}</span>;
     case "trend":
       return <Spark values={pool.sparkline} score={pool.score} width={72} height={22} />;
     case "tvl":
       return <span className="f-num">{formatUsd(pool.tvl)}</span>;
-    case "activeTvl":
-      return Number.isFinite(pool.activeTvl)
-        ? <span className="f-num">{formatUsd(pool.activeTvl)}</span>
-        : <span className="fx-na">—</span>;
     case "volume1h":
       return <span className="f-num">{formatUsd(pool.volume1h)}</span>;
     case "avgVolumePerMin":
       return Number.isFinite(pool.avgVolumePerMin)
         ? <span className="f-num">{formatUsd(pool.avgVolumePerMin)}</span>
-        : <span className="fx-na">—</span>;
+        : <Unread />;
     case "gmgnVolume5m":
       return Number.isFinite(pool.gmgnVolume5m)
         ? <span className="f-num">{formatUsd(pool.gmgnVolume5m)}</span>
-        : <span className="fx-na" title="Butuh GMGN_API_KEY">—</span>;
+        : <Unread why="Butuh GMGN_API_KEY" />;
     case "gmgnSwaps5m":
       return <span className="f-num">{optionalNumber(pool.gmgnSwaps5m)}</span>;
     case "volumeTvl1h":
@@ -273,7 +476,7 @@ function cellFor(key, pool) {
     case "volumeActiveTvl1h":
       return Number.isFinite(pool.volumeActiveTvl1h)
         ? <span className="f-num">{pool.volumeActiveTvl1h.toFixed(2)}x</span>
-        : <span className="fx-na">—</span>;
+        : <Unread />;
     case "totalFees1h":
       return (
         <span className="fx-cell-stack">
@@ -286,13 +489,13 @@ function cellFor(key, pool) {
     case "avgFeePerMin":
       return Number.isFinite(pool.avgFeePerMin)
         ? <span className="f-num">{formatUsd(pool.avgFeePerMin)}</span>
-        : <span className="fx-na">—</span>;
+        : <Unread />;
     case "feeTvl1h":
       return <span className="f-num">{pool.feeTvl1h.toFixed(2)}%</span>;
     case "feeActiveTvl1h":
       return Number.isFinite(pool.feeActiveTvl1h)
         ? <span className="f-num">{pool.feeActiveTvl1h.toFixed(2)}%</span>
-        : <span className="fx-na">—</span>;
+        : <Unread />;
     case "feeVelocity":
       return <FeeVelocityCell velocity={pool.feeVelocity} />;
     case "risk":
@@ -366,18 +569,24 @@ function PoolCard({ pool, preset, selected, watched, onOpen, onToggleWatch }) {
         <HeatBadge score={pool.score} status={poolTier(pool.score, preset)} size="lg" />
         <Spark values={pool.sparkline} score={pool.score} width={96} height={32} />
       </div>
+      {/* Phase before any number: the card's job on a phone is to say whether
+          this pool is worth opening at all, and a score cannot answer that. */}
+      <div className="fx-card-phase">
+        <PhaseChip phase={pool.phase} />
+        <BurstCell pool={pool} />
+      </div>
       <dl className="fx-card-stats">
         <div>
-          <dt>1 jam</dt>
-          <dd className={`f-num ${momentumTone(pool.priceChange1h)}`}>{formatPercent(pool.priceChange1h)}</dd>
+          <dt>Fee/mnt</dt>
+          <dd><YieldCell pool={pool} /></dd>
         </div>
         <div>
           <dt>TVL</dt>
           <dd className="f-num">{formatUsd(pool.tvl)}</dd>
         </div>
         <div>
-          <dt>Fee/TVL</dt>
-          <dd className="f-num">{pool.feeTvl1h.toFixed(2)}%</dd>
+          <dt>1 jam</dt>
+          <dd className={`f-num ${momentumTone(pool.priceChange1h)}`}>{formatPercent(pool.priceChange1h)}</dd>
         </div>
         <div>
           <dt>Risiko</dt>
@@ -402,6 +611,66 @@ function PoolCard({ pool, preset, selected, watched, onOpen, onToggleWatch }) {
   );
 }
 
+const PHASE_ORDER = ["igniting", "running", "peaking", "fading", "dead"];
+
+/**
+ * The scan read as one market rather than a sorted list.
+ *
+ * A list always has a top row, so a screener that only sorts can never say
+ * "nothing is running" — it just puts the least dead pool first and lets the
+ * reader assume it found something. This strip answers that question before any
+ * row is read, and the phase counts double as filters: clicking one narrows the
+ * table to pools in that phase.
+ */
+function MarketStrip({ pools, phaseFilter, onPhaseFilter, loading }) {
+  const read = useMemo(() => readMarket(pools), [pools]);
+  const meta = MARKET_CONDITION_META[read.condition];
+
+  return (
+    <section className={`fx-market fx-market--${read.condition}`} aria-label="Kondisi pasar">
+      <div className="fx-market-verdict">
+        <span className="f-eyebrow">Kondisi pasar</span>
+        <strong>{loading ? "Membaca…" : meta.label}</strong>
+        <p>{loading ? "Menunggu pemindaian pertama." : meta.blurb}</p>
+      </div>
+
+      <div className="fx-market-phases" role="group" aria-label="Saring menurut fase">
+        {PHASE_ORDER.map((phase) => (
+          <button
+            key={phase}
+            type="button"
+            className={`fx-market-phase fx-market-phase--${PHASE_META[phase].tone} ${phaseFilter === phase ? "is-active" : ""}`}
+            aria-pressed={phaseFilter === phase}
+            title={`${PHASE_META[phase].blurb} ${PHASE_META[phase].action}`}
+            onClick={() => onPhaseFilter(phaseFilter === phase ? null : phase)}
+          >
+            <span className="f-num">{read.phases[phase]}</span>
+            <small>{PHASE_META[phase].label}</small>
+          </button>
+        ))}
+      </div>
+
+      <dl className="fx-market-rates">
+        <div>
+          <dt>Burst median</dt>
+          <dd className="f-num">
+            {Number.isFinite(read.medianBurst) ? `${read.medianBurst.toFixed(2)}x` : "—"}
+            {read.burstReadable ? <em> · {read.burstReadable} pool</em> : null}
+          </dd>
+        </div>
+        <div>
+          <dt>Volume mengalir</dt>
+          <dd className="f-num">{formatUsd(read.volume1h / 60)}<em> /menit</em></dd>
+        </div>
+        <div>
+          <dt>Fee mengalir</dt>
+          <dd className="f-num">{formatUsd(read.feePerMin)}<em> /menit</em></dd>
+        </div>
+      </dl>
+    </section>
+  );
+}
+
 export default function ScannerView({
   pools,
   loading,
@@ -418,7 +687,7 @@ export default function ScannerView({
   onRefresh,
   onResetFilters,
 }) {
-  const { search, tab, sort, filters, view, density, columns, filtersOpen } = state;
+  const { search, tab, sort, filters, view, density, columns, filtersOpen, phaseFilter } = state;
   const patch = (partial) => setState((current) => ({ ...current, ...partial }));
   // Order follows `columns` itself, not COLUMNS' fixed order — that is the
   // whole point of letting the picker reorder them. COLUMNS is only consulted
@@ -470,7 +739,7 @@ export default function ScannerView({
           >
             <Filter /> Filter
           </button>
-          <ColumnPicker visible={columns} onChange={(next) => patch({ columns: next })} />
+          <ColumnPicker visible={columns} preset={preset} onChange={(next) => patch({ columns: next })} />
           <div className="fx-segment" role="group" aria-label="Bentuk tampilan">
             <button
               type="button"
@@ -514,6 +783,13 @@ export default function ScannerView({
           </button>
         </div>
       ) : null}
+
+      <MarketStrip
+        pools={pools}
+        loading={loading}
+        phaseFilter={phaseFilter}
+        onPhaseFilter={(next) => patch({ phaseFilter: next })}
+      />
 
       <div className="fx-scanner-bar">
         <div className="fx-preset-switch" role="group" aria-label="Preset strategi">

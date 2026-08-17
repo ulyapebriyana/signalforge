@@ -1,3 +1,4 @@
+import { readMarket } from "../../../shared/marketRead.js";
 import { DEFAULT_PRESET, poolTier, resolvePresetId } from "../../../shared/scoring.js";
 
 const median = (values) => {
@@ -26,11 +27,23 @@ export function summarize(pools = [], presetId = DEFAULT_PRESET) {
     .filter((pool) => Number.isFinite(pool.priceChange1h))
     .sort((a, b) => b.priceChange1h - a.priceChange1h);
 
+  // The pools running hardest right now, which is a different list from the
+  // highest-scoring ones: score rewards fee efficiency and freshness over a
+  // whole hour, burst only asks what the most recent window did.
+  const burstOf = (pool) =>
+    Number.isFinite(pool.tokenBurst) ? pool.tokenBurst : Number.isFinite(pool.poolBurst) ? pool.poolBurst : null;
+  const burning = pools
+    .filter((pool) => burstOf(pool) !== null)
+    .sort((a, b) => burstOf(b) - burstOf(a))
+    .slice(0, 5);
+
   return {
     enriched: pools.length,
     qualified,
     hot,
     watch,
+    market: readMarket(pools),
+    burning,
     medianRisk: median(risks),
     medianScore: median(scores),
     topScore: scores.length ? Math.max(...scores) : 0,

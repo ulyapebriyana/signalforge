@@ -54,7 +54,7 @@ import PoolDrawer from "./components/PoolDrawer.jsx";
 import { ToastStack, useToasts } from "./components/Toasts.jsx";
 import OverviewView from "./views/OverviewView.jsx";
 import RulesView from "./views/RulesView.jsx";
-import ScannerView, { defaultColumnKeys } from "./views/ScannerView.jsx";
+import ScannerView, { defaultColumnKeys, defaultSort } from "./views/ScannerView.jsx";
 import SettingsView from "./views/SettingsView.jsx";
 import SignalsView from "./views/SignalsView.jsx";
 import "./app.css";
@@ -106,13 +106,15 @@ const defaultFilters = (preset) => ({
 const initialScannerState = (preset) => ({
   search: "",
   tab: "all",
-  sort: { key: "score", direction: "desc" },
+  sort: defaultSort(preset.id),
   filters: defaultFilters(preset),
   // A 18-column table is unusable on a phone; start those sessions on cards.
   view: window.innerWidth < 760 ? "grid" : "table",
   density: "compact",
-  columns: defaultColumnKeys(),
+  columns: defaultColumnKeys(preset.id),
   filtersOpen: false,
+  // Set by clicking a phase count in the market strip. Null means every phase.
+  phaseFilter: null,
 });
 
 /* --- chrome ---------------------------------------------------------------- */
@@ -521,8 +523,13 @@ export default function ForgeApp({ path }) {
     const textMatch = (pool) =>
       !needle || `${pool.pair} ${pool.name} ${pool.address}`.toLowerCase().includes(needle);
 
+    // The phase chips in the market strip are a filter, not a legend: clicking
+    // "Menyala" is how you go from "three pools are igniting" to seeing them.
+    const phaseMatch = (pool) => !scanner.phaseFilter || pool.phase === scanner.phaseFilter;
+
     const passes = (pool) =>
       textMatch(pool) &&
+      phaseMatch(pool) &&
       pool.score >= filters.minScore &&
       pool.risk <= filters.maxRisk &&
       pool.tvl >= filters.minTvl &&
@@ -584,12 +591,18 @@ export default function ForgeApp({ path }) {
 
   /* --- actions ----------------------------------------------------------- */
 
+  // Switching preset switches the whole table, not just the gate: each preset
+  // trades on a different timescale and is judged on different columns, so the
+  // view follows the play rather than carrying the last one's layout across.
   const selectPreset = useCallback((next) => {
     setPreset(next);
     localStorage.setItem("signalforge:preset", next);
     setScanner((current) => ({
       ...current,
       filters: { ...current.filters, freezeOffOnly: PRESETS[next].requireFreezeOff },
+      columns: defaultColumnKeys(next),
+      sort: defaultSort(next),
+      phaseFilter: null,
       tab: "all",
     }));
   }, []);
@@ -605,7 +618,8 @@ export default function ForgeApp({ path }) {
       filters: defaultFilters(PRESETS[preset]),
       search: "",
       tab: "all",
-      sort: { key: "score", direction: "desc" },
+      phaseFilter: null,
+      sort: defaultSort(preset),
     }));
   }, [preset]);
 

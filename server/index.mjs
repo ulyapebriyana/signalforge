@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { appendSample, pruneStore, summarizeVelocity } from "../shared/feeVelocity.js";
 import { gmgnAuthQuery, normalizeGmgnToken } from "../shared/gmgn.js";
+import { classifyPhase, PHASE_META } from "../shared/marketRead.js";
 import { normalizePool, poolTier, PRESETS, resolvePresetId } from "../shared/scoring.js";
 import { alertPresetsFor, cooldownKey, presetsCleared } from "../shared/alertRouting.js";
 import { collectSignalEntries } from "../shared/signalTransitions.js";
@@ -141,6 +142,11 @@ const markBestPoolPerToken = (pools) => {
 /**
  * Record this scan's fee/TVL for every pool and hand back the decay summary.
  * Mutates the store, so it runs once per scan inside loadPools.
+ *
+ * Phase is settled here too, because it is the one market-read field that needs
+ * both halves: the burst ratio normalizePool derived from this scan, and the fee
+ * decay only this store remembers. Attaching it on the payload keeps the browser
+ * and the Telegram alert reading the same call.
  */
 const trackFeeVelocity = (pools, sampledAt) => {
   for (const pool of pools) {
@@ -149,10 +155,13 @@ const trackFeeVelocity = (pools, sampledAt) => {
   pruneStore(feeVelocityStore, pools.map((pool) => pool.address), sampledAt);
   persistFeeVelocity();
 
-  return pools.map((pool) => ({
-    ...pool,
-    feeVelocity: summarizeVelocity(feeVelocityStore.get(pool.address), sampledAt),
-  }));
+  return pools.map((pool) => {
+    const withVelocity = {
+      ...pool,
+      feeVelocity: summarizeVelocity(feeVelocityStore.get(pool.address), sampledAt),
+    };
+    return { ...withVelocity, phase: classifyPhase(withVelocity) };
+  });
 };
 
 const fetchJson = async (url, options = {}) => {
@@ -562,15 +571,33 @@ const alertMessage = (pool, source = "manual", presets = []) => {
   const named = presets.length ? presets : [PRESETS[scannerPresetName]];
   const tier = poolTier(pool.score, named[0]);
   const labels = named.map((preset) => escapeHtml(preset.label)).join(" + ");
+  const phase = pool.phase ?? classifyPhase(pool);
+
+  // The alert arrives on a phone, and the decision it triggers is made in under
+  // a minute. So it leads with rate — phase, burst, per-minute yield on in-range
+  // capital — and keeps the stock figures (TVL, MC, holders) below them as
+  // context. That ordering is the whole difference between "something happened
+  // in this pool" and "this pool is running right now".
+  const rate = [
+    Number.isFinite(pool.tokenBurst) ? `Burst token: <b>${pool.tokenBurst.toFixed(2)}x</b> (1m vs 5m)` : null,
+    Number.isFinite(pool.poolBurst) ? `Burst pool: <b>${pool.poolBurst.toFixed(2)}x</b> (1j vs harian)` : null,
+  ].filter(Boolean);
+
+  const yieldLine = [
+    Number.isFinite(pool.feePerMinPct) ? `Fee/menit: <b>${pool.feePerMinPct.toFixed(3)}%</b> TVL` : null,
+    Number.isFinite(pool.minutesTo1Pct) ? `1% tiap ~${Math.round(pool.minutesTo1Pct)} menit` : null,
+    Number.isFinite(pool.venueShare) ? `porsi venue ~${(pool.venueShare * 100).toFixed(0)}%` : null,
+  ].filter(Boolean);
 
   return [
-    `<b>SignalForge · ${escapeHtml(tier.toUpperCase())}</b>`,
+    `<b>SignalForge · ${escapeHtml(tier.toUpperCase())}</b> · ${escapeHtml(PHASE_META[phase].label)}`,
     `Preset: <b>${labels}</b>`,
     `<b>${escapeHtml(pool.pair)}</b> · Score ${pool.score}/100 · Risk ${pool.risk}/100`,
-    `1h: <b>${pool.priceChange1h?.toFixed(1) ?? "—"}%</b>`,
-    `TVL: ${usd(pool.tvl)} · Vol 1h: ${usd(pool.volume1h)}`,
-    `Vol/TVL: ${pool.volumeTvl1h.toFixed(2)}x · Fee/TVL: ${pool.feeTvl1h.toFixed(2)}%`,
-    `MC: ${usd(pool.marketCap)} · Holder: ${pool.holders.toLocaleString("en-US")}`,
+    ...(rate.length ? [rate.join(" · ")] : []),
+    ...(yieldLine.length ? [yieldLine.join(" · ")] : []),
+    `1h: <b>${pool.priceChange1h?.toFixed(1) ?? "—"}%</b> · Vol 1j: ${usd(pool.volume1h)} · Fee/TVL: ${pool.feeTvl1h.toFixed(2)}%`,
+    `TVL: ${usd(pool.tvl)} · MC: ${usd(pool.marketCap)} · Holder: ${pool.holders.toLocaleString("en-US")}`,
+    `<i>${escapeHtml(PHASE_META[phase].action)}</i>`,
     `<a href="https://www.meteora.ag/dlmm/${pool.address}">Buka pool di Meteora</a>`,
     `<i>${source === "auto" ? "Alert otomatis" : "Dikirim manual"}; ini bukan rekomendasi finansial.</i>`,
   ].join("\n");
