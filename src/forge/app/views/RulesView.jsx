@@ -9,11 +9,19 @@ const NONE = "—";
 /**
  * Read an optional numeric gate.
  *
- * Deliberately not a truthiness check: Skolmbeagh-like sets `devBalanceMax` to
- * 0 ("if the dev holds tokens, I stay away"), and 0 is falsy — a plain `? :`
- * renders the strictest gate in the table as though it were absent.
+ * Deliberately not a truthiness check: a preset may set a gate such as
+ * `devBalanceMax` to 0, and 0 is falsy — a plain `? :` would render the
+ * strictest gate in the table as though it were absent.
  */
 const gate = (value, format) => (Number.isFinite(value) ? format(value) : NONE);
+
+/**
+ * Rows no live preset declares are dropped rather than rendered as a line of em
+ * dashes. The gate implementations stay in scoring.js, so a preset that starts
+ * declaring one brings its row back on its own — the table follows the presets
+ * that exist rather than every gate that could exist.
+ */
+const declaredRows = (rows) => rows.filter(([, read]) => Object.values(PRESETS).some((p) => read(p) !== NONE));
 
 const GATE_ROWS = [
   ["Market cap", (p) => `${formatUsd(p.marketCapMin)} – ${formatUsd(p.marketCapMax)}`],
@@ -36,10 +44,10 @@ const GATE_ROWS = [
   ["Holder minimum", (p) => gate(p.holdersMin, formatNumber)],
   ["Mint authority", (p) => (p.requireMintOff ? "Wajib mati" : NONE)],
   ["Token terverifikasi", (p) => (p.requireVerified ? "Wajib" : NONE)],
+  ["Organic score minimum", (p) => gate(p.organicScoreMin, String)],
   ["Swap per trader maksimum", (p) => gate(p.maxSwapsPerTrader, (v) => `${v}x`)],
   ["Umur pool maksimum", (p) => gate(p.ageHoursMax, (v) => (v < 1 ? `${v * 60} menit` : `${v} jam`))],
   ["Umur pool minimum", (p) => gate(p.ageHoursMin, (v) => (v >= 24 ? `${Math.round(v / 24)} hari` : `${v} jam`))],
-  ["Rubrik screening", (p) => (p.rubric ? `${p.rubric.length} metrik, tolak merah` : NONE)],
   ["Skor minimum", (p) => String(p.minScore)],
   ["Risiko maksimum", (p) => String(p.maxRisk)],
   ["Freeze authority", (p) => (p.requireFreezeOff ? "Wajib mati" : "Opsional")],
@@ -98,7 +106,7 @@ export default function RulesView({ preset, onPreset }) {
           <header className="fx-panel-head">
             <div>
               <span className="f-eyebrow">Perbandingan gate</span>
-              <h2>Tujuh preset berdampingan</h2>
+              <h2>{Object.keys(PRESETS).length === 2 ? "Dua" : Object.keys(PRESETS).length} preset berdampingan</h2>
             </div>
             <ShieldCheck />
           </header>
@@ -112,7 +120,7 @@ export default function RulesView({ preset, onPreset }) {
                 </span>
               ))}
             </div>
-            {GATE_ROWS.map(([label, read]) => (
+            {declaredRows(GATE_ROWS).map(([label, read]) => (
               <div className="fx-compare-row" key={label}>
                 <span>{label}</span>
                 {Object.values(PRESETS).map((item) => (
@@ -124,22 +132,14 @@ export default function RulesView({ preset, onPreset }) {
             ))}
           </div>
           <p className="fx-panel-note">
-            Lima dari tujuhnya rekonstruksi dari materi yang dibagikan terbuka, bukan strategi milik
-            orang tersebut. “Auzhinta-like” menyalin satu rig dan menuntut pool-nya masih membayar.
-            “Swanny-like” bukan cara membuka posisi sama sekali — itu pre-filter yang menjawab apakah
-            sebuah token layak diriset, dan menilai umur token terbalik dari Auzhinta-like: makin tua
-            makin aman. Gate rubriknya menolak merah dan menerima kuning. “VanChu-like” mengejar
-            token yang sudah lari di pool fee tinggi dan sengaja punya batas risiko paling longgar —
-            momentum ekstrem justru yang dicari. “Skolmbeagh-like” hanya hidup 30 menit pertama
-            setelah migrasi, dan gate sniper/insider/bundler-nya butuh GMGN_API_KEY: tanpa kunci itu
-            semuanya gagal-tertutup dan preset ini diam. “Slow Wallet” beda sumbernya: dia bukan
-            transkripsi checklist yang pernah dipublikasi, karena tidak ada satupun — dia sintesis
-            dari serpihan yang disebut @0xVanChu soal wallet keduanya (bid-ask di token established,
-            umur pool minimal seminggu, wajib terverifikasi), disusun sesuai arahan pengguna.
-            “Heart Attack” meminjam pemeriksaan rugpull dari Skolmbeagh-like dan pelajaran fee tier
-            dari VanChu-like, lalu menambahkan pemicu yang tidak dimiliki preset lain: volume 5 menit
-            ≥ $50K. Ambang itu ditetapkan pengguna, bukan sumbernya — @0xMrBeefman menyebut 1M.
-            Seperti Skolmbeagh-like, preset ini butuh GMGN_API_KEY dan diam tanpa kunci itu.
+            Dua preset, dua ujung yang berlawanan. “Slow Wallet” adalah preset utama aplikasi ini:
+            sintesis dari serpihan yang disebut @0xVanChu soal wallet keduanya (bid-ask di token
+            established, umur pool minimal seminggu, wajib terverifikasi), lalu diperketat sisi
+            keamanannya dan dilonggarkan sisi aktivitasnya sesuai arahan pengguna — sebuah pool dalam
+            yang aman memang tidak pernah memutar volume seperti memecoin baru. “Heart Attack” ada
+            sebagai lawannya: pemicunya volume 5 menit ≥ $40K, ambang yang ditetapkan pengguna, bukan
+            sumbernya — @0xMrBeefman menyebut 1M. Preset itu butuh GMGN_API_KEY dan diam tanpa kunci
+            itu, karena gate sniper/insider/bundler-nya gagal-tertutup.
           </p>
         </section>
 

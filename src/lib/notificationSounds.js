@@ -28,11 +28,6 @@ export const NOTIFICATION_SOUND_OPTIONS = [
  * times of day. Anything not listed falls back to DEFAULT_NOTIFICATION_SOUND.
  */
 export const PRESET_DEFAULT_SOUND = Object.freeze({
-  yanman: "fight",
-  auzhinta: "jokowi",
-  swanny: "profit",
-  vanchu: "sanggup",
-  skolmbeagh: "sodara",
   // "burem" (blurry eyes) was a placeholder claimed by no preset — fitting for
   // the one strategy explicitly built around not staring at the chart.
   slowwallet: "burem",

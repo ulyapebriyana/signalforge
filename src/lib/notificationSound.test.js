@@ -79,26 +79,16 @@ describe("position sound", () => {
 describe("per-preset notification sound", () => {
   it("gives each preset its own default alarm", () => {
     expect(resolveNotificationSoundMap(null, null, null, null)).toEqual({
-      yanman: "fight",
-      auzhinta: "jokowi",
-      swanny: "profit",
-      vanchu: "sanggup",
-      skolmbeagh: "sodara",
       slowwallet: "burem",
       heartattack: "runner",
     });
   });
 
   it("restores a saved per-preset map", () => {
-    const saved = JSON.stringify({ yanman: "profit", auzhinta: NOTIFICATION_SOUND_OFF });
+    const saved = JSON.stringify({ slowwallet: "profit", heartattack: NOTIFICATION_SOUND_OFF });
     expect(resolveNotificationSoundMap(saved, null, null, null)).toEqual({
-      yanman: "profit",
-      auzhinta: NOTIFICATION_SOUND_OFF,
-      swanny: "profit",
-      vanchu: "sanggup",
-      skolmbeagh: "sodara",
-      slowwallet: "burem",
-      heartattack: "runner",
+      slowwallet: "profit",
+      heartattack: NOTIFICATION_SOUND_OFF,
     });
   });
 
@@ -106,65 +96,40 @@ describe("per-preset notification sound", () => {
     // Someone who picked Cuan Keras keeps it on the default preset, but a preset
     // that did not exist back then inherits nothing and takes its own default.
     expect(resolveNotificationSoundMap(null, "profit", "true", null)).toEqual({
-      yanman: "profit",
-      auzhinta: "jokowi",
-      swanny: "profit",
-      vanchu: "sanggup",
-      skolmbeagh: "sodara",
-      slowwallet: "burem",
+      slowwallet: "profit",
       heartattack: "runner",
     });
   });
 
   it("carries the legacy off toggle across to every preset", () => {
     expect(resolveNotificationSoundMap(null, null, "false", null)).toEqual({
-      yanman: NOTIFICATION_SOUND_OFF,
-      auzhinta: NOTIFICATION_SOUND_OFF,
-      swanny: NOTIFICATION_SOUND_OFF,
-      vanchu: NOTIFICATION_SOUND_OFF,
-      skolmbeagh: NOTIFICATION_SOUND_OFF,
       slowwallet: NOTIFICATION_SOUND_OFF,
       heartattack: NOTIFICATION_SOUND_OFF,
     });
   });
 
   it("migrates old sound ids stored inside the map", () => {
-    const saved = JSON.stringify({ yanman: "hidupJokowi", auzhinta: "sayaAkanLawan" });
+    const saved = JSON.stringify({ slowwallet: "hidupJokowi", heartattack: "sayaAkanLawan" });
     expect(resolveNotificationSoundMap(saved, null, null, null)).toEqual({
-      yanman: "jokowi",
-      auzhinta: "fight",
-      swanny: "profit",
-      vanchu: "sanggup",
-      skolmbeagh: "sodara",
-      slowwallet: "burem",
-      heartattack: "runner",
+      slowwallet: "jokowi",
+      heartattack: "fight",
     });
   });
 
   it("falls back per preset when the map is malformed or partial", () => {
     expect(resolveNotificationSoundMap("{not json", null, null, null)).toEqual({
-      yanman: "fight",
-      auzhinta: "jokowi",
-      swanny: "profit",
-      vanchu: "sanggup",
-      skolmbeagh: "sodara",
       slowwallet: "burem",
       heartattack: "runner",
     });
-    expect(resolveNotificationSoundMap(JSON.stringify({ yanman: "bogus" }), null, null, null)).toEqual({
-      yanman: "fight",
-      auzhinta: "jokowi",
-      swanny: "profit",
-      vanchu: "sanggup",
-      skolmbeagh: "sodara",
+    expect(resolveNotificationSoundMap(JSON.stringify({ slowwallet: "bogus" }), null, null, null)).toEqual({
       slowwallet: "burem",
       heartattack: "runner",
     });
   });
 
   it("reads a single preset out of the map and tolerates gaps", () => {
-    expect(soundForPreset({ auzhinta: "profit" }, "auzhinta")).toBe("profit");
-    expect(soundForPreset({}, "auzhinta")).toBe("jokowi");
-    expect(soundForPreset(null, "yanman")).toBe("fight");
+    expect(soundForPreset({ slowwallet: "profit" }, "slowwallet")).toBe("profit");
+    expect(soundForPreset({}, "slowwallet")).toBe("burem");
+    expect(soundForPreset(null, "heartattack")).toBe("runner");
   });
 });

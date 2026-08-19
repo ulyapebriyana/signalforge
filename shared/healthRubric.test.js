@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { bandOf, gateLabel, rubricReport, rubricTally, SWANNY_GMGN_KEYS, SWANNY_RUBRIC } from "./swannyRubric.js";
+import { bandOf, gateLabel, rubricReport, rubricTally, RUBRIC_GMGN_KEYS, HEALTH_RUBRIC } from "./healthRubric.js";
 
-const spec = (key) => SWANNY_RUBRIC.find((row) => row.key === key);
+const spec = (key) => HEALTH_RUBRIC.find((row) => row.key === key);
 
 describe("Swanny rubric bands", () => {
   it("reads a ceiling metric the way the tool does", () => {
@@ -29,7 +29,7 @@ describe("Swanny rubric bands", () => {
   });
 
   it("never calls a missing value green", () => {
-    for (const row of SWANNY_RUBRIC) {
+    for (const row of HEALTH_RUBRIC) {
       expect(bandOf(null, row)).toBe("unknown");
       expect(bandOf(undefined, row)).toBe("unknown");
       expect(bandOf(Number.NaN, row)).toBe("unknown");
@@ -37,7 +37,7 @@ describe("Swanny rubric bands", () => {
   });
 
   it("names the rows that cannot be filled without a GMGN key", () => {
-    expect(SWANNY_GMGN_KEYS).toEqual([
+    expect(RUBRIC_GMGN_KEYS).toEqual([
       "gmgnSniperPct",
       "gmgnSniperWallets",
       "gmgnInsidersPct",
@@ -58,7 +58,7 @@ describe("Swanny rubric bands", () => {
   });
 
   it("keeps every gate label free of negations", () => {
-    for (const row of SWANNY_RUBRIC) {
+    for (const row of HEALTH_RUBRIC) {
       expect(gateLabel(row)).not.toMatch(/tidak|bukan|non-/i);
       expect(gateLabel(row)).toMatch(/[≥≤]/);
     }
@@ -67,11 +67,11 @@ describe("Swanny rubric bands", () => {
   it("reports every row and tallies the bands", () => {
     const pool = { rugCheckScore: 8, organicScore: 91, marketCap: 900_000, tokenAgeHours: 300 };
     const report = rubricReport(pool);
-    expect(report).toHaveLength(SWANNY_RUBRIC.length);
+    expect(report).toHaveLength(HEALTH_RUBRIC.length);
     expect(report[0]).toMatchObject({ key: "rugCheckScore", value: 8, band: "green" });
 
     const tally = rubricTally(pool);
     expect(tally.green).toBe(4);
-    expect(tally.unknown).toBe(SWANNY_RUBRIC.length - 4);
+    expect(tally.unknown).toBe(HEALTH_RUBRIC.length - 4);
   });
 });

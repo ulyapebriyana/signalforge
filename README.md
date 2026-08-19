@@ -7,17 +7,12 @@ tidak pernah menandatanganinya. Server menyusun dan meneruskan, wallet Anda yang
 dan setiap transaksi butuh klik Anda sendiri. Tidak ada private key di server, dan itu bukan
 kebetulan: lihat [Menutup posisi](#menutup-posisi-zap-out).
 
-## Dua antarmuka, satu server
-
-Keduanya memakai API dan logika skor yang sama.
+## Antarmuka
 
 | Rute | Antarmuka |
 | --- | --- |
 | `/` | Landing page dengan hero 3D (three.js) dan ringkasan data langsung |
 | `/app` | Dashboard **Forge**: ringkasan, scanner, posisi LP, riwayat sinyal, aturan, pengaturan |
-| `/classic` | Antarmuka versi pertama, tidak diubah sama sekali |
-
-Pemilihan bundel terjadi di `src/main.jsx` sebelum salah satu stylesheet dimuat, jadi CSS kedua antarmuka tidak pernah berada dalam satu dokumen. `src/App.jsx` dan `src/styles.css` milik antarmuka klasik tidak disentuh.
 
 ### Yang ada di dashboard Forge
 
@@ -34,13 +29,18 @@ Pemilihan bundel terjadi di `src/main.jsx` sebelum salah satu stylesheet dimuat,
 
 ## Yang sudah berfungsi
 
-- Scan dua halaman 250 pool dari API resmi Meteora setiap 30 detik: satu diurutkan
-  `volume_1h:desc`, satu lagi `fee_tvl_ratio_1h:desc`. Halaman kedua yang membuat pool baru migrasi
-  ikut terlihat — urutan volume kepalanya selalu pool tua dan besar.
-- Ambil candle 1 jam untuk maksimal 72 kandidat secara paralel (48 dari halaman volume, 24 dari
-  halaman fee yang belum terbawa).
-- Preset **Yanman-like**, **Auzhinta-like**, **Swanny-like**, **VanChu-like**,
-  **Skolmbeagh-like**, **Slow Wallet**, dan **Heart Attack** dengan aturan yang transparan.
+- Scan tiga halaman 250 pool dari API resmi Meteora setiap 30 detik: `volume_1h:desc`,
+  `fee_tvl_ratio_1h:desc`, dan `tvl:desc`. Satu urutan tidak bisa melihat seluruh pasar — kepala
+  urutan volume selalu pool tua dan besar, urutan fee memunculkan pool yang baru migrasi, dan
+  urutan TVL adalah satu-satunya yang menanyakan kedalaman secara langsung, yaitu properti yang
+  jadi dasar preset Slow Wallet.
+- Ambil candle 1 jam untuk maksimal 96 kandidat secara paralel (48 dari halaman volume, 24 dari
+  halaman fee, 24 dari halaman TVL yang belum terbawa).
+- Plafon market cap pipeline **$500M** (sebelumnya $15M). Setiap pair yang benar-benar established
+  di Solana ada di atas $15M, jadi plafon lama menjamin Slow Wallet tidak pernah bisa melihat jenis
+  token yang justru jadi alasan preset itu ditulis.
+- Dua preset: **Slow Wallet** (gate utama, aman dan pelan) dan **Heart Attack** (lawannya) dengan
+  aturan yang transparan.
 - Score 0–100: momentum 25, fee efficiency 25, volume quality 20, security 20, freshness 10.
 - **Kecepatan fee**: fee/TVL direkam tiap scan, lalu dibandingkan dengan puncaknya dalam jendela 45 menit.
 - **Baca pasar** (`shared/marketRead.js`): angka laju, bukan angka stok. Fase pool (Menyala /
@@ -94,8 +94,8 @@ berulang.
 `SCANNER_PRESET` kini hanya menentukan preset untuk deteksi status di UI (bunyi dan lonceng),
 bukan alert. `ALERT_MIN_SCORE`, `ALERT_MAX_RISK`, dan `ALERT_COOLDOWN_MINUTES` sudah tidak
 dipakai — satu ambang global akan membungkam preset yang ladder-nya lebih rendah, misalnya
-`ALERT_MIN_SCORE=65` yang mematikan Auzhinta-like sepenuhnya. Server memperingatkan di log kalau
-ketiganya masih ada di `.env`.
+`ALERT_MIN_SCORE=65` yang mematikan Slow Wallet sepenuhnya (ladder-nya 38/30). Server
+memperingatkan di log kalau ketiganya masih ada di `.env`.
 
 Token Telegram hanya dibaca oleh server. Browser tidak pernah menerima nilainya.
 
@@ -171,100 +171,46 @@ Rute swap memakai Jupiter.
 
 ## Arti preset
 
-| Aturan | Heart Attack | Slow Wallet | VanChu-like | Skolmbeagh-like | Yanman-like | Auzhinta-like | Swanny-like |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Market cap | **$150K**–$15M | $2M–$15M | $300K–$15M | $50K–$200K | $100K–$10M | $400K–$15M | $100K–$15M |
-| TVL minimum | — | $100K | $15K | $1K | $500 | $35K | $500 |
-| Momentum 1h | 20–2000% | −15–20% | 15–900% | 0–2000% | 20–200% | 0–400% | bebas |
-| Volume 1h minimum | — | $20K | $250K | $20K | $5K | $10K | $1K |
-| **Volume 5m minimum** | **$50K** | — | — | — | — | — | — |
-| Vol/TVL minimum | — | 0.15x | 3x | 1x | 0.5x | 0.3x | — |
-| Fee/TVL minimum | — | 0.2% | 2% | 2% | 0.5% | 1.0% | — |
-| Bin step | — | — | — | — | — | 50–400 | — |
-| Base fee minimum | — | — | 2% | — | — | 2% | — |
-| Mode fee | — | — | — | — | — | Base + quote | — |
-| Cluster terbesar maksimum | — | — | — | — | — | 40% | — |
-| Top-10 holder | ≤35% | — | — | 10–35% | — | ≤40% | rubrik |
-| Saldo dev maksimum | ≤10% | — | — | 0% | — | 1% | rubrik |
-| Sniper / Insider | ≤15% masing-masing | — | — | ≤15% masing-masing | — | — | rubrik |
-| Bundler maksimum | **≤50%** | — | — | ≤15% | — | — | rubrik |
-| Holder minimum | — | 1.000 | — | — | — | 500 | — |
-| Mint authority | — | Wajib off | — | — | — | Wajib off | Wajib off |
-| Token terverifikasi | — | **Wajib** | — | — | — | — | — |
-| Umur pool maksimum | — | — | — | **30 menit** | — | 72 jam | — |
-| Umur pool minimum | — | **7 hari** | — | — | — | — | — |
-| Umur **token** minimum | — | — | — | — | — | — | rubrik (≥24 jam) |
-| Rubrik screening | — | — | — | — | — | — | 12 metrik, tolak merah |
-| Skor minimum | 65 | 35 | 65 | 55 | 65 | 48 | 50 |
-| Risiko maksimum | **95** | **45** | 88 | 92 | 72 | 78 | 100 |
-| Ambang Hot / Watch | 85 / 70 | 55 / 40 | 82 / 68 | 70 / 55 | 80 / 65 | 60 / 48 | 80 / 65 |
-| Freeze authority | Wajib off | Wajib off | Wajib off | Wajib off | Wajib off | Wajib off | Wajib off |
-| Cooldown alert | **3 menit** | 60 menit | 5 menit | 5 menit | 15 menit | 10 menit | 20 menit |
+| Aturan | Slow Wallet | Heart Attack |
+| --- | ---: | ---: |
+| Market cap | **$2M–$500M** | $100K–$15M |
+| TVL minimum | **$50K** | — |
+| Momentum 1h | −15–20% | 20–2000% |
+| Volume 1h minimum | $5K | — |
+| Volume 5m minimum | — | **$40K** |
+| Vol/TVL minimum | 0.05x | — |
+| Fee/TVL minimum | **0.03%** | — |
+| Top-10 holder maksimum | **≤40%** | ≤35% |
+| Saldo dev maksimum | **≤5%** | ≤10% |
+| Organic score minimum | **≥70** | — |
+| Sniper / Insider | — | ≤15% masing-masing |
+| Bundler maksimum | — | ≤50% |
+| Holder minimum | 1.000 | — |
+| Mint authority | Wajib off | — |
+| Token terverifikasi | **Wajib** | — |
+| Umur pool minimum | **7 hari** | — |
+| Skor minimum | 26 | 65 |
+| Risiko maksimum | **45** | **95** |
+| Ambang Hot / Watch | 38 / 30 | 85 / 70 |
+| Freeze authority | Wajib off | Wajib off |
+| Cooldown alert | 60 menit | **3 menit** |
 
-Lima dari tujuhnya rekonstruksi dari materi yang pernah dibagikan terbuka, bukan klaim bahwa ini
-strategi persis milik orang tersebut. Dua sisanya punya sumber berbeda dan dijelaskan tersendiri:
-[Slow Wallet](#slow-wallet--yang-tidak-dikonstruksi-dari-postingan) dan
-[Heart Attack](#heart-attack--pemicu-volume-5-menit).
+Keduanya rekonstruksi dari materi yang pernah dibagikan terbuka, bukan klaim bahwa ini strategi
+persis milik orang tersebut. Masing-masing dijelaskan tersendiri:
+[Slow Wallet](#slow-wallet--gate-utama) dan [Heart Attack](#heart-attack--pemicu-volume-5-menit).
 
-**Yanman-like** agresif dan dapat memasukkan pool dengan likuiditas sangat tipis.
+Angka yang **ditebalkan** adalah yang membedakan kedua preset paling tajam. Keduanya sengaja
+berlawanan di hampir setiap baris: satu menuntut token terverifikasi berumur seminggu dengan
+risiko ≤45 dan menunggu sejam sebelum ping berikutnya, satu lagi tidak menuntut verifikasi sama
+sekali, menerima risiko sampai 95, dan ping tiap 3 menit.
 
-**Auzhinta-like** menyalin checklist yang ditulis terbuka di artikel “Cara Gue LP di Meteora”.
-Sebagian besar angkanya disebut langsung di sana, bukan hasil terkaan: MCAP ≥ $400K, holder ≥ 500,
-cluster Bubblemaps 40%+ ditolak, dev wallet idealnya 0%, NoMint wajib, base fee 2–3%, dan range
-min price −70% s/d −80%.
+### Panel rubrik kesehatan
 
-Tiga hal yang membuatnya berbeda dari preset lain:
-
-- **Fee harus base + quote, bukan quote saja.** Alasannya di artikel: “karna kita cari rebound pas
-  dia turun jadi pas rebound pnl kedorong sama fee kita yang belum di claim”. Pool quote-only
-  kehilangan dorongan itu. Terbaca dari `pool_config.collect_fee_mode`.
-- **Bin step menentukan kedalaman, bukan diterima/ditolak.** Artikel memberi empat rig: BS 50 →
-  −50/−60%, BS 80 → −60/−70%, BS 100 → −70/−80% (“paling umum dipake buat meme coin”), BS 400+ →
-  −80% ke atas. Gate-nya karena itu 50–400, bukan satu angka.
-- **Ambang Hot/Watch-nya sendiri.** Model 100 poin dibangun untuk pool yang tidak pernah dia
-  sentuh: memecoin tanpa verifikasi kehilangan poin verifikasi dan jarang menahan volume/TVL 2x,
-  jadi kandidat kuat pun mendarat di kisaran 50-an. Memakai tangga 65/80 akan mematikan semua
-  alert-nya.
-
-`Swap per trader` adalah proksi kasar untuk langkah cek wash trade; median live-nya sekitar 1,7x,
-jadi batas 6x hanya menjaring kasus ekstrem.
-
-### Cluster wallet (pengecekan Bubblemaps)
-
-Artikel memberi porsi terbesar ke langkah ini, lengkap dengan contoh kategori aman (cluster terbesar
-3,63%) dan berbahaya (satu cluster 371 wallet memegang 47,95%). API publik Bubblemaps sendiri sudah
-mati — endpoint legacy-nya mengembalikan 404/500 untuk semua token, termasuk BONK dan WIF — jadi
-datanya diambil dari `insiderNetworks` di report penuh RugCheck: kelompok wallet yang terhubung satu
-sama lain lewat transfer, konsep yang sama dengan garis koneksi di Bubblemaps.
-
-Yang dihitung: `clusterLargestPct` (porsi supply di cluster terbesar), `clusterLargestWallets`,
-`clusterCount`, dan `clusteredSupplyPct`. Gate-nya memakai angka artikel: cluster terbesar ≤ 40%.
-
-**Ini menangkap yang tidak bisa dilihat top-10.** Contoh dari data live: Chonketha punya top-10
-22,3% dan dev balance 0% — dua-duanya hijau — tapi satu cluster 12 wallet memegang **69,6%** supply.
-SPCX serupa: cluster 75,9% dengan top-10 hanya 35,7%. Keduanya lolos gate top-10 dan hanya tertahan
-oleh gate cluster. Batas top-10 tetap dipertahankan karena kebalikannya juga terjadi: whale besar
-yang tidak saling terhubung tidak akan muncul sebagai cluster.
-
-Graf yang tidak terbaca dilaporkan `null` dan menggagalkan gate — Bubblemaps yang tidak dibuka bukan
-berarti bersih. Daftar cluster kosong adalah jawaban sungguhan dan bernilai 0, bukan null.
-
-Yang **tidak** dijadikan gate meski disebut di artikel: LP burnt 100%, karena pool yang benar-benar
-dia garap (BUTTHOLE) tercatat LP terkunci 0% — “idealnya” di artikel jelas aspirasi, bukan syarat.
-Jalur “Top Performance / Trending” untuk token yang lebih established juga sengaja tidak dicakup:
-semua posisi yang pernah dia posting berumur di bawah 48 jam.
-
-Snipers, insiders, bundler, dan Dex Paid dari checklist artikel itu kini **tersedia** lewat GMGN dan
-dipakai oleh preset Swanny-like di bawah, tapi sengaja tidak ditambahkan ke Auzhinta-like: artikelnya
-menyebut angka-angka itu sebagai pengecekan manual di GMGN, tanpa ambang yang bisa dikutip.
-
-### Pool terbaik per token
-
-Artikel menyuruh memilih “yang volume dan fees generated-nya paling gede — bukan yang fee rate-nya
-paling tinggi” kalau satu token punya beberapa pool. Meteora rutin melisting token yang sama di
-beberapa bin step, dan scanner menampilkannya sebagai baris terpisah. Server menandai baris yang
-kalah lewat `richerSiblingPool`, dan panel detail menunjukkan pool mana yang seharusnya diambil.
-Ini dilaporkan, bukan digate — pool yang lebih lemah itu pilihan yang lebih buruk, bukan berbahaya.
+Di luar gate preset, panel detail pool menampilkan **rubrik 12 metrik** (`shared/healthRubric.js`)
+yang dicat hijau / kuning / merah, ditranskripsi dari setelan ambang bawaan DLMM Checker milik
+@SwannyDeFi. Rubrik ini bukan gate — dia tampil untuk preset apa pun, karena warnanya menjawab
+"token ini layak diriset atau tidak" terlepas dari strategi yang sedang dijalankan. Beberapa
+barisnya butuh `GMGN_API_KEY`; tanpa kunci itu barisnya terbaca abu-abu, bukan hijau.
 
 ## Baca pasar
 
@@ -356,140 +302,69 @@ dan alasan kedua angka itu ditampilkan berdampingan.
 Riwayatnya bertahan melewati restart, jadi posisi yang sedang berjalan tidak kehilangan jejak
 peluruhannya.
 
-## Swanny-like — pre-filter, bukan cara membuka posisi
+## Slow Wallet — gate utama
 
-Dua preset lain menjelaskan **cara masuk pool**. Yang ini hanya menjawab satu pertanyaan:
-apakah token ini layak diriset sama sekali. Sumbernya rubrik ambang di DLMM Checker
-(`dlmmchecker.vercel.app`), tool yang penulisnya pakai sebelum meneliti token apa pun.
+Dimodelkan dari wallet *kedua* @0xVanChu — yang dia bilang "takes noticeably less time and nerves"
+dibanding wallet aksinya: "Bid-Ask on more proven tokens, without the constant race for new
+shitcoins and without the need to stare at the chart."
 
-Rubriknya mewarnai 12 metrik hijau / kuning / merah, bukan lolos / gagal. Bentuk itu
-dipertahankan: **gate menolak merah dan menerima kuning**, sesuai cara tool-nya dibaca.
-Warnanya tampil di panel “Rubrik screening” pada detail pool untuk **semua** preset, karena
-pertanyaan “layak diriset atau tidak” tidak bergantung pada play yang kamu jalankan.
+Ini **bukan** transkripsi checklist yang pernah dipublikasikan — dia tidak pernah menulis satu pun
+untuk wallet ini, cuma serpihan. Satu posisi konkret yang dia bagikan: $TOAD, Bid-Ask, range −42%,
+deposit 20.000 USDC, return ~3% selama 11 jam, harga bertahan dalam pita 15% sepanjang posisi
+terbuka. Angka di tabel adalah sintesis di atas serpihan itu, atas permintaan langsung pengguna.
 
-| Metrik | 🟢 | 🟡 | Sumber |
-| --- | ---: | ---: | --- |
-| RugCheck score | ≤ 14 | ≤ 25 | RugCheck |
-| Organic score | ≥ 80 | ≥ 50 | Jupiter |
-| Market cap | ≥ $500K | ≥ $100K | Meteora |
-| Umur token | ≥ 168 jam | ≥ 24 jam | Meteora discovery |
-| Top-10 holder | ≤ 15% | ≤ 30% | Meteora discovery |
-| Saldo dev | ≤ 5% | ≤ 15% | Meteora discovery |
-| Sniper % | ≤ 2% | ≤ 5% | GMGN |
-| Jumlah sniper | ≤ 5 | ≤ 15 | GMGN |
-| Insider | ≤ 5% | ≤ 12% | GMGN |
-| Bundler | ≤ 5% | ≤ 12% | GMGN |
-| Phishing | ≤ 2% | ≤ 8% | GMGN |
-| Total fee | ≥ 100 SOL | ≥ 20 SOL | GMGN |
+### Retune 2026-08-19
 
-**Umur token dinilai terbalik dari Auzhinta-like.** Di sini makin tua makin aman (≥7 hari
-hijau); di sana pool makin segar makin baik (≤72 jam). Dua metrik berbeda — umur *token* vs
-umur *pool* — dan keduanya memang berlawanan arah. `tokenAgeHours` ditambahkan berdampingan
-dengan `ageHours`, bukan menggantikannya.
+Preset ini dijadikan gate utama aplikasi dan dioptimalkan untuk pair yang aman. Retune-nya diukur,
+bukan ditebak.
 
-Dua baris dari tool aslinya sengaja tidak dipakai: “GMGN Top 10 Holders” menduplikasi
-“Top Holders” dari sumber kedua, dan “GMGN Total Fees” ambangnya (1 / 0.2) tidak cocok dengan
-satuan yang dikembalikan API.
+**Diagnosisnya.** 9.563 baris scan-log selama ~2 jam menunjukkan preset ini lolos **16 kali
+(0,17%)**, dan setiap gate yang mengikat adalah gate *aktivitas*, bukan keamanan:
 
-Presetnya **ketat**. Pada populasi 48 pool teratas by volume, median phishing 37,5% dan median
-bundler 38,8% — jauh di atas batas merah 8% dan 12%. Nol pool lolos itu jawaban yang wajar,
-bukan tanda rusak: pemiliknya sendiri bilang sebagian hari berarti nol posisi.
+| Gate gagal | % evaluasi |
+| --- | ---: |
+| Vol 1h ≥ $20.000 | 82,2% |
+| Fee/TVL ≥ 0,2% | 78,9% |
+| Vol/TVL ≥ 0,15x | 70,4% |
+| TVL ≥ $100.000 | 55,8% |
+| Holder ≥ 1.000 | 8,6% |
 
-### GMGN
+Sisi keamanannya justru hampir tidak pernah jadi penghalang: 27 dari 80 pool lolos *semua* gate
+keamanan. Bentuk seperti itu adalah preset yang meminta pool dalam, terverifikasi, berumur seminggu
+untuk berputar seperti memecoin baru — sesuatu yang tidak pernah dilakukannya.
 
-Enam baris di atas butuh `GMGN_API_KEY`. Tanpa key, baris itu bernilai null, ditandai abu-abu di
-panel rubrik, dan gagal-tertutup di gate — jadi Swanny-like praktis tidak akan meloloskan apa pun.
-Preset lain tidak terpengaruh sama sekali.
+**Perubahannya**, dan sengaja berjalan ke dua arah sekaligus:
 
-Key didapat di <https://gmgn.ai/ai>: buat key pair Ed25519 lokal, upload **public**-nya, aktifkan
-**Reading** saja. Trading butuh 2FA plus tanda tangan private key dan tidak pernah dipakai proyek
-ini. Autentikasinya header `X-APIKEY` plus `timestamp` dan `client_id` di query; server GMGN
-menoleransi selisih jam ±5 detik. Batas lajunya longgar (~3 panggilan/detik terukur), tapi
-permintaan tetap diantre satu jalur seperti RugCheck.
+- **Lantai aktivitas turun** ke angka yang benar-benar dibayar pool tenang: `volume1hMin` $20K → $5K,
+  `volumeTvlMin` 0.15 → 0.05, `feeTvlMin` 0.2% → 0.03%, `tvlMin` $100K → $50K. Ambang 0,2%/jam
+  di-back-compute dari trade $TOAD (~0,27%/jam) dan bukan laju yang bisa dipertahankan pair yang
+  dalam dan terverifikasi — di dua scan live terpisah, pool aman terbaik hanya mencapai 0,183%/jam
+  sementara mediannya ~0,02%. 0,03%/jam ≈ 0,7% per hari terhadap TVL.
+- **Plafon market cap naik** $15M → $500M, mengikuti pipeline. Ini penyebab struktural kenapa preset
+  yang ditulis untuk "proven token" tidak pernah bisa melihat satu pun.
+- **Tiga gate keamanan baru**, dibayar oleh pelonggaran di atas — masing-masing di field yang
+  terisi 40 dari 40 pool pada scan live, karena gate gagal-tertutup di atas sumber yang sering
+  kosong akan membuat preset berkedip tanpa alasan yang ada hubungannya dengan pool:
+  - `top10HoldersMax: 40` — satu-satunya gate yang menolak sesuatu yang lolos gate lama: token $240M,
+    terverifikasi, mint dan freeze mati, 1.000+ holder, pool berumur seminggu — dengan **62,8% supply
+    di sepuluh dompet**. Asal-usul dompetnya tidak relevan; pemegang 63% bisa menghabisi posisi.
+  - `devBalanceMax: 5` — lebih ketat dari Heart Attack (10%), yang menggate token berumur menit di
+    mana saldo dev masih wajar. Token proven berumur seminggu punya waktu seminggu untuk
+    mendistribusikannya dan tidak melakukannya.
+  - `organicScoreMin: 70` — organic score Jupiter, penjaga termurah terhadap pool yang volumenya
+    adalah market maker-nya sendiri. Median pool aman = 86,6, jadi 70 adalah lantai keaslian.
+- **Ladder turun** 35/55/40/28 → 26/38/30/24. Model 100 poin menghadiahkan momentum dan kesegaran,
+  dan preset ini menggate keduanya, jadi pool yang disukainya mencetak jauh di bawah ladder bersama.
+  Tiga pool yang lolos semua gate pada scan live mencetak 39, 30, dan 27 — lantai 35 akan
+  membungkam dua dari tiganya.
 
-## VanChu-like dan Skolmbeagh-like — dua preset paling agresif
+**Hasilnya**, diverifikasi live di pipeline yang sudah dilebarkan: dari 93–96 pool, 2–3 lolos, semuanya
+di **risk score 4**. Bandingkan dengan 0 sebelum retune.
 
-Keduanya direkonstruksi dari postingan publik di X pada Agustus 2026, dan keduanya sengaja punya
-batas risiko paling longgar di seluruh aplikasi. Itu bukan kelalaian: pool yang mereka cari
-mengumpulkan poin risiko justru karena sifat yang sedang diburu — token baru, belum terverifikasi,
-momentum ekstrem. Batas risiko seketat preset lain akan mematikan keduanya.
-
-### VanChu-like
-
-Modelnya satu hal saja: token yang **sudah** lari, di pool dengan fee setinggi mungkin, ditahan
-menit sampai jam — bukan hari. Postingannya menyebut range (−10%/−15% short spot, −42% medium,
-−59%/−65% slow bid-ask) tapi tidak pernah menyebut bin step, jadi preset ini **tidak** mendeklarasi
-gate bin step sama sekali. Mengarang satu angka di situ akan memalsukan sumbernya.
-
-Yang disebut terang-terangan adalah kesalahan yang membuatnya rugi 4 SOL: token dengan volume
-~$30K per menit, dimasuki lewat pool fee 1% yang sudah ada alih-alih membuat pool 3%, lalu terdorong
-keluar range oleh satu red candle. Kesimpulannya sendiri: pool 3% pada volume itu “would have
-compensated for around 90% of the losses”. Kebalikannya ada di postingan lain: +8 SOL dalam tiga
-menit di pool fee 10%. Karena itu **fee tier adalah gate yang menentukan, bukan pilihan tokennya**.
-
-`baseFeeMin` diisi 2, bukan 3 seperti pelajaran itu, karena 2% adalah tier terendah yang pernah dia
-tulis dimasuki dengan sengaja (posisi $LUNA berpindah 5% → 2% saat mereda). Gate tidak boleh menolak
-rig yang sumbernya tercatat memakainya.
-
-### Skolmbeagh-like
-
-Ini menyalin **filter pemilihan token** untuk migrasi baru — checklist yang dijalankan dalam 20–30
-detik sebelum likuiditas dikirim: umur < 30 menit, MC $50K–$200K, top-10 holder 10–35%, dev 0%,
-sniper/insider/bundler masing-masing < 15%.
-
-Thread aslinya adalah strategi DAMM v2, sedangkan scanner ini hanya membaca pool DLMM
-(`dlmm.datapi.meteora.ag`). Yang diambil karena itu hanya separuh pemilihan token, yang memang
-ditulis sebagai checklist bernomor dan berbicara tentang token mana yang layak, bukan venue mana
-yang dipakai. Separuh konstruksi posisinya — fee tier 6%, fee scheduler eksponensial, keluar di
-menit ke-45 — adalah setelan pool DAMM v2 yang tidak bisa dilihat screener DLMM, dan sengaja tidak
-dipalsukan ke dalam angka-angka ini. Thread-nya juga tertanggal Juni 2025 dan penulisnya sejak itu
-lebih banyak di DLMM: perlakukan angkanya sebagai transkripsi, bukan sebagai rekomendasi terkini.
-
-**Preset ini akan tetap jarang berbunyi, dan bukan karena angkanya salah** — jendela 30 menit pada
-pita market cap yang sempit memang membuat sebagian besar pemindaian tidak memuat satu pun pool yang
-memenuhi syarat. Yang berubah pada 2026-08-13 adalah pool seperti itu kini bisa sampai ke penilaian:
-
-| Penghalang | Status |
-| --- | --- |
-| Umur | **Sudah dibuka.** Dulu `loadPools` hanya mengambil pool teratas menurut volume 1 jam, dan yang termuda pun berumur 1,18 jam. Sekarang ada halaman kedua `sort_by=fee_tvl_ratio_1h:desc`, tempat pool baru migrasi berada. Pada pemindaian verifikasi, pool berumur 19 menit lolos gate umur dan ditolak karena market cap serta momentum — kriteria strategi itu sendiri, bukan batas pipeline. |
-| Market cap | Masih tipis: hanya 1 dari 48 kandidat halaman volume yang di bawah $200K. Lantai $50K di hulu bukan penghalang bagi preset ini, karena `marketCapMin`-nya juga $50K. |
-| GMGN | Ketiga gate sniper/insider/bundler gagal-tertutup, dan API-nya hanya terisi 0–6 dari ~35 token lintas percobaan lokal. `GMGN_API_KEY` terpasang di VPS. |
-
-Preset ini di-commit sebagai transkripsi yang setia, bukan dilonggarkan supaya kelihatan berbunyi —
-melonggarkannya berarti menggambarkan strategi yang tidak pernah dipostingkan siapa pun.
-
-## Slow Wallet — yang tidak dikonstruksi dari postingan
-
-Lima preset di atas semuanya transkripsi dari checklist atau artikel yang pernah dipublikasikan
-terbuka. Slow Wallet beda posisinya, dan itu disebutkan terang-terangan supaya tidak disamakan
-dengan lima yang lain: @0xVanChu tidak pernah mempublikasikan checklist untuk wallet keduanya ini —
-cuma serpihan. Yang dia sebutkan:
-
-- "Slow Wallet takes noticeably less time and nerves" dibanding wallet aksinya (yang jadi dasar
-  preset VanChu-like) — "Bid-Ask on more proven tokens, without the constant race for new shitcoins
-  and without the need to stare at the chart."
-- Satu posisi konkret yang dia bagikan: $TOAD, strategi Bid-Ask, range −42%, deposit 20.000 USDC,
-  return ~3% selama 11 jam, dan harga bertahan dalam pita 15% sepanjang posisi terbuka.
-
-Angka-angka di tabel adalah sintesis saya sendiri di atas serpihan itu, disusun atas permintaan
-langsung pengguna ("menurutmu kayak gimana metode screeningnya") — bukan hasil terka-terka acak,
-tapi juga bukan klaim bahwa ini transkripsi persis dari sesuatu yang pernah dia tulis.
-
-Tiga hal yang membedakannya dari preset lain:
-
-- **Dua gate baru di mesin scoring**: `ageHoursMin` (kebalikan dari `ageHoursMax` yang dipakai
-  Skolmbeagh-like — pool harus *sudah lewat* 7 hari pertamanya, bukan justru masih di dalamnya) dan
-  `requireVerified` (satu-satunya preset yang mewajibkan token terverifikasi). Keduanya gagal-tertutup
-  seperti gate opsional lain: umur tidak diketahui atau status verifikasi tidak diketahui dianggap
-  gagal, bukan diloloskan.
-- **Batas risiko paling ketat di seluruh aplikasi (45)**, kebalikan penuh dari VanChu-like (88) dan
-  Skolmbeagh-like (92). Itu memang intinya: Slow Wallet ada karena wallet aksinya "costs adrenaline
-  and stress", jadi pool yang lolos gate ini seharusnya sudah genuinely aman, bukan risiko yang
-  ditoleransi demi cuan cepat.
-- **Skor minimumnya rendah (35) untuk alasan yang sama seperti Auzhinta-like**: model 100 poin
-  menghadiahkan momentum tinggi dan pool yang masih segar, dan preset ini sengaja membatasi momentum
-  di 20% serta menuntut pool berumur ≥7 hari (yang paling banter dapat 5 dari 10 poin freshness).
-  Pool yang genuinely lolos gate ini biasanya mendarat di kisaran 35–55, bukan 65+.
+RugCheck score sengaja **tidak** dijadikan gate meski terlihat cocok: dia kosong pada 2 dari 40 pool,
+dan gate gagal-tertutup di atas upstream yang sering rate-limited akan membuat preset ini menyala-mati
+karena alasan yang tidak ada hubungannya dengan kualitas pool. Nilainya tetap tampil di tabel dan
+di rubrik kesehatan.
 
 ## Heart Attack — pemicu volume 5 menit
 
@@ -508,9 +383,7 @@ Yang benar-benar disebut sumbernya:
 - **Pemicunya lonjakan volume lima menit.** Algoritma @0xMrBeefman dibuka dengan *"say a runner
   launches and on the 5 minute I see 1M+ in trading volume."*
 - **Stage 1 selalu pemeriksaan rugpull** sebelum likuiditas dikirim — *"quickly going through
-  holders, distribution."* Itulah gate dev, sniper, insider, dan top-10 di tabel, dipinjam utuh dari
-  Skolmbeagh-like yang menuliskan checklist yang sama dalam angka. Bundler dipinjam dari sana juga,
-  tapi ambangnya sejak itu dilonggarkan (lihat bawah).
+  holders, distribution."* Itulah gate dev, sniper, insider, dan top-10 di tabel.
 - **Penilaian LP Army Academy sendiri**: *"extremely high risk and more like gambling. Not
   recommended to attempt."*
 
@@ -519,35 +392,31 @@ Yang benar-benar disebut sumbernya:
 Ambang-ambang di tabel di atas itu keputusan pengguna, bukan sumbernya, dan masing-masing dicatat
 begitu di komentar kode supaya tidak terbaca sebagai transkripsi:
 
-- **Volume 5 menit** $50K, bukan 1M yang disebut @0xMrBeefman. $50K dalam lima menit setara
-  $600K/jam bila bertahan — sudah benar-benar runner — sedangkan candle lima menit bervolume 1M
+- **Volume 5 menit** $40K, bukan 1M yang disebut @0xMrBeefman. $40K dalam lima menit setara
+  $480K/jam bila bertahan — sudah benar-benar runner — sedangkan candle lima menit bervolume 1M
   cukup langka sampai presetnya praktis tidak akan pernah berbunyi.
-- **Market cap** diturunkan dari $300K ke **$150K**, sekarang di dalam pita $50K–$200K
-  Skolmbeagh-like, bukan di atasnya.
+- **Market cap** diturunkan bertahap dari $300K ke $150K, lalu ke **$100K**.
 - **TVL minimum, volume 1 jam, Vol/TVL, dan Fee/TVL** dihapus total. TVL sempat berlantai $10K,
   volume 1 jam sempat diturunkan bertahap dari $200K ke $50K lalu $25K, Vol/TVL sempat 1x
   (turun dari 3x), Fee/TVL sempat 5% — pengguna memutuskan gate lonjakan 5 menit di atas sudah
   cukup menangani arus, dan menghapus keempatnya alih-alih melonggarkannya lagi.
-- **Base fee minimum** juga dihapus total, sempat 2% — pelajaran fee tier VanChu-like tidak lagi
-  digerbang di sini.
+- **Base fee minimum** juga dihapus total, sempat 2% — pelajaran fee tier tidak lagi digerbang
+  di sini.
 - **Saldo dev maksimum** dilonggarkan dari 0% ke **10%** — token dengan sisa saldo dev kecil tidak
   lagi otomatis gugur.
-- **Bundler** dilonggarkan dari 15% (angka Skolmbeagh-like) ke **50%**. Ini pelemahan nyata pada
+- **Bundler** dilonggarkan dari 15% ke **50%**. Ini pelemahan nyata pada
   pemeriksaan rugpull, bukan pembulatan — pada 50% sebuah pool bisa lolos gate ini walau separuh
   volumenya lewat bundled buy.
 - **Umur pool maksimum** dihapus total, sempat 24 jam. Angka itu murni inferensi — tidak ada sumber
   yang menyebut batas umur — dan dihapus alih-alih dilebarkan lagi.
 
 **Preset ini butuh `GMGN_API_KEY`.** Volume 5m, sniper, insider, dan bundler semuanya dari GMGN dan
-semuanya gagal-tertutup: tanpa kunci, preset ini diam total — persis posture Skolmbeagh-like. Kunci
-itu terpasang di VPS, jadi ini hanya menggigit pada percobaan lokal.
+semuanya gagal-tertutup: tanpa kunci, preset ini diam total. Kunci itu terpasang di VPS, jadi ini
+hanya menggigit pada percobaan lokal.
 
-### Yang dipinjam, dan yang tidak
-
-| Dari | Dipinjam | Tidak dipinjam |
-| --- | --- | --- |
-| VanChu-like | Batas momentum yang lebih longgar | `baseFeeMin` 2% — pelajaran fee tier yang paling mahal di postingan itu, sejak dihapus (lihat atas) |
-| Skolmbeagh-like | Sniper/insider ≤15%, top-10 ≤35%, bundler (dilonggarkan ke ≤50%, lihat atas) | Saldo dev 0% (dilonggarkan ke ≤10%, lihat atas); **lantai** top-10 10%: itu menyaring supply yang tersebar ke bot pada token baru migrasi, dan runner yang sudah bergerak melewati momen itu |
+Satu gate sengaja **tidak** ada di sini meski terlihat masuk akal: **lantai** top-10 holder. Lantai
+seperti itu menyaring supply yang tersebar ke bot pada token yang baru migrasi, dan runner yang
+sudah bergerak sudah melewati momen yang terbaca begitu — jadi hanya plafonnya yang berlaku.
 
 ## Catatan risiko
 

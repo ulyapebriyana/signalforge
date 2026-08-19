@@ -2,7 +2,6 @@ import { useState } from "react";
 import {
   Bell,
   Bot,
-  LayoutGrid,
   Loader2,
   Monitor,
   Moon,
@@ -246,11 +245,6 @@ export default function SettingsView({
             <button className="f-btn f-btn--danger" type="button" disabled={!watchlistCount} onClick={onClearWatchlist}>
               <Star /> Kosongkan
             </button>
-          </Row>
-          <Row title="Tampilan klasik" description="Versi antarmuka sebelumnya, tetap berjalan di /classic.">
-            <a className="f-btn" href="/classic">
-              <LayoutGrid /> Buka
-            </a>
           </Row>
         </section>
       </div>

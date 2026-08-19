@@ -86,19 +86,8 @@
   gap: 0.5rem;
 }
 
-.lp-nav-classic {
-  font-size: 0.8125rem;
-  color: var(--f-slag);
-  padding: 0.35rem 0.5rem;
-}
-
-.lp-nav-classic:hover {
-  color: var(--f-bone);
-}
-
 @media (max-width: 860px) {
-  .lp-nav-links,
-  .lp-nav-classic {
+  .lp-nav-links {
     display: none;
   }
 

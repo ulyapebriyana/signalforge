@@ -84,31 +84,31 @@ describe("moveColumnId", () => {
 
 describe("loadTablePrefs", () => {
   it("opens a untouched preset on its own columns, with the rest hidden", () => {
-    const prefs = loadTablePrefs("vanchu", DEFAULTS, MIDDLE);
+    const prefs = loadTablePrefs("slowwallet", DEFAULTS, MIDDLE);
     expect(prefs.columnOrder).toEqual(["star", "pair", "score", "phase", "tvl", "risk", "ageHours", "link"]);
     expect(prefs.columnVisibility).toEqual({ risk: false, ageHours: false });
     expect(prefs.columnPinning).toEqual({ start: ["star", "pair", "score"], end: [] });
   });
 
   it("round-trips a saved layout, pinning included", () => {
-    saveTablePrefs("vanchu", {
+    saveTablePrefs("slowwallet", {
       columnOrder: ["star", "pair", "tvl", "score", "phase", "risk", "ageHours", "link"],
       columnVisibility: { phase: false },
       columnPinning: { start: ["star", "pair"], end: ["link"] },
     });
-    const prefs = loadTablePrefs("vanchu", DEFAULTS, MIDDLE);
+    const prefs = loadTablePrefs("slowwallet", DEFAULTS, MIDDLE);
     expect(prefs.columnOrder).toEqual(["star", "pair", "tvl", "score", "phase", "risk", "ageHours", "link"]);
     expect(prefs.columnVisibility).toEqual({ phase: false });
     expect(prefs.columnPinning).toEqual({ start: ["star", "pair"], end: ["link"] });
   });
 
   it("realigns a stored pinning that disagrees with the stored order", () => {
-    saveTablePrefs("vanchu", {
+    saveTablePrefs("slowwallet", {
       columnOrder: ["pair", "star", "score", "phase", "tvl", "risk", "ageHours", "link"],
       columnVisibility: {},
       columnPinning: { start: ["star", "pair", "score"], end: [] },
     });
-    expect(loadTablePrefs("vanchu", DEFAULTS, MIDDLE).columnPinning.start).toEqual([
+    expect(loadTablePrefs("slowwallet", DEFAULTS, MIDDLE).columnPinning.start).toEqual([
       "pair",
       "star",
       "score",
@@ -117,7 +117,7 @@ describe("loadTablePrefs", () => {
 
   it("ignores a columnSizing key left over from when the table could be resized", () => {
     store.set(
-      "signalforge:table:vanchu",
+      "signalforge:table:slowwallet",
       JSON.stringify({
         v: 2,
         columnOrder: ["star", "pair", "score", "tvl", "phase", "risk", "ageHours", "link"],
@@ -126,28 +126,28 @@ describe("loadTablePrefs", () => {
         columnPinning: { start: ["star", "pair", "score"], end: [] },
       }),
     );
-    expect(loadTablePrefs("vanchu", DEFAULTS, MIDDLE)).not.toHaveProperty("columnSizing");
+    expect(loadTablePrefs("slowwallet", DEFAULTS, MIDDLE)).not.toHaveProperty("columnSizing");
   });
 
   it("migrates a v1 array into the split slices", () => {
-    store.set("signalforge:columns:vanchu", JSON.stringify(["risk", "tvl"]));
-    const prefs = loadTablePrefs("vanchu", DEFAULTS, MIDDLE);
+    store.set("signalforge:columns:slowwallet", JSON.stringify(["risk", "tvl"]));
+    const prefs = loadTablePrefs("slowwallet", DEFAULTS, MIDDLE);
     expect(prefs.columnOrder).toEqual(["star", "pair", "score", "risk", "tvl", "phase", "ageHours", "link"]);
     expect(prefs.columnVisibility).toEqual({ phase: false, ageHours: false });
   });
 
   it("falls back to the preset defaults when the stored blob is corrupt", () => {
-    store.set("signalforge:table:vanchu", "{not json");
-    expect(loadTablePrefs("vanchu", DEFAULTS, MIDDLE).columnVisibility).toEqual({
+    store.set("signalforge:table:slowwallet", "{not json");
+    expect(loadTablePrefs("slowwallet", DEFAULTS, MIDDLE).columnVisibility).toEqual({
       risk: false,
       ageHours: false,
     });
   });
 
   it("clears both formats", () => {
-    store.set("signalforge:columns:vanchu", JSON.stringify(["risk"]));
-    saveTablePrefs("vanchu", { columnOrder: [], columnVisibility: {}, columnPinning: {} });
-    clearTablePrefs("vanchu");
+    store.set("signalforge:columns:slowwallet", JSON.stringify(["risk"]));
+    saveTablePrefs("slowwallet", { columnOrder: [], columnVisibility: {}, columnPinning: {} });
+    clearTablePrefs("slowwallet");
     expect(store.size).toBe(0);
   });
 });

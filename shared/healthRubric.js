@@ -1,8 +1,8 @@
 /**
- * The Swanny-like rubric.
+ * The token health rubric.
  *
- * Transcribed from the default threshold settings of the DLMM Checker its
- * author built and screens every token through before researching it. The tool
+ * Transcribed from the default threshold settings of @SwannyDeFi's DLMM Checker,
+ * the tool they screen every token through before researching it. The tool
  * paints each metric green / yellow / red rather than passing or failing it, so
  * that shape is preserved here: the bands drive both the colour layer in the UI
  * and the preset gate, which rejects red and tolerates yellow.
@@ -16,7 +16,7 @@
  * not match the units the API returns, so rather than guess at what it means
  * only the unambiguous fee row is kept.
  */
-export const SWANNY_RUBRIC = Object.freeze([
+export const HEALTH_RUBRIC = Object.freeze([
   { key: "rugCheckScore", label: "RugCheck score", green: 14, yellow: 25, higherIsBetter: false },
   { key: "organicScore", label: "Organic score", green: 80, yellow: 50, higherIsBetter: true },
   { key: "marketCap", label: "Market cap", green: 500_000, yellow: 100_000, higherIsBetter: true, unit: "usd" },
@@ -32,8 +32,8 @@ export const SWANNY_RUBRIC = Object.freeze([
 ]);
 
 /** Rows that cannot be filled without a GMGN key, so the UI can say so. */
-export const SWANNY_GMGN_KEYS = Object.freeze(
-  SWANNY_RUBRIC.filter((spec) => spec.key.startsWith("gmgn")).map((spec) => spec.key),
+export const RUBRIC_GMGN_KEYS = Object.freeze(
+  HEALTH_RUBRIC.filter((spec) => spec.key.startsWith("gmgn")).map((spec) => spec.key),
 );
 
 /**
@@ -68,7 +68,7 @@ export const gateLabel = (spec) =>
 
 /** Every band for a pool, in rubric order. Drives the drawer panel. */
 export function rubricReport(pool) {
-  return SWANNY_RUBRIC.map((spec) => ({
+  return HEALTH_RUBRIC.map((spec) => ({
     ...spec,
     value: Number.isFinite(pool?.[spec.key]) ? pool[spec.key] : null,
     band: bandOf(pool?.[spec.key], spec),

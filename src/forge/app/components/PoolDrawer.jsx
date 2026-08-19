@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { VELOCITY_LABEL } from "../../../../shared/feeVelocity.js";
 import { BURST_LABEL, burstBand, PHASE_META, projectFees } from "../../../../shared/marketRead.js";
-import { rubricReport, rubricTally, SWANNY_GMGN_KEYS } from "../../../../shared/swannyRubric.js";
+import { rubricReport, rubricTally, RUBRIC_GMGN_KEYS } from "../../../../shared/healthRubric.js";
 import { PRESETS, poolTier } from "../../../../shared/scoring.js";
 import { formatAge, formatPercent, formatUsd } from "../../../lib/format.js";
 import { heatVars, riskLabel, STATUS_META } from "../../lib/heat.js";
@@ -51,14 +51,14 @@ const bandLimit = (row) =>
   row.higherIsBetter ? `hijau ≥ ${row.green} · kuning ≥ ${row.yellow}` : `hijau ≤ ${row.green} · kuning ≤ ${row.yellow}`;
 
 /**
- * The Swanny-like rubric as the source tool shows it: every metric painted, not
- * just the ones that fail. Rendered for any preset, because the colours answer
- * "is this token worth researching" regardless of which play you are running.
+ * The health rubric as the source tool shows it: every metric painted, not just
+ * the ones that fail. Rendered for any preset, because the colours answer "is
+ * this token worth researching" regardless of which play you are running.
  */
 function RubricPanel({ pool, gmgnConfigured }) {
   const rows = rubricReport(pool);
   const tally = rubricTally(pool);
-  const missingGmgn = rows.filter((row) => row.band === "unknown" && SWANNY_GMGN_KEYS.includes(row.key)).length;
+  const missingGmgn = rows.filter((row) => row.band === "unknown" && RUBRIC_GMGN_KEYS.includes(row.key)).length;
 
   return (
     <div className="fx-rubric">
@@ -155,7 +155,7 @@ const formatMoney = (value) => {
 };
 
 /** How long a hold each preset is written around, for the projection's second figure. */
-const HOLD_MINUTES = { heartattack: 10, skolmbeagh: 45, vanchu: 60, auzhinta: 180, swanny: 60, yanman: 60, slowwallet: 660 };
+const HOLD_MINUTES = { heartattack: 10, slowwallet: 660 };
 
 /**
  * The market read, as the panel the drawer opens on.
@@ -323,7 +323,7 @@ const METRIC_GROUPS = [
     ["Burst token", (pool) => xOrDash(pool.tokenBurst)],
     ["Porsi venue (est.)", (pool) => (Number.isFinite(pool.venueShare) ? `${(pool.venueShare * 100).toFixed(1)}%` : "—")],
     // Already on the payload and, until now, shown nowhere outside the
-    // Swanny rubric's own rows.
+    // The health rubric's own rows.
     ["Fresh wallet", (pool) => pctOrDash(pool.gmgnFreshWalletPct, 1)],
     ["Top-10 (GMGN)", (pool) => pctOrDash(pool.gmgnTop10Pct, 1)],
     ["Holder (GMGN)", (pool) => optionalNumber(pool.gmgnHolders)],

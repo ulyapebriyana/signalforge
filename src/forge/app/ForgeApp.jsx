@@ -15,7 +15,6 @@ import {
   Gauge,
   History,
   Home,
-  LayoutGrid,
   Loader2,
   Moon,
   RefreshCw,
@@ -157,10 +156,6 @@ function Rail({ path }) {
           );
         })}
       </ul>
-      <a className="fx-rail-item fx-rail-foot" href="/classic" title="Tampilan klasik">
-        <LayoutGrid />
-        <span>Klasik</span>
-      </a>
     </nav>
   );
 }
@@ -293,9 +288,9 @@ export default function ForgeApp({ path }) {
 
   /* --- sound ------------------------------------------------------------- */
 
-  // Playback lives in lib/signalSound.js, shared with the classic interface: it
-  // owns the one <audio> element for the file-backed sounds and synthesises the
-  // ones that have no file, which an <audio> element alone could never play.
+  // Playback lives in lib/signalSound.js: it owns the one <audio> element for
+  // the file-backed sounds and synthesises the ones that have no file, which an
+  // <audio> element alone could never play.
   const playSound = useCallback(
     async (choice = soundChoice) => {
       if (!NOTIFICATION_SOUNDS[choice]) return;

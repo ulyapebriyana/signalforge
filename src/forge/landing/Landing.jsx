@@ -4,7 +4,6 @@ import {
   BellRing,
   Check,
   Flame,
-  LayoutGrid,
   Moon,
   ShieldHalf,
   Sun,
@@ -91,9 +90,6 @@ function TopNav({ theme, onCycleTheme }) {
         ))}
       </nav>
       <div className="lp-nav-actions">
-        <a className="lp-nav-classic" href="/classic">
-          Tampilan klasik
-        </a>
         <button
           className="f-icon-btn"
           type="button"
@@ -277,20 +273,18 @@ function ScoreModel() {
 
 const PRESET_ROWS = [
   ["Market cap", (p) => `${formatUsd(p.marketCapMin)} – ${formatUsd(p.marketCapMax)}`],
-  ["TVL minimum", (p) => formatUsd(p.tvlMin)],
+  ["TVL minimum", (p) => (Number.isFinite(p.tvlMin) ? formatUsd(p.tvlMin) : "—")],
   ["Momentum 1 jam", (p) => `${p.momentumMin}% – ${p.momentumMax}%`],
-  ["Volume 1 jam minimum", (p) => formatUsd(p.volume1hMin)],
+  ["Volume 1 jam minimum", (p) => (Number.isFinite(p.volume1hMin) ? formatUsd(p.volume1hMin) : "—")],
   ["Volume 5 menit minimum", (p) => (Number.isFinite(p.volume5mMin) ? formatUsd(p.volume5mMin) : "—")],
-  ["Vol/TVL minimum", (p) => `${p.volumeTvlMin}x`],
-  ["Fee/TVL minimum", (p) => `${p.feeTvlMin}%`],
-  ["Bin step", (p) => (p.binStepMin ? `${p.binStepMin} – ${p.binStepMax}` : "—")],
-  ["Base fee minimum", (p) => (p.baseFeeMin ? `${p.baseFeeMin}%` : "—")],
-  // Sub-hour reads as minutes: Skolmbeagh-like's window is 0.5, and "0,5 jam"
-  // is a worse way to say the number the whole preset turns on.
-  ["Umur pool maksimum", (p) => {
-    if (!Number.isFinite(p.ageHoursMax)) return "—";
-    return p.ageHoursMax < 1 ? `${p.ageHoursMax * 60} menit` : `${p.ageHoursMax} jam`;
+  ["Fee/TVL minimum", (p) => (Number.isFinite(p.feeTvlMin) ? `${p.feeTvlMin}%` : "—")],
+  ["Vol/TVL minimum", (p) => (Number.isFinite(p.volumeTvlMin) ? `${p.volumeTvlMin}x` : "—")],
+  ["Top-10 holder maksimum", (p) => (Number.isFinite(p.top10HoldersMax) ? `${p.top10HoldersMax}%` : "—")],
+  ["Umur pool minimum", (p) => {
+    if (!Number.isFinite(p.ageHoursMin)) return "—";
+    return p.ageHoursMin >= 24 ? `${Math.round(p.ageHoursMin / 24)} hari` : `${p.ageHoursMin} jam`;
   }],
+  ["Token terverifikasi", (p) => (p.requireVerified ? "Wajib" : "—")],
   ["Risk maksimum", (p) => String(p.maxRisk)],
   ["Freeze authority", (p) => (p.requireFreezeOff ? "Wajib mati" : "Opsional")],
   ["Cooldown alert", (p) => `${p.cooldownMinutes} menit`],
@@ -300,9 +294,9 @@ function Presets() {
   return (
     <section className="lp-section lp-presets" id="preset" aria-labelledby="preset-title">
       <div className="lp-section-head" data-reveal>
-        <span className="f-eyebrow">Tujuh gate, aturan terbuka</span>
+        <span className="f-eyebrow">Dua gate, aturan terbuka</span>
         <h2 className="f-display" id="preset-title">
-          Pilih seberapa longgar saringannya
+          Aman pelan, atau cepat dan brutal
         </h2>
       </div>
       <div className="lp-preset-table" data-reveal style={{ "--lp-preset-count": Object.keys(PRESETS).length }}>
@@ -326,18 +320,15 @@ function Presets() {
         ))}
       </div>
       <p className="lp-preset-caveat" data-reveal>
-        Semuanya rekonstruksi dari filter yang pernah dibagikan terbuka — bukan klaim bahwa ini
-        strategi milik orang tersebut. “Yanman-like” longgar dan bisa memasukkan pool dengan
-        likuiditas sangat tipis. “Auzhinta-like” menuntut likuiditas jauh lebih tebal dan rig yang
-        spesifik, tapi sengaja menerima momentum negatif: range bid-ask lebar memang dipakai untuk
-        memanen fee saat harga turun, dan itu menanggung risiko penurunan yang nyata. “VanChu-like”
-        dan “Skolmbeagh-like” adalah dua yang paling agresif: yang pertama hanya masuk pool fee
-        tinggi saat token sudah lari, yang kedua hanya hidup 30 menit pertama setelah migrasi. Batas
-        risikonya sengaja paling longgar, dan itu berarti kerugiannya juga paling nyata. “Slow
-        Wallet” di ujung yang berlawanan: token established, pool berumur minimal seminggu, wajib
-        terverifikasi, dan batas risiko paling ketat di seluruh aplikasi. “Heart Attack” yang paling
-        ekstrem dari semuanya — dipicu volume 5 menit ≥ $50K pada token yang sedang lari, dengan
-        batas risiko paling longgar. LP Army Academy sendiri menyebut strategi ini “lebih mirip judi”.
+        Keduanya rekonstruksi dari filter yang pernah dibagikan terbuka — bukan klaim bahwa ini
+        strategi milik orang tersebut. “Slow Wallet” adalah gate utamanya: token established, pool
+        berumur minimal seminggu, wajib terverifikasi, supply tidak menumpuk di sepuluh dompet, dan
+        batas risiko paling ketat di seluruh aplikasi. Ambang aktivitasnya sengaja rendah, karena
+        pool dalam yang aman memang tidak pernah memutar volume seperti memecoin baru — yang dicari
+        di sini bukan pool yang paling ramai, tapi pool teraman yang masih membayar. “Heart Attack”
+        ada di ujung yang berlawanan — dipicu volume 5 menit ≥ $40K pada token yang sedang lari,
+        dengan batas risiko paling longgar. LP Army Academy sendiri menyebut strategi itu “lebih
+        mirip judi”.
       </p>
     </section>
   );
@@ -448,9 +439,6 @@ function Closing() {
           <button className="f-btn f-btn--hot" type="button" onClick={() => navigate("/app")}>
             Buka scanner <ArrowRight />
           </button>
-          <a className="f-btn f-btn--ghost" href="/classic">
-            <LayoutGrid /> Tampilan klasik
-          </a>
         </div>
       </div>
     </section>
@@ -465,7 +453,6 @@ function Footer() {
         <span>Screener Meteora DLMM · zona waktu WIB</span>
       </div>
       <nav aria-label="Tautan footer">
-        <a href="/classic">Tampilan klasik</a>
         <a href="https://www.meteora.ag/" target="_blank" rel="noreferrer">
           Meteora
         </a>

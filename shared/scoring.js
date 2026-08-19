@@ -1,6 +1,5 @@
 import { emptyGmgnFields } from "./gmgn.js";
 import { deriveMarketRead } from "./marketRead.js";
-import { bandOf, gateLabel, SWANNY_RUBRIC } from "./swannyRubric.js";
 
 export const PRESETS = Object.freeze({
   // The "Heart Attack" play, named for how it feels rather than how it works:
@@ -131,363 +130,121 @@ export const PRESETS = Object.freeze({
     cooldownMinutes: 3,
   },
   // Modelled on @0xVanChu's *other* wallet — the one he says takes "noticeably
-  // less time and nerves" than the Action Wallet the `vanchu` preset below
-  // reconstructs: "Bid-Ask on more proven tokens, without the constant race
-  // for new shitcoins and without the need to stare at the chart."
+  // less time and nerves" than the Action Wallet: "Bid-Ask on more proven
+  // tokens, without the constant race for new shitcoins and without the need to
+  // stare at the chart."
   //
-  // Unlike every other preset in this file, this is NOT a reconstruction of a
-  // published checklist — he never posted one for Slow Wallet, only fragments.
-  // The one concrete trade he did share: $TOAD, Bid-Ask, range −42%, 20,000
-  // USDC deposited, ~3% return over an 11-hour hold, price staying inside a
-  // 15% band the whole time. The thresholds below are my own synthesis around
-  // those fragments, at the user's explicit request ("menurutmu kayak gimana
-  // metode screeningnya") rather than a transcription — flagged here so this
-  // preset is never mistaken for the same kind of source-backed gate as its
-  // six siblings.
+  // This is NOT a reconstruction of a published checklist — he never posted one
+  // for Slow Wallet, only fragments. The one concrete trade he did share: $TOAD,
+  // Bid-Ask, range −42%, 20,000 USDC deposited, ~3% return over an 11-hour hold,
+  // price staying inside a 15% band the whole time. The thresholds below are a
+  // synthesis around those fragments at the user's request, not a transcription.
+  //
+  // Retuned 2026-08-19, on the user's instruction to make this the app's one
+  // serious preset and to maximise it on safe pairs. The retune was measured,
+  // not guessed: 9,563 scan-log rows over ~2h showed the preset clearing 16
+  // times (0.17%), and every binding gate was an *activity* gate, not a safety
+  // one — Vol 1h failed 82% of evaluations, Fee/TVL 79%, Vol/TVL 70%. The
+  // safety gates were barely the constraint at all: 27 of 80 pools cleared all
+  // of them. That is the shape of a preset asking a deep, verified, week-old
+  // pool to churn like a fresh memecoin, which it never does. So the trade made
+  // here is deliberate and runs in both directions at once: the activity floors
+  // come down to what a calm pool actually pays, and the safety side gets three
+  // gates it did not have before. Verified live against a 96-pool scan on the
+  // widened pipeline — 3 pools clear, all at risk 4.
   slowwallet: {
     id: "slowwallet",
     label: "Slow Wallet",
     // "Proven tokens" as opposed to the shitcoins Action Wallet chases. The
-    // upstream pipeline filter already caps candidates at $15M (see
-    // server/index.mjs), so a higher ceiling here would be decorative — same
-    // reasoning as VanChu-like's marketCapMax.
+    // ceiling was $15M and is now the pipeline's own $500M (see
+    // server/index.mjs): every established pair on Solana sits above $15M, so
+    // the old ceiling guaranteed this preset could never see the exact kind of
+    // token it was written for. The floor stays — below $2M "proven" is a word
+    // without content.
     marketCapMin: 2_000_000,
-    marketCapMax: 15_000_000,
-    // A 20,000 USDC single-sided deposit is the one deposit size on record.
-    // The pool has to be deep enough to take that without brutal price impact,
-    // so this floor sits above every other preset's — deep liquidity is the
-    // whole point of "proven," not a side effect of it.
-    tvlMin: 100_000,
+    marketCapMax: 500_000_000,
+    // Lowered from $100K. The old floor was back-computed from the one deposit
+    // size on record (20,000 USDC) needing to land without brutal price impact,
+    // but it was excluding the best candidates the scan actually produced — a
+    // $71K pool paying 0.183%/h at risk 4 is a better Slow Wallet position than
+    // a $400K pool paying 0.006%/h, and $50K is still deep enough that a
+    // position sized in single-digit SOL is nowhere near moving the price.
+    tvlMin: 50_000,
     // The $TOAD position "traded sideways within 15% the whole" hold, and the
-    // $LUNA position he named moved 5% → 2% as it calmed — this is a preset
-    // for a token that is not doing anything violent right now. A wide bid-ask
+    // $LUNA position he named moved 5% → 2% as it calmed — this is a preset for
+    // a token that is not doing anything violent right now. A wide bid-ask
     // range still earns on a mild pullback, so the floor is negative; the
-    // ceiling excludes anything that has become a runner, which is what the
-    // `vanchu` preset is for.
+    // ceiling excludes anything that has become a runner, which is what Heart
+    // Attack is for.
     momentumMin: -15,
     momentumMax: 20,
-    // Still needs to be a real, trading pool — just not a runner. $20K/hour is
-    // enough to matter against a $100K+ TVL floor without demanding vanchu-
-    // grade turnover.
-    volume1hMin: 20_000,
-    volumeTvlMin: 0.15,
-    // Back-computed from the one trade on record: 20,000 USDC, ~3% return over
-    // 11 hours ≈ ~0.27%/hr average fee/TVL. Set a shade under that so the gate
-    // does not exclude the very trade it is modelled on.
-    feeTvlMin: 0.2,
+    // The three activity gates below used to be three overlapping proxies for
+    // the same question, each set where a memecoin lives rather than where a
+    // proven pair does. They now split the question properly: volume1hMin is a
+    // liveness floor (a pool doing $1K/hour cannot be traded out of), and
+    // volumeTvlMin is the turnover shape that liveness floor cannot express
+    // once TVL is past ~$100K.
+    volume1hMin: 5_000,
+    volumeTvlMin: 0.05,
+    // The one number that decides whether this position is worth opening: is
+    // the pool paying? 0.2%/h was back-computed from the $TOAD trade (20,000
+    // USDC, ~3% over 11 hours ≈ 0.27%/h) and is simply not a rate a deep,
+    // verified pair sustains — across two separate live scans the best such
+    // pool reached 0.183%/h and the median sat near 0.02%. 0.03%/h is ~0.7%/day
+    // on TVL, which on a position carrying this little risk is a real return,
+    // and it still cuts two thirds of the safe universe as dead weight.
+    feeTvlMin: 0.03,
     requireFreezeOff: true,
     // "Proven" implies the standard rug levers are already closed off, not
     // merely tolerated.
     requireMintOff: true,
     requireVerified: true,
-    // An established community, not a just-migrated one — well above
-    // Auzhinta-like's 500, which is itself the floor for a much younger token.
+    // An established community, not a just-migrated one.
     holdersMin: 1_000,
-    // The plain inverse of Skolmbeagh-like's 0.5-hour ceiling: a pool has to
-    // have survived at least a week before it counts as "proven" rather than
-    // "still in its violent early hours."
+    // A pool has to have survived at least a week before it counts as "proven"
+    // rather than "still in its violent early hours."
     ageHoursMin: 168,
+    // The three gates added by the retune, all paid for by the loosened
+    // activity floors above. Each is measured on a field that came back
+    // populated for 40 of 40 pools in the live scan, which is why these three
+    // and not the obvious fourth: RugCheck's own score was missing on 2 of 40,
+    // and a fail-closed gate on a flaky upstream would make this preset blink
+    // on and off for reasons that have nothing to do with the pool.
+    //
+    // Top-10 concentration is the one that earns its place immediately. It was
+    // the only gate that rejected anything the old set would have passed: a
+    // $240M token, verified, mint and freeze off, 1,000+ holders, week-old
+    // pool — with 62.8% of supply in ten wallets. Provenance does not matter
+    // here; a wallet holding 63% can end the position regardless of whose it is.
+    top10HoldersMax: 40,
+    // Stricter than Heart Attack's 10%, which is a gate on a token minutes old
+    // where some dev balance is normal. A week-old proven token still holding
+    // 5%+ in the dev wallet has had a week to distribute it and has not.
+    devBalanceMax: 5,
+    // Jupiter's organic score: how much of the flow is real rather than
+    // manufactured. The median safe pool scores 86.6, so 70 is a floor on
+    // genuineness rather than a demand for excellence — the cheapest available
+    // guard against farming a pool whose volume is its own market maker.
+    organicScoreMin: 70,
     // The lowest ceiling of any preset, and the point of the exercise — Slow
     // Wallet exists because Action Wallet costs "adrenaline and stress."
-    // A genuinely established, verified, deep pool clears this with room to
-    // spare; nothing here is tuned to let a risky pool through the back door.
     maxRisk: 45,
-    // The 100-point model rewards momentum and freshness, and this preset
-    // deliberately scores low on both (momentum capped at 20%, and a pool
-    // ≥168h old never earns more than 5 of the 10 freshness points, often 3).
-    // A qualifying pool lands roughly 35–55 in practice — the same shape of
-    // mismatch as Auzhinta-like, and for the same reason: reusing the 65/80
-    // ladder would gate every alert off.
-    minScore: 35,
-    hotScore: 55,
-    watchScore: 40,
-    earlyScore: 28,
+    // Lowered with the gates. The 100-point model rewards momentum and
+    // freshness and this preset gates against both, so a pool it likes scores
+    // far below the shared 65/80 ladder: across the safe universe of the live
+    // scan the median was 26 and the best pool reached 45, while the three
+    // pools that cleared every gate scored 39, 30 and 27. A 35 floor would have
+    // silenced two of those three.
+    minScore: 26,
+    hotScore: 38,
+    watchScore: 30,
+    earlyScore: 24,
     // No reason to ping often for a position meant to sit for hours.
     cooldownMinutes: 60,
   },
-  // Modelled on the Meteora DLMM posts of @0xVanChu, who farms one thing: a
-  // token that is already running, in the highest-fee pool available, for
-  // minutes to hours rather than days. The posts name ranges (−10%/−15% short
-  // spot, −42% medium, −59%/−65% slow bid-ask) but never a bin step, so no bin
-  // step gate is declared here — inventing one would misrepresent the source.
-  //
-  // What the posts *do* state outright is the mistake that cost them 4 SOL: a
-  // token doing ~$30K of volume per minute, entered through an existing 1% fee
-  // pool instead of a 3% one, pushed out of range on a red candle. Their own
-  // verdict was that a 3% pool at that volume "would have compensated for
-  // around 90% of the losses". The counter-example is the same setup done
-  // right: +8 SOL in three minutes on a 10% fee pool. So the fee tier, not the
-  // token, is the gate that matters, and baseFeeMin exists for that reason.
-  //
-  // baseFeeMin is 2 rather than the 3 that lesson names, because 2% is the
-  // lowest tier they have posted entering on purpose (a $LUNA position moved
-  // 5% → 2% as it calmed). A gate should not exclude a rig the source is on
-  // record using.
-  vanchu: {
-    id: "vanchu",
-    label: "VanChu-like",
-    // Their runners span microcap shitcoins to $ANSEM at a $50M cap, but the
-    // upstream candidate filter in server/index.mjs already drops anything over
-    // $15M before scoring, so a higher ceiling here would be decorative.
-    marketCapMin: 300_000,
-    marketCapMax: 15_000_000,
-    // Positions are 20–100 SOL, so a dust pool cannot absorb one. The ceiling
-    // is deliberately absent: thin TVL against heavy volume is the whole edge.
-    tvlMin: 15_000,
-    // Entry is always into a move already happening — "saw a pump and volumes
-    // that were impossible to ignore". Never into something bleeding.
-    momentumMin: 15,
-    momentumMax: 900,
-    // A runner, not a busy pool. These three are one rule read three ways:
-    // heavy absolute flow, turning the pool over several times an hour, and
-    // actually paying for it. With a 2% base fee, 3x turnover implies roughly
-    // 6% fee/TVL, so feeTvlMin is a floor these already imply rather than a
-    // second, independent squeeze.
-    volume1hMin: 250_000,
-    volumeTvlMin: 3,
-    feeTvlMin: 2,
-    baseFeeMin: 2,
-    requireFreezeOff: true,
-    // The highest ceiling of any preset, and not an oversight. This is the
-    // "heart attack" play by name: a fresh unverified token at extreme
-    // momentum collects risk points for exactly the traits being farmed.
-    maxRisk: 88,
-    // Unlike Auzhinta-like, these pools score *well* on the 100-point model —
-    // momentum, fee efficiency, and volume quality are 70 of the 100 points and
-    // this preset gates hard on all three. So the ladder stays near the shared
-    // default instead of dropping into the fifties.
-    minScore: 65,
-    hotScore: 82,
-    watchScore: 68,
-    earlyScore: 55,
-    // Minutes matter here in a way they do not for the slower presets.
-    cooldownMinutes: 5,
-  },
-  // Modelled on the token filter @skolmbeaghNFT published for fresh migrations,
-  // the one applied in 20–30 seconds before any liquidity is committed.
-  //
-  // The thread it comes from is a DAMM v2 strategy, and this scanner only reads
-  // DLMM pools (server/index.mjs talks to dlmm.datapi.meteora.ag). That is not
-  // a mismatch to paper over: what is reproduced here is the *token selection*
-  // half, which is stated as a numbered checklist and is about which token
-  // deserves liquidity, not about which venue receives it. The position
-  // construction half of the thread — 6% fee tier, exponential fee scheduler,
-  // exit at 45 minutes — is a DAMM v2 pool setting a DLMM screener cannot see,
-  // and is deliberately not faked into these numbers.
-  //
-  // The thread is also from June 2025 and its author has since moved mostly to
-  // DLMM. Treat the thresholds as transcribed, not as currently endorsed.
-  //
-  // EXPECT THIS PRESET TO BE QUIET, and not because the numbers are wrong. It
-  // is a 30-minute window on a narrow cap band, so most scans will hold no pool
-  // that qualifies. What changed on 2026-08-13 is that such a pool can now
-  // reach scoring at all:
-  //
-  //   - Age. loadPools used to take only the top pools by 1h volume, where the
-  //     youngest admissible pool was 1.18h old — nothing inside a 30-minute
-  //     window ever arrived. It now also reads a page sorted by
-  //     fee_tvl_ratio_1h:desc, which is where fresh migrations rank; on the
-  //     verification run that page put two 12-minute-old pools in its top three.
-  //   - Market cap. Still thin: only 1 of 48 volume-page candidates sat under
-  //     $200K. The upstream $50K floor is not a limit for this preset, whose own
-  //     marketCapMin is the same $50K.
-  //   - GMGN. The sniper/insider/bundler gates fail closed, and the API filled
-  //     0–6 of ~35 tokens across local runs. GMGN_API_KEY is set on the VPS.
-  //
-  // It is committed as a faithful transcription rather than tuned into firing,
-  // because loosening it to match the pipeline would describe a play nobody
-  // posted.
-  skolmbeagh: {
-    id: "skolmbeagh",
-    label: "Skolmbeagh-like",
-    // "Coins over $200K gradually start opening DLMM pools, and since our
-    // losses increase when the coin price drops, I prefer to avoid them." The
-    // floor is the low end of the companion screener filter (50k–300k).
-    marketCapMin: 50_000,
-    marketCapMax: 200_000,
-    // Positions are 0.05–0.3 SOL, so almost any live pool is deep enough. This
-    // only excludes pools with no liquidity at all.
-    tvlMin: 1_000,
-    // "The coin's price should appear to have moved organically." A fresh
-    // migration already down on the hour is not that; the ceiling is wide
-    // because a migration candle legitimately is not.
-    momentumMin: 0,
-    momentumMax: 2_000,
-    volume1hMin: 20_000,
-    volumeTvlMin: 1,
-    feeTvlMin: 2,
-    // The hard clock, and the single most load-bearing number in the thread:
-    // "The token should have migrated within the last 30 minutes. After an
-    // hour, the fee yield drops from around 50% to about 20%."
-    ageHoursMax: 0.5,
-    // "Top 10 Holders: Should be between 10% and 35%" — a floor on
-    // concentration, which no other preset has. It is not a typo in the
-    // source: on a just-migrated token a top-10 share that low means the supply
-    // is scattered across bots rather than held by anyone.
-    top10HoldersMin: 10,
-    top10HoldersMax: 35,
-    // "Dev: If the dev holds tokens, I stay away." Zero, not "low".
-    devBalanceMax: 0,
-    // "Sniper / Insiders / Bundle: each below 15%." Loose on purpose — the
-    // thread says so — because the candidates are already filtered down to
-    // ~$100K caps where cleaner numbers barely exist.
-    sniperPctMax: 15,
-    insidersPctMax: 15,
-    bundlerPctMax: 15,
-    requireFreezeOff: true,
-    // A sub-30-minute pool collects risk points for being sub-30-minutes old,
-    // thinly held, and violently priced — the exact traits selected for. A
-    // ceiling tuned like the other presets would gate the whole preset off.
-    maxRisk: 92,
-    // Between Auzhinta-like's fifties and the shared default. A fresh pool
-    // takes full freshness and, when it is paying at all, near-full fee and
-    // volume points, but forfeits verification and the holder bonus — so the
-    // reachable band sits roughly 50–85.
-    minScore: 55,
-    hotScore: 70,
-    watchScore: 55,
-    earlyScore: 42,
-    cooldownMinutes: 5,
-  },
-  yanman: {
-    id: "yanman",
-    label: "Yanman-like",
-    marketCapMin: 100_000,
-    marketCapMax: 10_000_000,
-    tvlMin: 500,
-    momentumMin: 20,
-    momentumMax: 200,
-    volume1hMin: 5_000,
-    volumeTvlMin: 0.5,
-    feeTvlMin: 0.5,
-    requireFreezeOff: true,
-    maxRisk: 72,
-    minScore: 65,
-    hotScore: 80,
-    watchScore: 65,
-    earlyScore: 50,
-    cooldownMinutes: 15,
-  },
-  // Modelled on the publicly posted Meteora DLMM routine of @auzhinta: enter a
-  // fresh memecoin pool at or just after its top with a one-sided bid-ask range
-  // pushed 70–80% below entry, then harvest fees until the volume dies. Three
-  // things follow from that and make this preset unlike the other one.
-  //
-  //  1. The rig is specific and screenable. Bin step 80/100/125 with a 2–3%
-  //     base fee is the setup behind every position they have posted, so it is
-  //     a hard gate rather than a preference.
-  //  2. Direction barely matters. A bid-ask range that wide earns on the way
-  //     down — their own MOGDOG-SOL position closed +10.89% while the token
-  //     fell ~70% — so momentumMin is negative on purpose. What has to be true
-  //     is that the pool is *paying*, which is why feeTvlMin is the strictest
-  //     number here.
-  //  3. The exit is a volume rule, not a price rule. A screener cannot watch
-  //     fee velocity decay, so the closest standing equivalent is refusing to
-  //     surface a pool that is not already earning at ≥1% fee/TVL per hour.
-  auzhinta: {
-    id: "auzhinta",
-    label: "Auzhinta-like",
-    // Numbers below are stated outright in the step-by-step article, not
-    // inferred: MCAP ≥ $400K ("di bawah itu terlalu kecil dan rentan
-    // manipulasi"), holders ≥ 500, a Bubblemaps cluster of 40%+ is a reject,
-    // dev wallet ideally 0%, NoMint mandatory, base fee 2–3%.
-    marketCapMin: 400_000,
-    marketCapMax: 15_000_000,
-    // "TVL at least di minimal 35k an, at least kalo dump gak keberatan nahan
-    // IL" — and no ceiling: the article sorts by highest TVL on purpose,
-    // treating a crowded pool as other people's research already done.
-    tvlMin: 35_000,
-    // Entry wants the move intact — "cari yang baru ATH atau masih dalam fase
-    // naik", "kalau udah ATH lama terus turun panjang, momentumnya udah lewat".
-    // The wide range below is for what happens *after* entry, not a licence to
-    // enter something already bleeding.
-    momentumMin: 0,
-    momentumMax: 400,
-    volume1hMin: 10_000,
-    volumeTvlMin: 0.3,
-    feeTvlMin: 1,
-    // The article gives four rigs, each with its own depth: BS 50 → −50/−60%,
-    // BS 80 → −60/−70%, BS 100 → −70/−80% ("paling umum dipake buat meme
-    // coin"), BS 400+ → −80% and beyond. All four are in play.
-    binStepMin: 50,
-    binStepMax: 400,
-    baseFeeMin: 2,
-    // Fees must accrue in base + quote, not quote only: "karna kita cari
-    // rebound pas dia turun jadi pas rebound pnl kedorong sama fee kita yang
-    // belum di claim". Quote-only fees forfeit that push.
-    requireBothTokenFees: true,
-    // The Bubblemaps check itself: RugCheck's transfer-linked wallet groups,
-    // measured against the article's own threshold — "kalau ada satu cluster
-    // gede yang pegang 40%+ supply, bahaya". The dangerous example walked
-    // through there was a single cluster of 371 wallets holding 47.95%.
-    maxClusterPct: 40,
-    // Top-10 concentration is a different, coarser cut of the same worry, kept
-    // because a cluster graph can miss supply parked in unlinked whales.
-    top10HoldersMax: 40,
-    devBalanceMax: 1,
-    holdersMin: 500,
-    requireMintOff: true,
-    // Crude wash-trade guard. The article checks whether the buyers and
-    // sellers are the same handful of wallets; swaps per unique trader is the
-    // only shape of that visible from the API. Live median sits near 1.7, so
-    // this only catches the pathological end.
-    maxSwapsPerTrader: 6,
-    ageHoursMax: 72,
-    requireFreezeOff: true,
-    maxRisk: 78,
-    // The 100-point model is built for pools this preset never trades. An
-    // unverified memecoin forfeits the verification points outright and rarely
-    // sustains the 2x volume/TVL that tops out volume quality, so a strong
-    // candidate lands in the fifties: the two pools that inspired this preset
-    // scored 53 and 45 while they were being farmed. Reusing the 65/80 ladder
-    // would gate every alert off and leave the preset inert.
-    minScore: 48,
-    hotScore: 60,
-    watchScore: 48,
-    earlyScore: 38,
-    cooldownMinutes: 10,
-  },
-  // Modelled on @SwannyDeFi's DLMM Checker, the pre-filter every token is put
-  // through before it earns any research time. It is a screen, not a play:
-  // where the other two presets describe a way to open a position, this one
-  // only answers whether a token is worth looking at at all.
-  //
-  // That difference shows in the shape. The rubric it comes from paints twelve
-  // metrics green / yellow / red rather than passing or failing them, so the
-  // gate here rejects red and tolerates yellow — the way the tool is actually
-  // read. The pool-level checks below are deliberately loose: the rubric says
-  // nothing about bin step, fee tier, or volume, and inventing limits it never
-  // states would misrepresent it.
-  swanny: {
-    id: "swanny",
-    label: "Swanny-like",
-    // Mirrors the rubric's own red line for market cap rather than adding a
-    // second, different one.
-    marketCapMin: 100_000,
-    marketCapMax: 15_000_000,
-    tvlMin: 500,
-    momentumMin: -95,
-    momentumMax: 2_000,
-    volume1hMin: 1_000,
-    volumeTvlMin: 0,
-    feeTvlMin: 0,
-    requireFreezeOff: true,
-    requireMintOff: true,
-    // The twelve-row rubric, evaluated as bands. See shared/swannyRubric.js.
-    rubric: SWANNY_RUBRIC,
-    maxRisk: 100,
-    // Screening quality and confidence score are different questions, and this
-    // preset only answers the first. The ladder therefore stays on the shared
-    // default rather than pretending the rubric produces a score.
-    minScore: 50,
-    hotScore: 80,
-    watchScore: 65,
-    earlyScore: 50,
-    cooldownMinutes: 20,
-  },
 });
 
-export const DEFAULT_PRESET = "yanman";
+export const DEFAULT_PRESET = "slowwallet";
 
 /**
  * Resolve a preset id that may come from localStorage, an env var, or an API
@@ -500,7 +257,7 @@ export const resolvePresetId = (value) => (PRESETS[value] ? value : DEFAULT_PRES
 /**
  * Where a score sits on the active preset's ladder. The ladder is per-preset
  * because the 100-point model does not score every kind of pool over the same
- * range — see the note on PRESETS.auzhinta. This is the single source for the
+ * range — see the note on PRESETS.slowwallet. This is the single source for the
  * row badge, the Hot/Watch tabs, and the alert transitions, so the three can
  * never disagree about what a pool is.
  */
@@ -779,6 +536,15 @@ export function evaluatePreset(pool, presetInput) {
   if (preset.requireVerified) {
     checks.push([pool.isVerified === true, "Token terverifikasi"]);
   }
+  // Jupiter's organic score — how much of the flow is genuine rather than
+  // manufactured. Fails closed like every other optional gate: a token whose
+  // flow could not be judged is not a token whose flow was judged clean.
+  if (Number.isFinite(preset.organicScoreMin)) {
+    checks.push([
+      Number.isFinite(pool.organicScore) && pool.organicScore >= preset.organicScoreMin,
+      `Organic score ≥ ${preset.organicScoreMin}`,
+    ]);
+  }
   if (Number.isFinite(preset.holdersMin)) {
     checks.push([pool.holders >= preset.holdersMin, `Holder ≥ ${preset.holdersMin}`]);
   }
@@ -787,14 +553,6 @@ export function evaluatePreset(pool, presetInput) {
   }
   if (preset.requireBothTokenFees) {
     checks.push([pool.feesInBothTokens === true, "Fee base + quote"]);
-  }
-  if (Array.isArray(preset.rubric)) {
-    // Reject red, tolerate yellow — how the source tool is read in practice.
-    // Unknown counts as red: an unread metric is not a clean one.
-    for (const spec of preset.rubric) {
-      const tier = bandOf(pool[spec.key], spec);
-      checks.push([tier === "green" || tier === "yellow", gateLabel(spec)]);
-    }
   }
   if (Number.isFinite(preset.maxSwapsPerTrader)) {
     checks.push([

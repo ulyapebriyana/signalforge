@@ -19,34 +19,36 @@ const ids = (presets) => presets.map((preset) => preset.id);
 
 describe("alert routing", () => {
   it("alerts on every preset a pool clears, not just one", () => {
-    const both = pool(["yanman", "auzhinta"]);
-    expect(ids(alertPresetsFor(both, new Map(), NOW))).toEqual(["yanman", "auzhinta"]);
+    const both = pool(["heartattack", "slowwallet"]);
+    expect(ids(alertPresetsFor(both, new Map(), NOW))).toEqual(["heartattack", "slowwallet"]);
   });
 
   it("judges each preset against its own score floor", () => {
-    // 55 is above Auzhinta-like's floor of 48 and below Yanman-like's 65. The
-    // old shared floor of 65 would have silenced the former entirely.
-    const midFifties = pool(["yanman", "auzhinta"], { score: 55 });
-    expect(ids(alertPresetsFor(midFifties, new Map(), NOW))).toEqual(["auzhinta"]);
+    // 40 is above Slow Wallet's floor of 26 and far below Heart Attack's 65.
+    // A single shared floor could only ever be right for one of the two.
+    const forty = pool(["heartattack", "slowwallet"], { score: 40 });
+    expect(ids(alertPresetsFor(forty, new Map(), NOW))).toEqual(["slowwallet"]);
   });
 
   it("judges each preset against its own risk ceiling", () => {
-    const risky = pool(["yanman", "auzhinta"], { risk: 75 });
-    // Yanman-like caps at 72, Auzhinta-like at 78.
-    expect(ids(alertPresetsFor(risky, new Map(), NOW))).toEqual(["auzhinta"]);
+    // Slow Wallet caps at 45, Heart Attack at 95 — the whole difference between
+    // the two plays, expressed as one number.
+    const risky = pool(["heartattack", "slowwallet"], { risk: 60 });
+    expect(ids(alertPresetsFor(risky, new Map(), NOW))).toEqual(["heartattack"]);
   });
 
   it("keeps cooldowns independent per preset", () => {
-    const both = pool(["yanman", "auzhinta"]);
-    const cooldowns = new Map([[cooldownKey("pool1", "yanman"), NOW - minutes(5)]]);
-    // Yanman-like waits 15 minutes, so it is still muted; Auzhinta-like is not.
-    expect(ids(alertPresetsFor(both, cooldowns, NOW))).toEqual(["auzhinta"]);
+    const both = pool(["heartattack", "slowwallet"]);
+    const cooldowns = new Map([[cooldownKey("pool1", "slowwallet"), NOW - minutes(5)]]);
+    // Slow Wallet waits an hour, so it is still muted; Heart Attack waits 3
+    // minutes and is not.
+    expect(ids(alertPresetsFor(both, cooldowns, NOW))).toEqual(["heartattack"]);
   });
 
   it("releases a preset once its own cooldown expires", () => {
-    const both = pool(["yanman", "auzhinta"]);
-    const cooldowns = new Map([[cooldownKey("pool1", "yanman"), NOW - minutes(20)]]);
-    expect(ids(alertPresetsFor(both, cooldowns, NOW))).toEqual(["yanman", "auzhinta"]);
+    const both = pool(["heartattack", "slowwallet"]);
+    const cooldowns = new Map([[cooldownKey("pool1", "slowwallet"), NOW - minutes(70)]]);
+    expect(ids(alertPresetsFor(both, cooldowns, NOW))).toEqual(["heartattack", "slowwallet"]);
   });
 
   it("stays silent for a pool that clears nothing", () => {
@@ -54,14 +56,14 @@ describe("alert routing", () => {
   });
 
   it("does not alert on a pool with no score or risk", () => {
-    const unscored = { address: "x", qualifies: { yanman: { passed: true } } };
+    const unscored = { address: "x", qualifies: { slowwallet: { passed: true } } };
     expect(alertPresetsFor(unscored, new Map(), NOW)).toEqual([]);
   });
 
   it("reports gate-cleared presets separately from alert-worthy ones", () => {
     // Manual sends name what the pool clears, ignoring score, risk, and cooldown.
-    const lowScore = pool(["yanman"], { score: 10 });
-    expect(ids(presetsCleared(lowScore))).toEqual(["yanman"]);
+    const lowScore = pool(["slowwallet"], { score: 10 });
+    expect(ids(presetsCleared(lowScore))).toEqual(["slowwallet"]);
     expect(alertPresetsFor(lowScore, new Map(), NOW)).toEqual([]);
   });
 });

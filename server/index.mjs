@@ -426,31 +426,58 @@ const fetchPoolAnalytics = async (addresses) => {
  * budget counts pools actually taken, so a duplicate costs nothing and the walk
  * simply continues further down that page.
  *
- * 72 is therefore the enrichment budget, and enrichment is the expensive half of
+ * The TVL page is the third, and it exists for Slow Wallet. Both other sorts
+ * rank by flow, and their heads are therefore whatever is busiest right now —
+ * measured 2026-08-19 across a ~2h window, the pools they carried that cleared
+ * every one of Slow Wallet's safety gates topped out at 0.06%/h fee/TVL and
+ * $53K of hourly volume, because a deep, verified, week-old pool is never the
+ * busiest thing on the chain. Sorting by TVL is the only one of the three that
+ * asks for depth directly, which is the property that preset is built around.
+ *
+ * 96 is therefore the enrichment budget, and enrichment is the expensive half of
  * a scan: one OHLCV call per pool, plus two RugCheck calls per distinct mint
  * down a single 180ms lane. Measured 2026-08-13, a cold scan went 20.3s at 48
  * candidates and 33–41s at 72 — over the 30s interval, which is tolerable only
  * because it happens once per restart (`activeFetch` makes a tick that lands
  * mid-scan await the running one instead of starting a second), and because a
- * warm scan is 1.6s. Re-measure both numbers before raising either budget.
+ * warm scan is 1.6s. Re-measure before raising any budget again.
  */
 const VOLUME_PAGE_BUDGET = 48;
 const FEE_PAGE_BUDGET = 24;
+const TVL_PAGE_BUDGET = 24;
 
+/**
+ * 25s rather than the 12s default, because a 250-row page is roughly half a
+ * megabyte and the upstream serves it slowly: measured 2026-08-19 over six
+ * cold calls, `tvl:desc` took 15.4–34.0s and `volume_1h:desc` 17.5–32.4s. At
+ * the default the TVL page timed out often enough to drop out of a scan
+ * silently — it is best-effort, so its failure costs 24 candidates with no
+ * error anywhere — and the page it drops is the one Slow Wallet depends on.
+ * The three pages are fetched in parallel, so this is 25s of wall clock for
+ * all three, not each.
+ */
 const fetchPoolPage = async (sortBy) => {
   const query = new URLSearchParams({ page: "1", page_size: "250", sort_by: sortBy });
-  const upstream = await fetchJson(`${dataApi}/pools?${query}`);
+  const upstream = await fetchJson(`${dataApi}/pools?${query}`, { timeoutMs: 25_000 });
   return {
     rawPools: Array.isArray(upstream.data) ? upstream.data : [],
     total: Number(upstream.total || 0),
   };
 };
 
+/**
+ * The ceiling was $15M until 2026-08-19, which quietly capped what the whole app
+ * could ever screen for: every genuinely established pair on Solana — JUP, JTO,
+ * WIF, PYTH, SOL/USDC — sits above it, so Slow Wallet was asked to find safe,
+ * proven tokens inside a universe that by construction contained none of them.
+ * $500M is set to admit those without opening the door to the majors, where a
+ * one-sided DLMM position is a different trade than the one this app screens for.
+ */
 const admissibleCandidates = (rawPools) => rawPools
   .map((pool) => ({ raw: pool, normalized: normalizePool(pool) }))
   .filter(({ normalized }) =>
     normalized.marketCap >= 50_000 &&
-    normalized.marketCap <= 15_000_000 &&
+    normalized.marketCap <= 500_000_000 &&
     normalized.tvl >= 300 &&
     normalized.volume1h >= 1_000,
   );
@@ -474,9 +501,10 @@ const loadPools = async ({ force = false } = {}) => {
      * `created_at:desc` and `age:asc` would be the direct expression of what is
      * wanted here, but the upstream returns HTTP 400 for both.
      */
-    const [byVolume, byFeeTvl] = await Promise.all([
+    const [byVolume, byFeeTvl, byTvl] = await Promise.all([
       fetchPoolPage("volume_1h:desc"),
       fetchPoolPage("fee_tvl_ratio_1h:desc").catch(() => ({ rawPools: [], total: 0 })),
+      fetchPoolPage("tvl:desc").catch(() => ({ rawPools: [], total: 0 })),
     ]);
 
     const seen = new Set();
@@ -493,8 +521,11 @@ const loadPools = async ({ force = false } = {}) => {
     };
     takeFrom(byVolume, VOLUME_PAGE_BUDGET);
     takeFrom(byFeeTvl, FEE_PAGE_BUDGET);
+    takeFrom(byTvl, TVL_PAGE_BUDGET);
 
-    const scannedAddresses = new Set([...byVolume.rawPools, ...byFeeTvl.rawPools].map((pool) => pool.address));
+    const scannedAddresses = new Set(
+      [...byVolume.rawPools, ...byFeeTvl.rawPools, ...byTvl.rawPools].map((pool) => pool.address),
+    );
 
     const [momentumByPool, analyticsByPool, rugCheckByMint, gmgnByMint] = await Promise.all([
       mapConcurrent(candidates, 6, async ({ raw }) => [raw.address, await fetchMomentum(raw.address)]),
@@ -524,7 +555,7 @@ const loadPools = async ({ force = false } = {}) => {
         apiHealthy: true,
         scannedAt: now,
         scannedCount: scannedAddresses.size,
-        totalAvailable: Math.max(byVolume.total, byFeeTvl.total) || scannedAddresses.size,
+        totalAvailable: Math.max(byVolume.total, byFeeTvl.total, byTvl.total) || scannedAddresses.size,
         enrichedCount: enriched.length,
         scanIntervalSeconds,
       },
