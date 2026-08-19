@@ -68,7 +68,8 @@ export const PRESETS = Object.freeze({
     marketCapMax: 15_000_000,
     // "Ripping upward with almost no corrections." Entry is never into
     // something flat and never into something bleeding.
-    momentumMin: 20,
+    // Lowered from 20% to 10% on the user's explicit instruction.
+    momentumMin: 10,
     momentumMax: 2_000,
     // No tvlMin, volume1hMin, volumeTvlMin, or feeTvlMin gate, on the user's
     // explicit instruction — each was previously set (tvlMin was $10K; the
