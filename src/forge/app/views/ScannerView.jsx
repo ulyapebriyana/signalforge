@@ -1,11 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  columnFilteringFeature,
   columnOrderingFeature,
   columnPinningFeature,
-  columnResizingFeature,
   columnSizingFeature,
   columnVisibilityFeature,
+  createFilteredRowModel,
   createSortedRowModel,
+  FlexRender,
+  filterFn_inNumberRange,
+  filterFn_includesString,
   rowSortingFeature,
   sortFn_basic,
   sortFn_text,
@@ -14,15 +18,16 @@ import {
 } from "@tanstack/react-table";
 import {
   ArrowDown,
+  ArrowLeftToLine,
+  ArrowRightToLine,
   ArrowUp,
   ChevronsUpDown,
   Columns3,
   ExternalLink,
   Filter,
-  GripVertical,
   LayoutGrid,
+  ListFilter,
   Pin,
-  PinOff,
   RotateCcw,
   Rows3,
   Search,
@@ -61,28 +66,34 @@ import {
   YieldCell,
 } from "../components/bits.jsx";
 import {
+  alignPinning,
   clearTablePrefs,
-  fullColumnOrder,
-  LEADING_COLUMN_IDS,
   loadTablePrefs,
+  moveColumnId,
   saveTablePrefs,
-  TRAILING_COLUMN_IDS,
 } from "../lib/tablePrefs.js";
 
 /**
  * Only the features this table actually uses, which is the whole point of v9's
  * opt-in registration — an unregistered feature's state and methods do not
- * exist at all. `columnSizingFeature` is a prerequisite of both resizing and
- * pinning: pinned offsets are computed from numeric column sizes.
+ * exist at all. `columnSizingFeature` stays even though nothing resizes any
+ * more: a pinned column's sticky offset is the summed width of the columns
+ * pinned before it, and those widths come from the sizing feature.
+ *
+ * Only the two filter functions the columns actually name are registered.
+ * Spreading the whole `filterFns` export would pull every built-in into the
+ * bundle for the sake of two of them.
  */
 const tableFeatureSet = tableFeatures({
   rowSortingFeature,
   sortedRowModel: createSortedRowModel(),
   sortFns: { basic: sortFn_basic, text: sortFn_text },
+  columnFilteringFeature,
+  filteredRowModel: createFilteredRowModel(),
+  filterFns: { inNumberRange: filterFn_inNumberRange, includesString: filterFn_includesString },
   columnVisibilityFeature,
   columnOrderingFeature,
   columnSizingFeature,
-  columnResizingFeature,
   columnPinningFeature,
 });
 
@@ -106,9 +117,13 @@ export const COLUMN_GROUPS = Object.freeze({
  * editing two places that had no way of telling you when they disagreed —
  * a key present here but missing there rendered as an empty cell, silently.
  *
- * `size` is the starting width in pixels; the user can drag any of them.
- * `sortable: false` marks the columns whose cell is a shape rather than a
- * value (a chip, a sparkline), where an ordering would be meaningless.
+ * `size` is the column's width in pixels, wide enough for the header's label
+ * beside its sort icon and pin button — the table lays out fixed now, so a
+ * column too narrow for its own title clips it rather than stretching to fit.
+ *
+ * `sortable: false` marks the columns whose cell is a shape rather than a value
+ * (a chip, a sparkline): there is no meaningful ordering of those, and no
+ * meaningful range to filter them by either, so they carry neither control.
  */
 const usdCell = (key) => (pool) => <span className="f-num">{formatUsd(pool[key])}</span>;
 
@@ -136,7 +151,7 @@ export const COLUMNS = [
   // The token's last minute against its last five. GMGN on both sides, and
   // token-wide on both sides — see shared/marketRead.js for why a GMGN figure
   // may never be divided by a Meteora one.
-  { key: "tokenBurst", label: "Burst token", group: "rate", size: 124, render: (pool) => <TokenBurstCell pool={pool} /> },
+  { key: "tokenBurst", label: "Burst token", group: "rate", size: 132, render: (pool) => <TokenBurstCell pool={pool} /> },
   // This pool's hour against its own daily pace, Meteora on both sides.
   { key: "poolBurst", label: "Burst pool", group: "rate", size: 124, render: (pool) => <PoolBurstCell pool={pool} /> },
   { key: "feeVelocity", label: "Fee tren", group: "rate", sortable: false, size: 112, render: (pool) => <FeeVelocityCell velocity={pool.feeVelocity} /> },
@@ -148,13 +163,13 @@ export const COLUMNS = [
     render: (pool) => <span className={`f-num ${momentumTone(pool.priceChange1h)}`}>{formatPercent(pool.priceChange1h)}</span>,
   },
   { key: "trend", label: "Tren", group: "rate", sortable: false, size: 92, render: (pool) => <Spark values={pool.sparkline} score={pool.score} width={72} height={22} /> },
-  { key: "gmgnVolume1m", label: "Vol token 1m", group: "rate", size: 124, render: optionalUsdCell("gmgnVolume1m", "Butuh GMGN_API_KEY") },
-  { key: "gmgnVolume5m", label: "Vol token 5m", group: "rate", size: 124, render: optionalUsdCell("gmgnVolume5m", "Butuh GMGN_API_KEY") },
-  { key: "gmgnSwaps5m", label: "Swap token 5m", group: "rate", size: 124, render: countCell("gmgnSwaps5m") },
+  { key: "gmgnVolume1m", label: "Vol token 1m", group: "rate", size: 135, render: optionalUsdCell("gmgnVolume1m", "Butuh GMGN_API_KEY") },
+  { key: "gmgnVolume5m", label: "Vol token 5m", group: "rate", size: 135, render: optionalUsdCell("gmgnVolume5m", "Butuh GMGN_API_KEY") },
+  { key: "gmgnSwaps5m", label: "Swap token 5m", group: "rate", size: 150, render: countCell("gmgnSwaps5m") },
 
   // --- yield: what the pool pays, per minute -------------------------------
   { key: "feePerMinPct", label: "Fee/mnt", group: "yield", size: 116, render: (pool) => <YieldCell pool={pool} /> },
-  { key: "minutesTo1Pct", label: "Waktu ke 1%", group: "yield", size: 116, render: (pool) => <ClockCell pool={pool} /> },
+  { key: "minutesTo1Pct", label: "Waktu ke 1%", group: "yield", size: 134, render: (pool) => <ClockCell pool={pool} /> },
   { key: "feeTvl1h", label: "Fee/TVL", group: "yield", size: 104, render: (pool) => <span className="f-num">{pool.feeTvl1h.toFixed(2)}%</span> },
   {
     key: "totalFees1h",
@@ -170,26 +185,26 @@ export const COLUMNS = [
       </span>
     ),
   },
-  { key: "avgFeePerMin", label: "Avg Fee/m", group: "yield", size: 112, render: optionalUsdCell("avgFeePerMin") },
-  { key: "feeActiveTvl1h", label: "Fee/Active TVL", group: "yield", size: 128, render: percentCell("feeActiveTvl1h") },
+  { key: "avgFeePerMin", label: "Avg Fee/m", group: "yield", size: 118, render: optionalUsdCell("avgFeePerMin") },
+  { key: "feeActiveTvl1h", label: "Fee/Active TVL", group: "yield", size: 150, render: percentCell("feeActiveTvl1h") },
 
   // --- size: the pool and the flow through it ------------------------------
   // The share of the token's own flow this pool carries — the reading that
   // catches a pool that looks busy while the token trades somewhere else.
-  { key: "venueShare", label: "Porsi venue", group: "size", size: 116, render: (pool) => <VenueShareCell pool={pool} /> },
-  { key: "poolTurnover", label: "Putaran TVL", group: "size", size: 116, render: (pool) => <TurnoverCell pool={pool} /> },
-  { key: "tradeImpact", label: "Impact/trade", group: "size", size: 120, render: (pool) => <ImpactCell pool={pool} /> },
+  { key: "venueShare", label: "Porsi venue", group: "size", size: 126, render: (pool) => <VenueShareCell pool={pool} /> },
+  { key: "poolTurnover", label: "Putaran TVL", group: "size", size: 129, render: (pool) => <TurnoverCell pool={pool} /> },
+  { key: "tradeImpact", label: "Impact/trade", group: "size", size: 136, render: (pool) => <ImpactCell pool={pool} /> },
   { key: "tvl", label: "TVL", group: "size", size: 104, render: usdCell("tvl") },
   { key: "volume1h", label: "Vol 1j", group: "size", size: 104, render: usdCell("volume1h") },
   { key: "volume24h", label: "Vol 24j", group: "size", size: 104, render: usdCell("volume24h") },
-  { key: "avgVolumePerMin", label: "Avg Vol/m", group: "size", size: 112, render: optionalUsdCell("avgVolumePerMin") },
+  { key: "avgVolumePerMin", label: "Avg Vol/m", group: "size", size: 116, render: optionalUsdCell("avgVolumePerMin") },
   { key: "volumeTvl1h", label: "Vol/TVL", group: "size", size: 104, render: (pool) => <span className="f-num">{pool.volumeTvl1h.toFixed(2)}x</span> },
   // Reachable only through the picker, like Vol/Active TVL below it — neither
   // is in any preset's default list, but both read cleanly once shown.
-  { key: "volumeActiveTvl1h", label: "Vol/Active TVL", group: "size", size: 128, render: ratioCell("volumeActiveTvl1h") },
-  { key: "activeTvl", label: "Active TVL", group: "size", size: 116, render: (pool) => <ActiveDepthCell pool={pool} /> },
+  { key: "volumeActiveTvl1h", label: "Vol/Active TVL", group: "size", size: 147, render: ratioCell("volumeActiveTvl1h") },
+  { key: "activeTvl", label: "Active TVL", group: "size", size: 119, render: (pool) => <ActiveDepthCell pool={pool} /> },
   { key: "swaps1h", label: "Swap", group: "size", size: 92, render: countCell("swaps1h") },
-  { key: "avgSwapsPerMin", label: "Avg Swap/m", group: "size", size: 116, render: countCell("avgSwapsPerMin") },
+  { key: "avgSwapsPerMin", label: "Avg Swap/m", group: "size", size: 130, render: countCell("avgSwapsPerMin") },
   { key: "traders1h", label: "Trader", group: "size", size: 96, render: countCell("traders1h") },
   { key: "totalLps", label: "LP", group: "size", size: 88, render: countCell("totalLps") },
   { key: "ageHours", label: "Umur", group: "size", size: 96, render: (pool) => <span className="f-num">{formatAge(pool.ageHours)}</span> },
@@ -209,8 +224,8 @@ export const COLUMNS = [
   },
   { key: "top10HoldersPct", label: "Top-10", group: "safety", size: 100, render: (pool) => <ConcentrationValue value={pool.top10HoldersPct} warningAt={30} dangerAt={50} /> },
   { key: "devBalancePct", label: "Dev", group: "safety", size: 92, render: (pool) => <ConcentrationValue value={pool.devBalancePct} warningAt={5} dangerAt={10} /> },
-  { key: "jupShieldRank", label: "JupShield", group: "safety", size: 112, render: (pool) => <JupShieldChip pool={pool} /> },
-  { key: "rugCheckScore", label: "RugCheck", group: "safety", size: 112, render: (pool) => <RugCheckChip pool={pool} /> },
+  { key: "jupShieldRank", label: "JupShield", group: "safety", size: 114, render: (pool) => <JupShieldChip pool={pool} /> },
+  { key: "rugCheckScore", label: "RugCheck", group: "safety", size: 124, render: (pool) => <RugCheckChip pool={pool} /> },
   { key: "organicScore", label: "Organic", group: "safety", size: 108, render: (pool) => <OrganicChip pool={pool} /> },
 ];
 
@@ -347,14 +362,18 @@ const PRESET_COLUMNS = {
 export const defaultColumnKeys = (presetId) => PRESET_COLUMNS[presetId] || GENERAL_COLUMNS;
 
 /**
- * The four slices TanStack owns for this table, resolved for a preset: the
- * user's saved layout when there is one, the preset's own list when there is
- * not. Sorting is deliberately not persisted — switching preset should open on
- * the sort that preset is judged by, not on whatever was last clicked.
+ * The slices TanStack owns for this table, resolved for a preset: the user's
+ * saved layout when there is one, the preset's own list when there is not.
+ * Sorting and column filters are deliberately not persisted — switching preset
+ * should open on the sort that preset is judged by and on an unfiltered table,
+ * not on whatever was last clicked.
  */
 export const tableStateFor = (presetId) => ({
   ...loadTablePrefs(presetId, defaultColumnKeys(presetId), ALL_COLUMN_KEYS),
   sorting: defaultSort(presetId),
+  // Per-column filters are a question asked of one scan, not a layout choice.
+  // They are dropped on a preset switch for the same reason sorting is.
+  columnFilters: [],
 });
 
 export const resetTableState = (presetId) => {
@@ -385,17 +404,192 @@ const TABS = [
 ];
 
 /**
- * `rank` is the column's position in a multi-sort, shown only when more than
- * one column is sorted — otherwise the badge is noise on a table that is
- * usually sorted by exactly one thing.
+ * `rank` is the column's position in a multi-sort, and the caller passes -1
+ * while only one column is sorted — a "1" badge on a table sorted by exactly
+ * one thing is noise. Once there are two, every sorted column is numbered:
+ * badging only the second leaves the reader to infer which one leads.
  */
 function SortIcon({ sorted, rank }) {
   if (!sorted) return <ChevronsUpDown />;
   return (
     <>
       {sorted === "asc" ? <ArrowUp /> : <ArrowDown />}
-      {rank > 0 ? <em className="fx-sort-rank f-num">{rank + 1}</em> : null}
+      {rank >= 0 ? <em className="fx-sort-rank f-num">{rank + 1}</em> : null}
     </>
+  );
+}
+
+const NO_DRAG = Object.freeze({ id: null, index: -1, pinned: false, over: null, after: false });
+
+/**
+ * One button rather than three, cycling unpinned → kiri → kanan → unpinned.
+ * Each state draws a different icon, so where a column is frozen is readable
+ * without hovering for the tooltip.
+ */
+const PIN_STATES = {
+  false: { icon: Pin, next: "start", title: "Bekukan kolom di kiri" },
+  start: { icon: ArrowLeftToLine, next: "end", title: "Beku di kiri — klik untuk pindah ke kanan" },
+  end: { icon: ArrowRightToLine, next: false, title: "Beku di kanan — klik untuk lepas" },
+};
+
+/**
+ * The header owns three controls now: click to sort, drag to reorder, and a pin
+ * toggle. They used to live in the column picker, two menus away from the
+ * column they act on.
+ *
+ * The whole `th` is the drag handle — a 9px grip would be a smaller target than
+ * the resize handle it replaces. Dragging is refused across pinning regions:
+ * a frozen column and a scrolling one are laid out by different arrays, so
+ * "dropping" one into the other could only ever look like nothing happened.
+ */
+function HeaderCell({ header, sortCount, dragRef, drag, onDrag, onMove, onPin, style, className }) {
+  const { column } = header;
+  const sorted = column.getIsSorted();
+  const pinned = column.getIsPinned() || false;
+  const pin = PIN_STATES[String(pinned)];
+  const label = typeof column.columnDef.header === "string" ? column.columnDef.header : column.id;
+  const sortable = column.getCanSort();
+
+  const isTarget = drag.over === column.id && drag.id && drag.id !== column.id;
+
+  // What is being dragged is read from the ref, not from the rendered props:
+  // `dragover` can fire in the same task as `dragstart`, before React has
+  // re-rendered with the new source, and a handler reading the stale prop would
+  // refuse that first hover.
+  const accepts = () => {
+    const source = dragRef.current;
+    return Boolean(source.id) && source.id !== column.id && source.pinned === pinned;
+  };
+
+  const endDrag = () => {
+    dragRef.current = NO_DRAG;
+    onDrag(NO_DRAG);
+  };
+
+  return (
+    <th
+      scope="col"
+      className={[
+        className,
+        drag.id === column.id ? "is-dragging" : "",
+        isTarget ? (drag.after ? "is-drop-after" : "is-drop-before") : "",
+      ].filter(Boolean).join(" ")}
+      style={style}
+      title={label}
+      aria-sort={sorted ? (sorted === "asc" ? "ascending" : "descending") : "none"}
+      draggable
+      onDragStart={(event) => {
+        event.dataTransfer.effectAllowed = "move";
+        event.dataTransfer.setData("text/plain", column.id);
+        const source = { id: column.id, index: column.getIndex(), pinned, over: null, after: false };
+        dragRef.current = source;
+        onDrag(source);
+      }}
+      onDragOver={(event) => {
+        // Leaving the event un-prevented is how a cross-region drag is refused:
+        // the browser then shows "no drop" and never fires `drop` here.
+        if (!accepts()) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "move";
+        const source = dragRef.current;
+        if (source.over === column.id) return;
+        const next = { ...source, over: column.id, after: column.getIndex() > source.index };
+        dragRef.current = next;
+        onDrag(next);
+      }}
+      onDrop={(event) => {
+        event.preventDefault();
+        const source = dragRef.current;
+        if (accepts()) onMove(source.id, column.id);
+        endDrag();
+      }}
+      onDragEnd={endDrag}
+    >
+      <div className="fx-th">
+        <button
+          type="button"
+          className="fx-th-label"
+          // Alt+arrow is the keyboard equivalent of the drag: the header is the
+          // only place columns can be reordered now, so it cannot be a
+          // pointer-only affordance.
+          onKeyDown={(event) => {
+            if (!event.altKey || (event.key !== "ArrowLeft" && event.key !== "ArrowRight")) return;
+            event.preventDefault();
+            onMove(column.id, event.key === "ArrowLeft" ? -1 : 1);
+          }}
+          onClick={sortable ? column.getToggleSortingHandler() : undefined}
+          title={
+            sortable
+              ? "Klik untuk urutkan · Shift+klik untuk urutan bertingkat · Alt+←/→ untuk geser"
+              : "Alt+←/→ untuk geser kolom"
+          }
+        >
+          <span className="fx-th-text">
+            <FlexRender header={header} />
+          </span>
+          {sortable ? <SortIcon sorted={sorted} rank={sortCount > 1 ? column.getSortIndex() : -1} /> : null}
+        </button>
+        <button
+          type="button"
+          className={`fx-th-pin ${pinned ? "is-on" : ""}`}
+          aria-pressed={Boolean(pinned)}
+          aria-label={`${pin.title}: ${label}`}
+          title={pin.title}
+          onClick={() => onPin(column.id, pin.next)}
+        >
+          <pin.icon />
+        </button>
+      </div>
+    </th>
+  );
+}
+
+/**
+ * The filter each column carries is decided by what its cell holds: a range for
+ * the numbers, a substring for the one column that is a name. Columns whose
+ * cell is a chip or a sparkline get nothing — see the COLUMNS comment.
+ *
+ * An empty box is not a filter of zero. `inNumberRange` reads a blank end as
+ * open, and TanStack drops the entry entirely once both ends are blank, so
+ * clearing both boxes restores the full list without a separate reset.
+ */
+function ColumnFilter({ column }) {
+  const value = column.getFilterValue();
+  const label = typeof column.columnDef.header === "string" ? column.columnDef.header : column.id;
+
+  if (column.columnDef.meta?.filter === "text") {
+    return (
+      <input
+        className="fx-cf"
+        type="search"
+        value={value ?? ""}
+        placeholder="cari"
+        aria-label={`Saring ${label}`}
+        onChange={(event) => column.setFilterValue(event.target.value)}
+      />
+    );
+  }
+
+  const [min, max] = Array.isArray(value) ? value : ["", ""];
+  return (
+    <span className="fx-cf-range">
+      <input
+        className="fx-cf f-num"
+        type="number"
+        value={min ?? ""}
+        placeholder="min"
+        aria-label={`${label} minimum`}
+        onChange={(event) => column.setFilterValue([event.target.value, max ?? ""])}
+      />
+      <input
+        className="fx-cf f-num"
+        type="number"
+        value={max ?? ""}
+        placeholder="maks"
+        aria-label={`${label} maksimum`}
+        onChange={(event) => column.setFilterValue([min ?? "", event.target.value])}
+      />
+    </span>
   );
 }
 
@@ -430,21 +624,19 @@ function Switch({ checked, onChange, children }) {
 }
 
 /**
- * `visible` is the ordered list of active column keys — the same array that
- * drives the table's render order, so reordering here and reordering the
- * table are the same operation. Hidden columns carry no order of their own;
- * showing one just appends it to the end of `visible`.
- */
-/**
- * The picker edits TanStack's `columnOrder` and `columnVisibility` slices
- * directly. Order state covers every leaf column including the pinned edges,
- * but only the middle ones are listed here — the star, pool, score and link
- * columns are structural, so there is nothing useful to drag or hide about
- * them.
+ * The picker is now only a list of what is shown. Reordering and pinning moved
+ * onto the header itself, where the column being moved is the one under the
+ * cursor — they used to be here, two menus away from the table they changed.
+ *
+ * Showing a column does not move it: `columnOrder` covers every column whether
+ * visible or not (see normalizeOrder), so a column comes back to the slot it
+ * was hidden from rather than jumping to the end of the row.
+ *
+ * The structural columns — the star, the pool identity, the score, the link —
+ * are absent because there is nothing useful to hide about them.
  */
 function ColumnPicker({ table }) {
   const [open, setOpen] = useState(false);
-  const [dragKey, setDragKey] = useState(null);
   const ref = useRef(null);
 
   useEffect(() => {
@@ -456,39 +648,8 @@ function ColumnPicker({ table }) {
     return () => document.removeEventListener("pointerdown", onPointerDown);
   }, [open]);
 
-  const order = table.state.columnOrder;
-  const middleOrder = order.filter(
-    (id) => !LEADING_COLUMN_IDS.includes(id) && !TRAILING_COLUMN_IDS.includes(id),
-  );
   const visibility = table.state.columnVisibility;
-  const isVisible = (key) => visibility[key] !== false;
-  const visibleMiddle = middleOrder.filter(isVisible);
-  const hiddenColumns = COLUMNS.filter((column) => !isVisible(column.key));
-
-  // Showing a column moves it to the end of the visible run rather than leaving
-  // it wherever it was hidden from, which is what the single-array version did
-  // implicitly and what people expect when they tick something on.
-  const show = (key) => {
-    const withoutKey = middleOrder.filter((id) => id !== key);
-    const lastVisible = withoutKey.findLastIndex(isVisible);
-    withoutKey.splice(lastVisible + 1, 0, key);
-    table.setColumnOrder(fullColumnOrder(withoutKey));
-    table.setColumnVisibility({ ...visibility, [key]: true });
-  };
-
-  const hide = (key) => table.setColumnVisibility({ ...visibility, [key]: false });
-
-  // Live reorder while dragging: dropping is not required, hovering a row
-  // already moves the dragged key next to it. `fromKey === toKey` is what
-  // stops this from firing on every dragover tick once the two are adjacent.
-  const reorder = (fromKey, toKey) => {
-    if (!fromKey || fromKey === toKey) return;
-    const next = middleOrder.filter((id) => id !== fromKey);
-    const toIndex = next.indexOf(toKey);
-    if (toIndex === -1) return;
-    next.splice(toIndex, 0, fromKey);
-    table.setColumnOrder(fullColumnOrder(next));
-  };
+  const shown = COLUMNS.filter((column) => visibility[column.key] !== false).length;
 
   return (
     <div className="fx-dropdown" ref={ref}>
@@ -498,66 +659,26 @@ function ColumnPicker({ table }) {
         onClick={() => setOpen((value) => !value)}
         aria-expanded={open}
       >
-        <Columns3 /> Kolom
+        <Columns3 /> Kolom <em className="f-num">{shown}</em>
       </button>
       {open ? (
         <div className="fx-dropdown-menu fx-dropdown-menu--columns" role="menu">
-          <span className="f-eyebrow">Kolom aktif — seret buat urutkan</span>
-          {visibleMiddle.map((key) => {
-            const column = COLUMNS.find((item) => item.key === key);
-            if (!column) return null;
-            const pinned = table.getColumn(key)?.getIsPinned();
-            return (
-              <div
-                key={key}
-                className={`fx-col-row ${dragKey === key ? "is-dragging" : ""}`}
-                draggable
-                onDragStart={(event) => {
-                  setDragKey(key);
-                  event.dataTransfer.effectAllowed = "move";
-                  event.dataTransfer.setData("text/plain", key);
-                }}
-                onDragOver={(event) => {
-                  event.preventDefault();
-                  reorder(dragKey, key);
-                }}
-                onDrop={(event) => event.preventDefault()}
-                onDragEnd={() => setDragKey(null)}
-              >
-                <span className="fx-col-handle" aria-hidden="true">
-                  <GripVertical />
-                </span>
-                <label className="fx-dropdown-check">
-                  <input type="checkbox" checked onChange={() => hide(key)} />
+          <span className="f-eyebrow">Seret judul kolom di tabel untuk menata urutannya</span>
+          {Object.entries(COLUMN_GROUPS).map(([group, title]) => (
+            <div key={group}>
+              <span className="f-eyebrow fx-dropdown-section">{title}</span>
+              {COLUMNS.filter((column) => column.group === group).map((column) => (
+                <label key={column.key} className="fx-dropdown-check">
+                  <input
+                    type="checkbox"
+                    checked={visibility[column.key] !== false}
+                    onChange={() => table.getColumn(column.key)?.toggleVisibility()}
+                  />
                   {column.label}
                 </label>
-                <button
-                  type="button"
-                  className={`fx-col-pin ${pinned ? "is-on" : ""}`}
-                  aria-pressed={Boolean(pinned)}
-                  title={pinned ? `Lepas pin ${column.label}` : `Pin ${column.label} di kiri`}
-                  onClick={() => table.getColumn(key)?.pin(pinned ? false : "start")}
-                >
-                  {pinned ? <Pin /> : <PinOff />}
-                </button>
-              </div>
-            );
-          })}
-          {Object.entries(COLUMN_GROUPS).map(([group, title]) => {
-            const inGroup = hiddenColumns.filter((column) => column.group === group);
-            if (!inGroup.length) return null;
-            return (
-              <div key={group}>
-                <span className="f-eyebrow fx-dropdown-section">{title}</span>
-                {inGroup.map((column) => (
-                  <label key={column.key} className="fx-dropdown-check">
-                    <input type="checkbox" checked={false} onChange={() => show(column.key)} />
-                    {column.label}
-                  </label>
-                ))}
-              </div>
-            );
-          })}
+              ))}
+            </div>
+          ))}
         </div>
       ) : null}
     </div>
@@ -728,11 +849,12 @@ export default function ScannerView({
     view,
     density,
     filtersOpen,
+    columnFiltersOpen,
     phaseFilter,
     sorting,
+    columnFilters,
     columnOrder,
     columnVisibility,
-    columnSizing,
     columnPinning,
   } = state;
   const patch = (partial) => setState((current) => ({ ...current, ...partial }));
@@ -762,7 +884,11 @@ export default function ScannerView({
       enableSorting: column.sortable !== false,
       sortFn: "basic",
       sortUndefined: "last",
-      meta: { group: column.group },
+      // A column with no ordering has no range either — the chip and sparkline
+      // columns would offer a min/max box over a value nobody can see.
+      enableColumnFilter: column.sortable !== false,
+      filterFn: "inNumberRange",
+      meta: { group: column.group, filter: "number" },
     }));
 
     return [
@@ -791,7 +917,6 @@ export default function ScannerView({
         minSize: 44,
         enableSorting: false,
         enableHiding: false,
-        enableResizing: false,
       },
       {
         id: "pair",
@@ -809,6 +934,8 @@ export default function ScannerView({
         size: 208,
         minSize: 140,
         sortFn: "text",
+        filterFn: "includesString",
+        meta: { filter: "text" },
         enableHiding: false,
       },
       {
@@ -822,6 +949,8 @@ export default function ScannerView({
         minSize: 96,
         sortFn: "basic",
         sortUndefined: "last",
+        filterFn: "inNumberRange",
+        meta: { filter: "number" },
         enableHiding: false,
       },
       ...middle,
@@ -844,7 +973,6 @@ export default function ScannerView({
         minSize: 52,
         enableSorting: false,
         enableHiding: false,
-        enableResizing: false,
       },
     ];
   }, []);
@@ -854,37 +982,95 @@ export default function ScannerView({
     columns: tableColumns,
     data: rows,
     getRowId: (pool) => pool.address,
-    columnResizeMode: "onChange",
     enableMultiSort: true,
     // Clicking a sorted header cycles desc → asc → desc rather than passing
     // through unsorted: an unsorted scanner table has no meaning here, every
     // view of it is "the strongest by some measure, first".
     enableSortingRemoval: false,
     meta: { watchlist, preset: PRESETS[preset] },
-    state: { sorting, columnOrder, columnVisibility, columnSizing, columnPinning },
+    state: { sorting, columnFilters, columnOrder, columnVisibility, columnPinning },
     onSortingChange: (updater) =>
       patch({ sorting: typeof updater === "function" ? updater(sorting) : updater }),
+    onColumnFiltersChange: (updater) =>
+      patch({ columnFilters: typeof updater === "function" ? updater(columnFilters) : updater }),
     onColumnOrderChange: (updater) =>
       patch({ columnOrder: typeof updater === "function" ? updater(columnOrder) : updater }),
     onColumnVisibilityChange: (updater) =>
       patch({ columnVisibility: typeof updater === "function" ? updater(columnVisibility) : updater }),
-    onColumnSizingChange: (updater) =>
-      patch({ columnSizing: typeof updater === "function" ? updater(columnSizing) : updater }),
     onColumnPinningChange: (updater) =>
       patch({ columnPinning: typeof updater === "function" ? updater(columnPinning) : updater }),
   });
 
-  // Layout is per preset and survives a reload. Sorting is deliberately left
-  // out — see tableStateFor.
+  // Layout is per preset and survives a reload. Sorting and column filters are
+  // deliberately left out — see tableStateFor.
   useEffect(() => {
-    saveTablePrefs(preset, { columnOrder, columnVisibility, columnSizing, columnPinning });
-  }, [preset, columnOrder, columnVisibility, columnSizing, columnPinning]);
+    saveTablePrefs(preset, { columnOrder, columnVisibility, columnPinning });
+  }, [preset, columnOrder, columnVisibility, columnPinning]);
+
+  /* --- header interactions ----------------------------------------------- */
+
+  const [drag, setDrag] = useState(NO_DRAG);
+  const dragRef = useRef(NO_DRAG);
+
+  /**
+   * Order and pinning are written together, always. A pinned region renders in
+   * its own array's order, so a move that touched only `columnOrder` would do
+   * nothing to a frozen column — see alignPinning.
+   *
+   * `target` is either the column dropped on or a step (-1 / +1) from the
+   * keyboard. A step is resolved against the region the column is actually in,
+   * because that is the run it can move within.
+   */
+  const moveColumn = (fromId, target) => {
+    let toId = target;
+    if (typeof target === "number") {
+      const column = table.getColumn(fromId);
+      if (!column) return;
+      const region = table.getPinnedVisibleLeafColumns(column.getIsPinned() || "center");
+      const at = region.findIndex((item) => item.id === fromId);
+      toId = region[at + target]?.id;
+    }
+    if (!toId || toId === fromId) return;
+    const nextOrder = moveColumnId(columnOrder, fromId, toId);
+    if (nextOrder === columnOrder) return;
+    patch({ columnOrder: nextOrder, columnPinning: alignPinning(columnPinning, nextOrder) });
+  };
+
+  const pinColumn = (columnId, region) => {
+    const without = (ids) => (ids || []).filter((id) => id !== columnId);
+    const next = { start: without(columnPinning.start), end: without(columnPinning.end) };
+    if (region) next[region] = [...next[region], columnId];
+    patch({ columnPinning: alignPinning(next, columnOrder) });
+  };
+
+  /**
+   * The filter row sticks below the header row, and the header row's height is
+   * whatever the labels wrap to — so it is measured rather than guessed. A
+   * hardcoded offset is what would leave a gap or an overlap the first time a
+   * label wrapped or the font loaded late.
+   */
+  const headRowRef = useRef(null);
+  const [headHeight, setHeadHeight] = useState(0);
+  const showFilterRow = columnFiltersOpen || columnFilters.length > 0;
+
+  useEffect(() => {
+    const node = headRowRef.current;
+    if (!node) return undefined;
+    const measure = () => setHeadHeight(node.getBoundingClientRect().height);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [view, showFilterRow]);
+
+  /* --- rendering --------------------------------------------------------- */
 
   /**
    * Pinned cells are sticky, and their offset is the summed width of everything
-   * pinned before them — which changes as soon as a column is resized. The old
-   * CSS hardcoded those offsets (left: 0 / 34px / 202px), so any resize would
-   * have torn the frozen edge apart.
+   * pinned before them in the same region — which changes the moment another
+   * column joins or leaves that region. The old CSS hardcoded those offsets
+   * (left: 0 / 34px / 202px), which only held while exactly three fixed columns
+   * could ever be frozen.
    */
   const pinnedStyle = (column) => {
     const pinned = column.getIsPinned();
@@ -895,15 +1081,48 @@ export default function ScannerView({
     };
   };
 
-  const pinnedClass = (column) => (column.getIsPinned() ? "fx-col-pinned" : "");
+  /**
+   * The seam between a frozen run and the scrolling remainder is drawn on the
+   * run's last column, which is now whichever column the user pinned last
+   * rather than a fixed one.
+   */
+  const pinnedClass = (column) => {
+    const pinned = column.getIsPinned();
+    if (!pinned) return "";
+    const seam =
+      pinned === "start"
+        ? column.getIsLastColumn("start") && "fx-col-seam-start"
+        : column.getIsFirstColumn("end") && "fx-col-seam-end";
+    return `fx-col-pinned ${seam || ""}`;
+  };
 
   /**
-   * Cards read the same ordering as the table. `rows` arrives unsorted now that
-   * the table owns sorting, so going through the row model is what keeps the
-   * two views showing the same pool first — switching layout must not silently
-   * reshuffle the list.
+   * Cells and headers are read region by region rather than from the plain
+   * header groups. `columnOrder` alone decides the flat order, but a pinned
+   * column's sticky offset is measured inside its own region — render the two
+   * out of step and a frozen column sits at an offset belonging to a slot it is
+   * not in.
    */
-  const sortedPools = table.getRowModel().rows.map((row) => row.original);
+  const headers = [
+    ...table.getStartFlatHeaders(),
+    ...table.getCenterFlatHeaders(),
+    ...table.getEndFlatHeaders(),
+  ];
+  const rowCells = (row) => [
+    ...row.getStartVisibleCells(),
+    ...row.getCenterVisibleCells(),
+    ...row.getEndVisibleCells(),
+  ];
+
+  /**
+   * Cards read the same ordering as the table. `rows` arrives unsorted and
+   * unfiltered now that the table owns both, so going through the row model is
+   * what keeps the two views showing the same pools — switching layout must not
+   * silently reshuffle or re-widen the list.
+   */
+  const shownRows = table.getRowModel().rows;
+  const sortedPools = shownRows.map((row) => row.original);
+  const sortCount = sorting.length;
 
   return (
     <div className="fx-view fx-scanner">
@@ -913,7 +1132,7 @@ export default function ScannerView({
           <p>
             {loading
               ? "Memuat hasil pemindaian…"
-              : `${rows.length} pool ditampilkan dari ${pools.length} yang diperkaya penuh.`}
+              : `${shownRows.length} pool ditampilkan dari ${pools.length} yang diperkaya penuh.`}
           </p>
         </div>
         <div className="fx-view-head-tools">
@@ -938,6 +1157,16 @@ export default function ScannerView({
             onClick={() => patch({ filtersOpen: !filtersOpen })}
           >
             <Filter /> Filter
+          </button>
+          <button
+            className={`f-btn f-btn--ghost ${showFilterRow ? "is-open" : ""}`}
+            type="button"
+            aria-expanded={showFilterRow}
+            title="Saring tiap kolom langsung di tabel"
+            onClick={() => patch({ columnFiltersOpen: !showFilterRow, columnFilters: [] })}
+          >
+            <ListFilter /> Kolom filter
+            {columnFilters.length ? <em className="f-num">{columnFilters.length}</em> : null}
           </button>
           <ColumnPicker table={table} />
           <div className="fx-segment" role="group" aria-label="Bentuk tampilan">
@@ -1076,82 +1305,65 @@ export default function ScannerView({
         <div className={`fx-table-frame fx-table-frame--${density}`}>
           <table className="fx-table" style={{ width: table.getTotalSize() }}>
             <thead>
-              {table.getHeaderGroups().map((group) => (
-                <tr key={group.id}>
-                  {group.headers.map((header) => {
-                    const { column } = header;
-                    const sorted = column.getIsSorted();
-                    return (
-                      <th
-                        key={header.id}
-                        scope="col"
-                        className={`fx-col-${header.id} ${pinnedClass(column)}`}
-                        style={pinnedStyle(column)}
-                        aria-sort={sorted ? (sorted === "asc" ? "ascending" : "descending") : "none"}
-                      >
-                        {column.getCanSort() ? (
-                          <button
-                            type="button"
-                            // Shift-click adds a column to the sort instead of
-                            // replacing it; the handler reads the modifier off
-                            // the event itself.
-                            onClick={column.getToggleSortingHandler()}
-                            title="Klik untuk urutkan · Shift+klik untuk urutan bertingkat"
-                          >
-                            <table.FlexRender header={header} />
-                            <SortIcon sorted={sorted} rank={column.getSortIndex()} />
-                          </button>
-                        ) : (
-                          <span>
-                            <table.FlexRender header={header} />
-                          </span>
-                        )}
-                        {column.getCanResize() ? (
-                          <span
-                            className={`fx-col-resize ${column.getIsResizing() ? "is-active" : ""}`}
-                            role="separator"
-                            aria-orientation="vertical"
-                            aria-label={`Ubah lebar kolom ${typeof column.columnDef.header === "string" ? column.columnDef.header : header.id}`}
-                            // Both events, not a single pointerdown: the shipped
-                            // handler branches on touchstart, and a pointer-only
-                            // listener leaves touch resizing inert.
-                            onMouseDown={header.getResizeHandler()}
-                            onTouchStart={header.getResizeHandler()}
-                            onClick={(event) => event.stopPropagation()}
-                            onDoubleClick={() => column.resetSize()}
-                          />
-                        ) : null}
-                      </th>
-                    );
-                  })}
+              <tr ref={headRowRef}>
+                {headers.map((header) => (
+                  <HeaderCell
+                    key={header.id}
+                    header={header}
+                    sortCount={sortCount}
+                    dragRef={dragRef}
+                    drag={drag}
+                    onDrag={setDrag}
+                    onMove={moveColumn}
+                    onPin={pinColumn}
+                    className={`fx-col-${header.id} ${pinnedClass(header.column)}`}
+                    style={pinnedStyle(header.column)}
+                  />
+                ))}
+              </tr>
+              {showFilterRow ? (
+                <tr className="fx-filter-row">
+                  {headers.map(({ id, column }) => (
+                    <th
+                      key={id}
+                      className={`fx-col-${id} ${pinnedClass(column)}`}
+                      style={{ ...pinnedStyle(column), top: `${headHeight}px` }}
+                    >
+                      {column.getCanFilter() ? <ColumnFilter column={column} /> : null}
+                    </th>
+                  ))}
                 </tr>
-              ))}
+              ) : null}
             </thead>
             <tbody>
               {loading
                 ? Array.from({ length: 9 }, (_, index) => (
                     <tr key={index} className="fx-row-skeleton">
-                      {table.getVisibleLeafColumns().map((column) => (
-                        <td key={column.id}>
+                      {headers.map(({ id, column }) => (
+                        <td
+                          key={id}
+                          className={`fx-col-${id} ${pinnedClass(column)}`}
+                          style={pinnedStyle(column)}
+                        >
                           <span className="f-skeleton" />
                         </td>
                       ))}
                     </tr>
                   ))
-                : table.getRowModel().rows.map((row) => (
+                : shownRows.map((row) => (
                     <tr
                       key={row.id}
                       className={row.original.address === selectedAddress ? "is-selected" : ""}
                       style={heatVars(row.original.score)}
                       onClick={() => onOpenPool(row.original)}
                     >
-                      {row.getVisibleCells().map((cell) => (
+                      {rowCells(row).map((cell) => (
                         <td
                           key={cell.id}
                           className={`fx-col-${cell.column.id} ${pinnedClass(cell.column)}`}
                           style={pinnedStyle(cell.column)}
                         >
-                          <table.FlexRender cell={cell} />
+                          <FlexRender cell={cell} />
                         </td>
                       ))}
                     </tr>
@@ -1161,14 +1373,16 @@ export default function ScannerView({
         </div>
       )}
 
-      {!loading && rows.length === 0 ? (
+      {!loading && shownRows.length === 0 ? (
         <EmptyState
           icon={Filter}
           title="Tidak ada pool yang cocok"
           body={
-            tab === "watchlist"
-              ? "Klik bintang di baris mana pun untuk menyimpan pool ke sini."
-              : "Longgarkan filter, atau buka tab Gagal gate untuk melihat pool yang tertahan beserta alasannya."
+            columnFilters.length
+              ? "Filter kolom di tabel sedang mempersempit daftar. Kosongkan kotaknya untuk melebarkan lagi."
+              : tab === "watchlist"
+                ? "Klik bintang di baris mana pun untuk menyimpan pool ke sini."
+                : "Longgarkan filter, atau buka tab Gagal gate untuk melihat pool yang tertahan beserta alasannya."
           }
           action={
             <button className="f-btn" type="button" onClick={onResetFilters}>

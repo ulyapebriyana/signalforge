@@ -118,9 +118,12 @@ const initialScannerState = (preset) => ({
   view: window.innerWidth < 760 ? "grid" : "table",
   density: "compact",
   filtersOpen: false,
+  // The per-column filter row inside the table, separate from the advanced
+  // filter panel above it.
+  columnFiltersOpen: false,
   // Set by clicking a phase count in the market strip. Null means every phase.
   phaseFilter: null,
-  // sorting / columnOrder / columnVisibility / columnSizing / columnPinning —
+  // sorting / columnFilters / columnOrder / columnVisibility / columnPinning —
   // the slices TanStack owns, held here so the preset switch and the reset
   // button can rewrite them.
   ...tableStateFor(preset.id),

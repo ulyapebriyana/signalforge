@@ -23,6 +23,11 @@ Pemilihan bundel terjadi di `src/main.jsx` sebelum salah satu stylesheet dimuat,
 
 - Skor dibaca sebagai suhu: satu skala warna dari besi dingin ke putih membara, dipakai di tabel, kartu, riwayat, dan command palette.
 - Scanner dengan dua bentuk tampilan (tabel padat dan kartu), pemilih kolom, kerapatan baris, dan enam tab: Semua, Lolos gate, Hot, Watch, Gagal gate, Watchlist.
+- Tabel scanner dikendalikan dari judul kolomnya: klik untuk mengurutkan (Shift+klik untuk
+  urutan bertingkat), seret untuk memindahkan kolom (Alt+←/→ dari papan ketik), dan tombol pin
+  untuk membekukan kolom di tepi kiri atau kanan saat tabel digeser. Baris **Kolom filter**
+  menyaring tiap kolom langsung di tabel — rentang min/maks untuk angka, pencarian untuk nama
+  pool — dan kartu ikut hasil saringan yang sama.
 - Panel detail pool: radar lima komponen skor, dial risiko, grafik momentum, hasil gate preset, panel keamanan, dan rincian fee.
 - Watchlist tersimpan di browser, command palette `⌘K` / `Ctrl+K`, pintasan `/` untuk cari dan `r` untuk muat ulang.
 - Tema gelap, terang, atau ikut sistem.
@@ -42,8 +47,10 @@ Pemilihan bundel terjadi di `src/main.jsx` sebelum salah satu stylesheet dimuat,
   Jalan / Puncak / Meredup / Mati), dua burst yang tidak boleh dicampur, fee per menit, waktu
   ke 1%, impact per trade, dan porsi venue. Lihat [Baca pasar](#baca-pasar) di bawah.
 - **Kolom scanner mengikuti preset**. Tiap preset membuka tabel dan urutan yang berbeda karena
-  skala waktunya berbeda; Heart Attack membuka pada burst, bukan skor. Pilihan kolom disimpan
-  per preset, jadi menata tabel Heart Attack tidak ikut mengubah tabel Slow Wallet.
+  skala waktunya berbeda; Heart Attack membuka pada burst, bukan skor. Susunan kolom — pilihan,
+  urutan, dan pin — disimpan per preset, jadi menata tabel Heart Attack tidak ikut mengubah
+  tabel Slow Wallet. Urutan sortir dan filter kolom sengaja tidak disimpan: berganti preset
+  membuka tabel pada sortir preset itu sendiri, tanpa saringan sisa.
 - Notifikasi berbunyi **berbeda per preset**, jadi bunyinya sendiri sudah memberi tahu gate mana yang lolos.
 - Risk score 0–100 dengan flag freeze authority, blacklist, verifikasi, TVL tipis, usia pool, dan data holder yang belum tersedia.
 - Pencarian, filter angka, tab Hot/Watch/Skipped, panel inspeksi, tautan ke Meteora.

@@ -976,43 +976,6 @@
   border-top: 1px solid var(--f-line);
 }
 
-.fx-col-row {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  border-radius: var(--f-r-sm);
-}
-
-.fx-col-row .fx-dropdown-check {
-  flex: 1;
-}
-
-.fx-col-handle {
-  display: grid;
-  place-items: center;
-  width: 1.1rem;
-  height: 1.6rem;
-  color: var(--f-slag);
-  cursor: grab;
-}
-
-.fx-col-handle svg {
-  width: 13px;
-  height: 13px;
-}
-
-.fx-col-row:hover .fx-col-handle {
-  color: var(--f-ember);
-}
-
-.fx-col-row.is-dragging {
-  opacity: 0.4;
-}
-
-.fx-col-row.is-dragging .fx-col-handle {
-  cursor: grabbing;
-}
-
 .f-btn.is-open {
   border-color: var(--f-ember);
   color: var(--f-ember);
@@ -1164,11 +1127,27 @@
   max-height: calc(100dvh - var(--f-topbar) - 260px);
 }
 
+/**
+ * `table-layout: fixed` is what makes the frozen edge line up. A pinned cell's
+ * sticky offset is the sum of the *declared* widths ahead of it, but under the
+ * default auto layout the browser redistributes those widths to fit the
+ * content — the pool column asked for 208px and was given 198, and every pinned
+ * column after it sat ten pixels adrift of the one before. Fixed layout makes
+ * the rendered geometry the same numbers the offsets are computed from.
+ */
 .fx-table {
   width: 100%;
+  table-layout: fixed;
   border-collapse: separate;
   border-spacing: 0;
   font-size: 0.8125rem;
+}
+
+/* The corollary: a cell can no longer widen to fit, so it clips instead of
+   spilling its content over the column next to it. */
+.fx-table th,
+.fx-table td {
+  overflow: hidden;
 }
 
 .fx-table thead th {
@@ -1183,14 +1162,26 @@
   white-space: nowrap;
 }
 
-.fx-table thead th button,
-.fx-table thead th > span {
+/* The whole header cell is the drag handle for reordering, so it advertises
+   that with the cursor rather than with yet another 9px grip target. */
+.fx-table thead th {
+  cursor: grab;
+}
+
+.fx-th {
+  display: flex;
+  align-items: center;
+  gap: 0.1rem;
+}
+
+.fx-th-label {
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;
   gap: 0.3rem;
-  width: 100%;
-  padding: 0.55rem 0.6rem;
+  flex: 1;
+  min-width: 0;
+  padding: 0.55rem 0.1rem 0.55rem 0.5rem;
   font-family: var(--f-mono);
   font-size: 0.6875rem;
   font-weight: 600;
@@ -1199,7 +1190,16 @@
   color: var(--f-slag);
 }
 
-.fx-table thead th button:hover {
+/* A label too long for its column truncates rather than wrapping: the sticky
+   filter row below is offset by the measured header height, and a header that
+   grows a line on one column grows the whole row. */
+.fx-th-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fx-th-label:hover {
   color: var(--f-bone);
 }
 
@@ -1207,6 +1207,62 @@
   width: 11px;
   height: 11px;
   opacity: 0.65;
+  flex-shrink: 0;
+}
+
+/* The pin slot is always reserved, never revealed on hover: a button that
+   appears on hover would reflow the label out from under the cursor. */
+.fx-th-pin {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-right: 0.15rem;
+  flex: none;
+  border-radius: var(--f-r-sm, 6px);
+  color: var(--f-slag);
+  opacity: 0;
+  transition: opacity 0.12s ease, color 0.12s ease;
+}
+
+.fx-table thead th:hover .fx-th-pin,
+.fx-th-pin:focus-visible,
+.fx-th-pin.is-on {
+  opacity: 1;
+}
+
+.fx-th-pin:hover {
+  color: var(--f-bone);
+  background: var(--f-line);
+}
+
+.fx-th-pin.is-on {
+  color: var(--f-heat, var(--f-ember));
+}
+
+.fx-th-pin svg {
+  width: 12px;
+  height: 12px;
+  opacity: 1;
+}
+
+/* --- header drag and drop ------------------------------------------------ */
+
+.fx-table thead th.is-dragging {
+  cursor: grabbing;
+  opacity: 0.45;
+}
+
+/* The drop edge is drawn with an inset shadow rather than a border so it costs
+   the cell no width — a border here would shift every following column by a
+   pixel for the length of the drag. */
+.fx-table thead th.is-drop-before {
+  box-shadow: inset 2px 0 0 var(--f-ember, #ff7a45);
+}
+
+.fx-table thead th.is-drop-after {
+  box-shadow: inset -2px 0 0 var(--f-ember, #ff7a45);
 }
 
 .fx-table tbody td {
@@ -1236,9 +1292,10 @@
 
 /**
  * Pinned cells are sticky; the inline-start offset is supplied per cell by the
- * table, because it is the running total of the widths before it and those
- * widths are now draggable. The offsets used to be hardcoded here (0/34/202px),
- * which only held while the three frozen columns could never be resized.
+ * table, because it is the running total of the widths of whatever else is
+ * frozen ahead of it — and any column can now be frozen from its header. The
+ * offsets used to be hardcoded here (0/34/202px), which only held while exactly
+ * three fixed columns could ever be pinned.
  */
 .fx-col-pinned {
   position: sticky;
@@ -1256,10 +1313,25 @@
   padding-right: 0 !important;
 }
 
-/* The seam between the frozen run and the scrolling remainder. */
-.fx-table thead th.fx-col-pinned:last-of-type,
-.fx-table tbody td.fx-col-pinned:last-of-type {
-  box-shadow: 1px 0 0 var(--f-line);
+/* The seam between a frozen run and the scrolling remainder, drawn on whichever
+   column now ends that run. This used to key off `.fx-col-pinned:last-of-type`,
+   which reads "the last cell in the row, if it happens to be pinned" — the row
+   ends on the unpinned link column, so the seam never actually drew. */
+.fx-col-seam-start {
+  box-shadow: 1px 0 0 var(--f-line-strong);
+}
+
+.fx-col-seam-end {
+  box-shadow: -1px 0 0 var(--f-line-strong);
+}
+
+/* A drop indicator on the column that carries the seam has to beat it. */
+.fx-table thead th.fx-col-seam-start.is-drop-before {
+  box-shadow: 1px 0 0 var(--f-line-strong), inset 2px 0 0 var(--f-ember, #ff7a45);
+}
+
+.fx-table thead th.fx-col-seam-start.is-drop-after {
+  box-shadow: 1px 0 0 var(--f-line-strong), inset -2px 0 0 var(--f-ember, #ff7a45);
 }
 
 .fx-table thead .fx-col-pinned {
@@ -1267,8 +1339,9 @@
   background: var(--f-iron-900);
 }
 
-.fx-table thead .fx-col-pair button,
-.fx-table thead .fx-col-score button {
+.fx-table thead .fx-col-star .fx-th-label,
+.fx-table thead .fx-col-pair .fx-th-label,
+.fx-table thead .fx-col-score .fx-th-label {
   justify-content: flex-start;
 }
 
@@ -1280,33 +1353,59 @@
   background: color-mix(in srgb, var(--heat) 9%, var(--f-iron-900));
 }
 
-/* --- resize handle ------------------------------------------------------- */
+/* --- per-column filter row ------------------------------------------------ */
 
-/* `thead th` is already sticky above, which makes it a positioned ancestor —
-   the handle anchors to it without needing its own `position: relative`. */
-.fx-col-resize {
-  position: absolute;
-  top: 0;
-  right: 0;
-  height: 100%;
-  width: 9px;
-  cursor: col-resize;
-  touch-action: none;
-  user-select: none;
-  /* Invisible until wanted: a permanent rule between every pair of columns
-     would compete with the data for attention on an 18-column table. */
-  opacity: 0;
-  background: linear-gradient(to right, transparent 4px, var(--f-heat, var(--f-line-strong)) 4px 5px, transparent 5px);
-  transition: opacity 0.12s ease;
+/* Sticks directly under the header row. `top` is supplied inline from the
+   measured header height — see ScannerView — because the labels decide it. */
+.fx-table thead .fx-filter-row th {
+  position: sticky;
+  z-index: 3;
+  padding: 0 0.3rem 0.4rem;
+  background: var(--f-iron-900);
+  border-bottom: 1px solid var(--f-line-strong);
+  cursor: auto;
 }
 
-.fx-table thead th:hover .fx-col-resize,
-.fx-col-resize.is-active {
-  opacity: 1;
+.fx-table thead .fx-filter-row th.fx-col-pinned {
+  z-index: 4;
 }
 
-.fx-col-resize.is-active {
-  background: linear-gradient(to right, transparent 4px, var(--f-ember, #ff7a45) 4px 5px, transparent 5px);
+.fx-cf-range {
+  display: flex;
+  gap: 0.2rem;
+}
+
+.fx-cf {
+  width: 100%;
+  min-width: 0;
+  padding: 0.2rem 0.3rem;
+  border: 1px solid var(--f-line);
+  border-radius: var(--f-r-sm, 6px);
+  background: var(--f-iron-950);
+  color: var(--f-bone);
+  font-size: 0.6875rem;
+}
+
+.fx-cf:focus {
+  outline: none;
+  border-color: var(--f-ember);
+}
+
+.fx-cf::placeholder {
+  color: var(--f-slag);
+  opacity: 0.7;
+}
+
+/* The spinners are unusable at 40px wide and steal the room the digits need. */
+.fx-cf[type="number"] {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.fx-cf[type="number"]::-webkit-outer-spin-button,
+.fx-cf[type="number"]::-webkit-inner-spin-button {
+  appearance: none;
+  margin: 0;
 }
 
 /* --- multi-sort rank ----------------------------------------------------- */
@@ -1324,40 +1423,6 @@
   font-size: 0.5625rem;
   font-style: normal;
   font-weight: 700;
-}
-
-/* --- pin toggle in the column picker ------------------------------------- */
-
-.fx-col-pin {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  flex: none;
-  border-radius: var(--f-r-sm, 6px);
-  color: var(--f-slag);
-  opacity: 0;
-  transition: opacity 0.12s ease, color 0.12s ease;
-}
-
-.fx-col-row:hover .fx-col-pin,
-.fx-col-pin.is-on {
-  opacity: 1;
-}
-
-.fx-col-pin:hover {
-  color: var(--f-bone);
-  background: var(--f-line);
-}
-
-.fx-col-pin.is-on {
-  color: var(--f-heat, var(--f-bone));
-}
-
-.fx-col-pin svg {
-  width: 12px;
-  height: 12px;
 }
 
 .fx-pool-cell {
