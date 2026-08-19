@@ -54,7 +54,7 @@ import PoolDrawer from "./components/PoolDrawer.jsx";
 import { ToastStack, useToasts } from "./components/Toasts.jsx";
 import OverviewView from "./views/OverviewView.jsx";
 import RulesView from "./views/RulesView.jsx";
-import ScannerView, { defaultColumnKeys, defaultSort } from "./views/ScannerView.jsx";
+import ScannerView, { resetTableState, tableStateFor } from "./views/ScannerView.jsx";
 import SettingsView from "./views/SettingsView.jsx";
 import SignalsView from "./views/SignalsView.jsx";
 import "./app.css";
@@ -103,18 +103,27 @@ const defaultFilters = (preset) => ({
   cleanSecurityOnly: false,
 });
 
+/**
+ * Module scope, not an inline `[]`: a fresh fallback array on every render
+ * invalidates the table's data-dependent models each time, which quietly
+ * defeats its memoisation on an empty tab.
+ */
+const EMPTY_ROWS = [];
+
 const initialScannerState = (preset) => ({
   search: "",
   tab: "all",
-  sort: defaultSort(preset.id),
   filters: defaultFilters(preset),
   // A 18-column table is unusable on a phone; start those sessions on cards.
   view: window.innerWidth < 760 ? "grid" : "table",
   density: "compact",
-  columns: defaultColumnKeys(preset.id),
   filtersOpen: false,
   // Set by clicking a phase count in the market strip. Null means every phase.
   phaseFilter: null,
+  // sorting / columnOrder / columnVisibility / columnSizing / columnPinning —
+  // the slices TanStack owns, held here so the preset switch and the reset
+  // button can rewrite them.
+  ...tableStateFor(preset.id),
 });
 
 /* --- chrome ---------------------------------------------------------------- */
@@ -574,20 +583,13 @@ export default function ForgeApp({ path }) {
     [projection],
   );
 
-  const rows = useMemo(() => {
-    const { key, direction } = scanner.sort;
-    const factor = direction === "asc" ? 1 : -1;
-    return (projection[scanner.tab] || []).toSorted((left, right) => {
-      const a = left[key];
-      const b = right[key];
-      if (typeof a === "string" || typeof b === "string") {
-        return String(a ?? "").localeCompare(String(b ?? "")) * factor;
-      }
-      if (!Number.isFinite(a)) return 1;
-      if (!Number.isFinite(b)) return -1;
-      return (a - b) * factor;
-    });
-  }, [projection, scanner.sort, scanner.tab]);
+  // Unsorted on purpose: ordering is the table's job now, so that the header
+  // click, the multi-sort and the null-sinking rule all live in one place
+  // rather than being split between here and the view.
+  const rows = useMemo(
+    () => projection[scanner.tab] || EMPTY_ROWS,
+    [projection, scanner.tab],
+  );
 
   /* --- actions ----------------------------------------------------------- */
 
@@ -600,8 +602,9 @@ export default function ForgeApp({ path }) {
     setScanner((current) => ({
       ...current,
       filters: { ...current.filters, freezeOffOnly: PRESETS[next].requireFreezeOff },
-      columns: defaultColumnKeys(next),
-      sort: defaultSort(next),
+      // Loads that preset's own saved layout, or its defaults — never carries
+      // the outgoing preset's columns across.
+      ...tableStateFor(next),
       phaseFilter: null,
       tab: "all",
     }));
@@ -619,7 +622,9 @@ export default function ForgeApp({ path }) {
       search: "",
       tab: "all",
       phaseFilter: null,
-      sort: defaultSort(preset),
+      // Drops the saved layout too, so "Reset" also undoes a table dragged into
+      // an unreadable shape — resized, reordered, or pinned.
+      ...resetTableState(preset),
     }));
   }, [preset]);
 

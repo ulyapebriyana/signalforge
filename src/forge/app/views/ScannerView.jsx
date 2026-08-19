@@ -1,5 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  columnOrderingFeature,
+  columnPinningFeature,
+  columnResizingFeature,
+  columnSizingFeature,
+  columnVisibilityFeature,
+  createSortedRowModel,
+  rowSortingFeature,
+  sortFn_basic,
+  sortFn_text,
+  tableFeatures,
+  useTable,
+} from "@tanstack/react-table";
+import {
   ArrowDown,
   ArrowUp,
   ChevronsUpDown,
@@ -8,6 +21,8 @@ import {
   Filter,
   GripVertical,
   LayoutGrid,
+  Pin,
+  PinOff,
   RotateCcw,
   Rows3,
   Search,
@@ -45,6 +60,31 @@ import {
   VenueShareCell,
   YieldCell,
 } from "../components/bits.jsx";
+import {
+  clearTablePrefs,
+  fullColumnOrder,
+  LEADING_COLUMN_IDS,
+  loadTablePrefs,
+  saveTablePrefs,
+  TRAILING_COLUMN_IDS,
+} from "../lib/tablePrefs.js";
+
+/**
+ * Only the features this table actually uses, which is the whole point of v9's
+ * opt-in registration — an unregistered feature's state and methods do not
+ * exist at all. `columnSizingFeature` is a prerequisite of both resizing and
+ * pinning: pinned offsets are computed from numeric column sizes.
+ */
+const tableFeatureSet = tableFeatures({
+  rowSortingFeature,
+  sortedRowModel: createSortedRowModel(),
+  sortFns: { basic: sortFn_basic, text: sortFn_text },
+  columnVisibilityFeature,
+  columnOrderingFeature,
+  columnSizingFeature,
+  columnResizingFeature,
+  columnPinningFeature,
+});
 
 /**
  * Columns are grouped by the question they answer, and the groups are ordered
@@ -60,56 +100,121 @@ export const COLUMN_GROUPS = Object.freeze({
   safety: "Keamanan",
 });
 
+/**
+ * Each column carries its own renderer. This used to be a 130-line `switch`
+ * living a few hundred lines away from the list, so adding a column meant
+ * editing two places that had no way of telling you when they disagreed —
+ * a key present here but missing there rendered as an empty cell, silently.
+ *
+ * `size` is the starting width in pixels; the user can drag any of them.
+ * `sortable: false` marks the columns whose cell is a shape rather than a
+ * value (a chip, a sparkline), where an ordering would be meaningless.
+ */
+const usdCell = (key) => (pool) => <span className="f-num">{formatUsd(pool[key])}</span>;
+
+/** GMGN and pool-discovery figures are absent rather than zero when unread. */
+const optionalUsdCell = (key, why) => (pool) =>
+  Number.isFinite(pool[key])
+    ? <span className="f-num">{formatUsd(pool[key])}</span>
+    : <Unread why={why} />;
+
+const countCell = (key) => (pool) => <span className="f-num">{optionalNumber(pool[key])}</span>;
+
+const ratioCell = (key) => (pool) =>
+  Number.isFinite(pool[key])
+    ? <span className="f-num">{pool[key].toFixed(2)}x</span>
+    : <Unread />;
+
+const percentCell = (key) => (pool) =>
+  Number.isFinite(pool[key])
+    ? <span className="f-num">{pool[key].toFixed(2)}%</span>
+    : <Unread />;
+
 export const COLUMNS = [
   // --- rate: the pool at this minute ---------------------------------------
-  { key: "phase", label: "Fase", group: "rate", sortable: false },
+  { key: "phase", label: "Fase", group: "rate", sortable: false, size: 104, render: (pool) => <PhaseChip phase={pool.phase} size="sm" /> },
   // The token's last minute against its last five. GMGN on both sides, and
   // token-wide on both sides — see shared/marketRead.js for why a GMGN figure
   // may never be divided by a Meteora one.
-  { key: "tokenBurst", label: "Burst token", group: "rate" },
+  { key: "tokenBurst", label: "Burst token", group: "rate", size: 124, render: (pool) => <TokenBurstCell pool={pool} /> },
   // This pool's hour against its own daily pace, Meteora on both sides.
-  { key: "poolBurst", label: "Burst pool", group: "rate" },
-  { key: "feeVelocity", label: "Fee tren", group: "rate", sortable: false },
-  { key: "priceChange1h", label: "1j", group: "rate" },
-  { key: "trend", label: "Tren", group: "rate", sortable: false },
-  { key: "gmgnVolume1m", label: "Vol token 1m", group: "rate" },
-  { key: "gmgnVolume5m", label: "Vol token 5m", group: "rate" },
-  { key: "gmgnSwaps5m", label: "Swap token 5m", group: "rate" },
+  { key: "poolBurst", label: "Burst pool", group: "rate", size: 124, render: (pool) => <PoolBurstCell pool={pool} /> },
+  { key: "feeVelocity", label: "Fee tren", group: "rate", sortable: false, size: 112, render: (pool) => <FeeVelocityCell velocity={pool.feeVelocity} /> },
+  {
+    key: "priceChange1h",
+    label: "1j",
+    group: "rate",
+    size: 92,
+    render: (pool) => <span className={`f-num ${momentumTone(pool.priceChange1h)}`}>{formatPercent(pool.priceChange1h)}</span>,
+  },
+  { key: "trend", label: "Tren", group: "rate", sortable: false, size: 92, render: (pool) => <Spark values={pool.sparkline} score={pool.score} width={72} height={22} /> },
+  { key: "gmgnVolume1m", label: "Vol token 1m", group: "rate", size: 124, render: optionalUsdCell("gmgnVolume1m", "Butuh GMGN_API_KEY") },
+  { key: "gmgnVolume5m", label: "Vol token 5m", group: "rate", size: 124, render: optionalUsdCell("gmgnVolume5m", "Butuh GMGN_API_KEY") },
+  { key: "gmgnSwaps5m", label: "Swap token 5m", group: "rate", size: 124, render: countCell("gmgnSwaps5m") },
 
   // --- yield: what the pool pays, per minute -------------------------------
-  { key: "feePerMinPct", label: "Fee/mnt", group: "yield" },
-  { key: "minutesTo1Pct", label: "Waktu ke 1%", group: "yield" },
-  { key: "feeTvl1h", label: "Fee/TVL", group: "yield" },
-  { key: "totalFees1h", label: "Fee 1j", group: "yield" },
-  { key: "avgFeePerMin", label: "Avg Fee/m", group: "yield" },
-  { key: "feeActiveTvl1h", label: "Fee/Active TVL", group: "yield" },
+  { key: "feePerMinPct", label: "Fee/mnt", group: "yield", size: 116, render: (pool) => <YieldCell pool={pool} /> },
+  { key: "minutesTo1Pct", label: "Waktu ke 1%", group: "yield", size: 116, render: (pool) => <ClockCell pool={pool} /> },
+  { key: "feeTvl1h", label: "Fee/TVL", group: "yield", size: 104, render: (pool) => <span className="f-num">{pool.feeTvl1h.toFixed(2)}%</span> },
+  {
+    key: "totalFees1h",
+    label: "Fee 1j",
+    group: "yield",
+    size: 148,
+    render: (pool) => (
+      <span className="fx-cell-stack">
+        <span className="f-num">{formatUsd(pool.totalFees1h)}</span>
+        <small className="f-num">
+          LP {formatUsd(pool.lpFees1h)} · Prot {formatUsd(pool.protocolFees1h)}
+        </small>
+      </span>
+    ),
+  },
+  { key: "avgFeePerMin", label: "Avg Fee/m", group: "yield", size: 112, render: optionalUsdCell("avgFeePerMin") },
+  { key: "feeActiveTvl1h", label: "Fee/Active TVL", group: "yield", size: 128, render: percentCell("feeActiveTvl1h") },
 
   // --- size: the pool and the flow through it ------------------------------
   // The share of the token's own flow this pool carries — the reading that
   // catches a pool that looks busy while the token trades somewhere else.
-  { key: "venueShare", label: "Porsi venue", group: "size" },
-  { key: "poolTurnover", label: "Putaran TVL", group: "size" },
-  { key: "tradeImpact", label: "Impact/trade", group: "size" },
-  { key: "tvl", label: "TVL", group: "size" },
-  { key: "volume1h", label: "Vol 1j", group: "size" },
-  { key: "volume24h", label: "Vol 24j", group: "size" },
-  { key: "avgVolumePerMin", label: "Avg Vol/m", group: "size" },
-  { key: "volumeTvl1h", label: "Vol/TVL", group: "size" },
-  { key: "activeTvl", label: "Active TVL", group: "size" },
-  { key: "swaps1h", label: "Swap", group: "size" },
-  { key: "avgSwapsPerMin", label: "Avg Swap/m", group: "size" },
-  { key: "traders1h", label: "Trader", group: "size" },
-  { key: "totalLps", label: "LP", group: "size" },
-  { key: "ageHours", label: "Umur", group: "size" },
+  { key: "venueShare", label: "Porsi venue", group: "size", size: 116, render: (pool) => <VenueShareCell pool={pool} /> },
+  { key: "poolTurnover", label: "Putaran TVL", group: "size", size: 116, render: (pool) => <TurnoverCell pool={pool} /> },
+  { key: "tradeImpact", label: "Impact/trade", group: "size", size: 120, render: (pool) => <ImpactCell pool={pool} /> },
+  { key: "tvl", label: "TVL", group: "size", size: 104, render: usdCell("tvl") },
+  { key: "volume1h", label: "Vol 1j", group: "size", size: 104, render: usdCell("volume1h") },
+  { key: "volume24h", label: "Vol 24j", group: "size", size: 104, render: usdCell("volume24h") },
+  { key: "avgVolumePerMin", label: "Avg Vol/m", group: "size", size: 112, render: optionalUsdCell("avgVolumePerMin") },
+  { key: "volumeTvl1h", label: "Vol/TVL", group: "size", size: 104, render: (pool) => <span className="f-num">{pool.volumeTvl1h.toFixed(2)}x</span> },
+  // Reachable only through the picker, like Vol/Active TVL below it — neither
+  // is in any preset's default list, but both read cleanly once shown.
+  { key: "volumeActiveTvl1h", label: "Vol/Active TVL", group: "size", size: 128, render: ratioCell("volumeActiveTvl1h") },
+  { key: "activeTvl", label: "Active TVL", group: "size", size: 116, render: (pool) => <ActiveDepthCell pool={pool} /> },
+  { key: "swaps1h", label: "Swap", group: "size", size: 92, render: countCell("swaps1h") },
+  { key: "avgSwapsPerMin", label: "Avg Swap/m", group: "size", size: 116, render: countCell("avgSwapsPerMin") },
+  { key: "traders1h", label: "Trader", group: "size", size: 96, render: countCell("traders1h") },
+  { key: "totalLps", label: "LP", group: "size", size: 88, render: countCell("totalLps") },
+  { key: "ageHours", label: "Umur", group: "size", size: 96, render: (pool) => <span className="f-num">{formatAge(pool.ageHours)}</span> },
 
   // --- safety ---------------------------------------------------------------
-  { key: "risk", label: "Risiko", group: "safety" },
-  { key: "top10HoldersPct", label: "Top-10", group: "safety" },
-  { key: "devBalancePct", label: "Dev", group: "safety" },
-  { key: "jupShieldRank", label: "JupShield", group: "safety" },
-  { key: "rugCheckScore", label: "RugCheck", group: "safety" },
-  { key: "organicScore", label: "Organic", group: "safety" },
+  {
+    key: "risk",
+    label: "Risiko",
+    group: "safety",
+    size: 108,
+    render: (pool) => (
+      <span className={`fx-risk fx-risk--${riskBand(pool.risk)}`}>
+        <strong className="f-num">{pool.risk}</strong>
+        <small>{riskLabel(pool.risk)}</small>
+      </span>
+    ),
+  },
+  { key: "top10HoldersPct", label: "Top-10", group: "safety", size: 100, render: (pool) => <ConcentrationValue value={pool.top10HoldersPct} warningAt={30} dangerAt={50} /> },
+  { key: "devBalancePct", label: "Dev", group: "safety", size: 92, render: (pool) => <ConcentrationValue value={pool.devBalancePct} warningAt={5} dangerAt={10} /> },
+  { key: "jupShieldRank", label: "JupShield", group: "safety", size: 112, render: (pool) => <JupShieldChip pool={pool} /> },
+  { key: "rugCheckScore", label: "RugCheck", group: "safety", size: 112, render: (pool) => <RugCheckChip pool={pool} /> },
+  { key: "organicScore", label: "Organic", group: "safety", size: 108, render: (pool) => <OrganicChip pool={pool} /> },
 ];
+
+const ALL_COLUMN_KEYS = COLUMNS.map((column) => column.key);
 
 const GENERAL_COLUMNS = [
   "phase",
@@ -234,24 +339,27 @@ const PRESET_COLUMNS = {
   ],
 };
 
-const columnKey = (presetId) => `signalforge:columns:${presetId}`;
-
 /**
  * Saved choices are per preset, because the presets no longer want the same
  * table. A single global list is why every preset used to open on the same
  * hourly columns regardless of the timescale it trades on.
  */
-export const defaultColumnKeys = (presetId) => {
-  try {
-    const saved = JSON.parse(localStorage.getItem(columnKey(presetId)) || "null");
-    if (Array.isArray(saved) && saved.length) {
-      const kept = saved.filter((key) => COLUMNS.some((column) => column.key === key));
-      if (kept.length) return kept;
-    }
-  } catch {
-    // A malformed preference falls back to the preset's default column set.
-  }
-  return PRESET_COLUMNS[presetId] || GENERAL_COLUMNS;
+export const defaultColumnKeys = (presetId) => PRESET_COLUMNS[presetId] || GENERAL_COLUMNS;
+
+/**
+ * The four slices TanStack owns for this table, resolved for a preset: the
+ * user's saved layout when there is one, the preset's own list when there is
+ * not. Sorting is deliberately not persisted — switching preset should open on
+ * the sort that preset is judged by, not on whatever was last clicked.
+ */
+export const tableStateFor = (presetId) => ({
+  ...loadTablePrefs(presetId, defaultColumnKeys(presetId), ALL_COLUMN_KEYS),
+  sorting: defaultSort(presetId),
+});
+
+export const resetTableState = (presetId) => {
+  clearTablePrefs(presetId);
+  return tableStateFor(presetId);
 };
 
 /**
@@ -264,8 +372,8 @@ export const defaultColumnKeys = (presetId) => {
  */
 export const defaultSort = (presetId) =>
   presetId === "heartattack"
-    ? { key: "tokenBurst", direction: "desc" }
-    : { key: "score", direction: "desc" };
+    ? [{ id: "tokenBurst", desc: true }]
+    : [{ id: "score", desc: true }];
 
 const TABS = [
   ["all", "Semua"],
@@ -276,9 +384,19 @@ const TABS = [
   ["watchlist", "Watchlist"],
 ];
 
-function SortIcon({ active, direction }) {
-  if (!active) return <ChevronsUpDown />;
-  return direction === "asc" ? <ArrowUp /> : <ArrowDown />;
+/**
+ * `rank` is the column's position in a multi-sort, shown only when more than
+ * one column is sorted — otherwise the badge is noise on a table that is
+ * usually sorted by exactly one thing.
+ */
+function SortIcon({ sorted, rank }) {
+  if (!sorted) return <ChevronsUpDown />;
+  return (
+    <>
+      {sorted === "asc" ? <ArrowUp /> : <ArrowDown />}
+      {rank > 0 ? <em className="fx-sort-rank f-num">{rank + 1}</em> : null}
+    </>
+  );
 }
 
 function NumberField({ label, value, suffix, onChange, step = 1, min }) {
@@ -317,7 +435,14 @@ function Switch({ checked, onChange, children }) {
  * table are the same operation. Hidden columns carry no order of their own;
  * showing one just appends it to the end of `visible`.
  */
-function ColumnPicker({ visible, onChange, preset }) {
+/**
+ * The picker edits TanStack's `columnOrder` and `columnVisibility` slices
+ * directly. Order state covers every leaf column including the pinned edges,
+ * but only the middle ones are listed here — the star, pool, score and link
+ * columns are structural, so there is nothing useful to drag or hide about
+ * them.
+ */
+function ColumnPicker({ table }) {
   const [open, setOpen] = useState(false);
   const [dragKey, setDragKey] = useState(null);
   const ref = useRef(null);
@@ -331,31 +456,39 @@ function ColumnPicker({ visible, onChange, preset }) {
     return () => document.removeEventListener("pointerdown", onPointerDown);
   }, [open]);
 
-  // Saved against the preset, so tuning the Heart Attack table does not silently
-  // rewrite the one Slow Wallet opens on.
-  const persist = (next) => {
-    onChange(next);
-    localStorage.setItem(`signalforge:columns:${preset}`, JSON.stringify(next));
+  const order = table.state.columnOrder;
+  const middleOrder = order.filter(
+    (id) => !LEADING_COLUMN_IDS.includes(id) && !TRAILING_COLUMN_IDS.includes(id),
+  );
+  const visibility = table.state.columnVisibility;
+  const isVisible = (key) => visibility[key] !== false;
+  const visibleMiddle = middleOrder.filter(isVisible);
+  const hiddenColumns = COLUMNS.filter((column) => !isVisible(column.key));
+
+  // Showing a column moves it to the end of the visible run rather than leaving
+  // it wherever it was hidden from, which is what the single-array version did
+  // implicitly and what people expect when they tick something on.
+  const show = (key) => {
+    const withoutKey = middleOrder.filter((id) => id !== key);
+    const lastVisible = withoutKey.findLastIndex(isVisible);
+    withoutKey.splice(lastVisible + 1, 0, key);
+    table.setColumnOrder(fullColumnOrder(withoutKey));
+    table.setColumnVisibility({ ...visibility, [key]: true });
   };
 
-  const hide = (key) => persist(visible.filter((item) => item !== key));
-  const show = (key) => persist([...visible, key]);
+  const hide = (key) => table.setColumnVisibility({ ...visibility, [key]: false });
 
   // Live reorder while dragging: dropping is not required, hovering a row
   // already moves the dragged key next to it. `fromKey === toKey` is what
   // stops this from firing on every dragover tick once the two are adjacent.
   const reorder = (fromKey, toKey) => {
     if (!fromKey || fromKey === toKey) return;
-    const fromIndex = visible.indexOf(fromKey);
-    const toIndex = visible.indexOf(toKey);
-    if (fromIndex === -1 || toIndex === -1) return;
-    const next = [...visible];
-    next.splice(fromIndex, 1);
+    const next = middleOrder.filter((id) => id !== fromKey);
+    const toIndex = next.indexOf(toKey);
+    if (toIndex === -1) return;
     next.splice(toIndex, 0, fromKey);
-    persist(next);
+    table.setColumnOrder(fullColumnOrder(next));
   };
-
-  const hiddenColumns = COLUMNS.filter((column) => !visible.includes(column.key));
 
   return (
     <div className="fx-dropdown" ref={ref}>
@@ -370,9 +503,10 @@ function ColumnPicker({ visible, onChange, preset }) {
       {open ? (
         <div className="fx-dropdown-menu fx-dropdown-menu--columns" role="menu">
           <span className="f-eyebrow">Kolom aktif — seret buat urutkan</span>
-          {visible.map((key) => {
+          {visibleMiddle.map((key) => {
             const column = COLUMNS.find((item) => item.key === key);
             if (!column) return null;
+            const pinned = table.getColumn(key)?.getIsPinned();
             return (
               <div
                 key={key}
@@ -397,6 +531,15 @@ function ColumnPicker({ visible, onChange, preset }) {
                   <input type="checkbox" checked onChange={() => hide(key)} />
                   {column.label}
                 </label>
+                <button
+                  type="button"
+                  className={`fx-col-pin ${pinned ? "is-on" : ""}`}
+                  aria-pressed={Boolean(pinned)}
+                  title={pinned ? `Lepas pin ${column.label}` : `Pin ${column.label} di kiri`}
+                  onClick={() => table.getColumn(key)?.pin(pinned ? false : "start")}
+                >
+                  {pinned ? <Pin /> : <PinOff />}
+                </button>
               </div>
             );
           })}
@@ -419,115 +562,6 @@ function ColumnPicker({ visible, onChange, preset }) {
       ) : null}
     </div>
   );
-}
-
-function cellFor(key, pool) {
-  switch (key) {
-    // --- rate ---------------------------------------------------------------
-    case "phase":
-      return <PhaseChip phase={pool.phase} size="sm" />;
-    case "tokenBurst":
-      return <TokenBurstCell pool={pool} />;
-    case "poolBurst":
-      return <PoolBurstCell pool={pool} />;
-    case "gmgnVolume1m":
-      return Number.isFinite(pool.gmgnVolume1m)
-        ? <span className="f-num">{formatUsd(pool.gmgnVolume1m)}</span>
-        : <Unread why="Butuh GMGN_API_KEY" />;
-
-    // --- yield --------------------------------------------------------------
-    case "feePerMinPct":
-      return <YieldCell pool={pool} />;
-    case "minutesTo1Pct":
-      return <ClockCell pool={pool} />;
-
-    // --- size ---------------------------------------------------------------
-    case "venueShare":
-      return <VenueShareCell pool={pool} />;
-    case "poolTurnover":
-      return <TurnoverCell pool={pool} />;
-    case "tradeImpact":
-      return <ImpactCell pool={pool} />;
-    case "activeTvl":
-      return <ActiveDepthCell pool={pool} />;
-    case "volume24h":
-      return <span className="f-num">{formatUsd(pool.volume24h)}</span>;
-
-    case "priceChange1h":
-      return <span className={`f-num ${momentumTone(pool.priceChange1h)}`}>{formatPercent(pool.priceChange1h)}</span>;
-    case "trend":
-      return <Spark values={pool.sparkline} score={pool.score} width={72} height={22} />;
-    case "tvl":
-      return <span className="f-num">{formatUsd(pool.tvl)}</span>;
-    case "volume1h":
-      return <span className="f-num">{formatUsd(pool.volume1h)}</span>;
-    case "avgVolumePerMin":
-      return Number.isFinite(pool.avgVolumePerMin)
-        ? <span className="f-num">{formatUsd(pool.avgVolumePerMin)}</span>
-        : <Unread />;
-    case "gmgnVolume5m":
-      return Number.isFinite(pool.gmgnVolume5m)
-        ? <span className="f-num">{formatUsd(pool.gmgnVolume5m)}</span>
-        : <Unread why="Butuh GMGN_API_KEY" />;
-    case "gmgnSwaps5m":
-      return <span className="f-num">{optionalNumber(pool.gmgnSwaps5m)}</span>;
-    case "volumeTvl1h":
-      return <span className="f-num">{pool.volumeTvl1h.toFixed(2)}x</span>;
-    case "volumeActiveTvl1h":
-      return Number.isFinite(pool.volumeActiveTvl1h)
-        ? <span className="f-num">{pool.volumeActiveTvl1h.toFixed(2)}x</span>
-        : <Unread />;
-    case "totalFees1h":
-      return (
-        <span className="fx-cell-stack">
-          <span className="f-num">{formatUsd(pool.totalFees1h)}</span>
-          <small className="f-num">
-            LP {formatUsd(pool.lpFees1h)} · Prot {formatUsd(pool.protocolFees1h)}
-          </small>
-        </span>
-      );
-    case "avgFeePerMin":
-      return Number.isFinite(pool.avgFeePerMin)
-        ? <span className="f-num">{formatUsd(pool.avgFeePerMin)}</span>
-        : <Unread />;
-    case "feeTvl1h":
-      return <span className="f-num">{pool.feeTvl1h.toFixed(2)}%</span>;
-    case "feeActiveTvl1h":
-      return Number.isFinite(pool.feeActiveTvl1h)
-        ? <span className="f-num">{pool.feeActiveTvl1h.toFixed(2)}%</span>
-        : <Unread />;
-    case "feeVelocity":
-      return <FeeVelocityCell velocity={pool.feeVelocity} />;
-    case "risk":
-      return (
-        <span className={`fx-risk fx-risk--${riskBand(pool.risk)}`}>
-          <strong className="f-num">{pool.risk}</strong>
-          <small>{riskLabel(pool.risk)}</small>
-        </span>
-      );
-    case "top10HoldersPct":
-      return <ConcentrationValue value={pool.top10HoldersPct} warningAt={30} dangerAt={50} />;
-    case "devBalancePct":
-      return <ConcentrationValue value={pool.devBalancePct} warningAt={5} dangerAt={10} />;
-    case "jupShieldRank":
-      return <JupShieldChip pool={pool} />;
-    case "rugCheckScore":
-      return <RugCheckChip pool={pool} />;
-    case "organicScore":
-      return <OrganicChip pool={pool} />;
-    case "swaps1h":
-      return <span className="f-num">{optionalNumber(pool.swaps1h)}</span>;
-    case "avgSwapsPerMin":
-      return <span className="f-num">{optionalNumber(pool.avgSwapsPerMin)}</span>;
-    case "traders1h":
-      return <span className="f-num">{optionalNumber(pool.traders1h)}</span>;
-    case "totalLps":
-      return <span className="f-num">{optionalNumber(pool.totalLps)}</span>;
-    case "ageHours":
-      return <span className="f-num">{formatAge(pool.ageHours)}</span>;
-    default:
-      return null;
-  }
 }
 
 function PoolCard({ pool, preset, selected, watched, onOpen, onToggleWatch }) {
@@ -687,23 +721,189 @@ export default function ScannerView({
   onRefresh,
   onResetFilters,
 }) {
-  const { search, tab, sort, filters, view, density, columns, filtersOpen, phaseFilter } = state;
+  const {
+    search,
+    tab,
+    filters,
+    view,
+    density,
+    filtersOpen,
+    phaseFilter,
+    sorting,
+    columnOrder,
+    columnVisibility,
+    columnSizing,
+    columnPinning,
+  } = state;
   const patch = (partial) => setState((current) => ({ ...current, ...partial }));
-  // Order follows `columns` itself, not COLUMNS' fixed order — that is the
-  // whole point of letting the picker reorder them. COLUMNS is only consulted
-  // for each key's label/render metadata.
-  const visibleColumns = useMemo(
-    () => columns.map((key) => COLUMNS.find((column) => column.key === key)).filter(Boolean),
-    [columns],
-  );
 
-  const changeSort = (key) =>
-    patch({
-      sort: {
-        key,
-        direction: sort.key === key && sort.direction === "desc" ? "asc" : "desc",
+  /**
+   * Table columns are derived once from the COLUMNS catalogue. The leading
+   * three and the trailing link are display columns rather than catalogue
+   * entries: they are structural, always shown, and their cells read from the
+   * row rather than from a single field.
+   */
+  const tableColumns = useMemo(() => {
+    const middle = COLUMNS.map((column) => ({
+      id: column.key,
+      // Non-finite readings resolve to undefined so `sortUndefined: "last"`
+      // can sink them. That option short-circuits before the direction flip,
+      // which is what keeps an unread metric at the bottom in both directions
+      // — the behaviour the hand-rolled comparator had, and the reason this is
+      // not left to a plain numeric sort.
+      accessorFn: (pool) => {
+        const value = pool[column.key];
+        return Number.isFinite(value) ? value : undefined;
       },
-    });
+      header: column.label,
+      cell: ({ row }) => column.render(row.original),
+      size: column.size ?? 108,
+      minSize: 64,
+      enableSorting: column.sortable !== false,
+      sortFn: "basic",
+      sortUndefined: "last",
+      meta: { group: column.group },
+    }));
+
+    return [
+      {
+        id: "star",
+        header: () => <span className="f-visually-hidden">Watchlist</span>,
+        cell: ({ row, table: instance }) => {
+          const { watchlist: list } = instance.options.meta;
+          const watched = list.has(row.original.address);
+          return (
+            <button
+              type="button"
+              className={`fx-star ${watched ? "is-on" : ""}`}
+              aria-label={watched ? `Hapus ${row.original.pair} dari watchlist` : `Simpan ${row.original.pair} ke watchlist`}
+              aria-pressed={watched}
+              onClick={(event) => {
+                event.stopPropagation();
+                list.toggle(row.original.address);
+              }}
+            >
+              <Star fill={watched ? "currentColor" : "none"} />
+            </button>
+          );
+        },
+        size: 44,
+        minSize: 44,
+        enableSorting: false,
+        enableHiding: false,
+        enableResizing: false,
+      },
+      {
+        id: "pair",
+        accessorFn: (pool) => pool.pair,
+        header: "Pool",
+        cell: ({ row }) => (
+          <div className="fx-pool-cell">
+            <PoolAvatar symbol={row.original.baseSymbol} quote={row.original.quoteSymbol} />
+            <div>
+              <strong>{row.original.pair}</strong>
+              <small className="f-num">MC {formatUsd(row.original.marketCap)}</small>
+            </div>
+          </div>
+        ),
+        size: 208,
+        minSize: 140,
+        sortFn: "text",
+        enableHiding: false,
+      },
+      {
+        id: "score",
+        accessorFn: (pool) => pool.score,
+        header: "Skor",
+        cell: ({ row, table: instance }) => (
+          <HeatBadge score={row.original.score} status={poolTier(row.original.score, instance.options.meta.preset)} />
+        ),
+        size: 128,
+        minSize: 96,
+        sortFn: "basic",
+        sortUndefined: "last",
+        enableHiding: false,
+      },
+      ...middle,
+      {
+        id: "link",
+        header: () => <span className="f-visually-hidden">Tautan</span>,
+        cell: ({ row }) => (
+          <a
+            className="fx-row-link"
+            href={`https://www.meteora.ag/dlmm/${row.original.address}`}
+            target="_blank"
+            rel="noreferrer"
+            aria-label={`Buka ${row.original.pair} di Meteora`}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <ExternalLink />
+          </a>
+        ),
+        size: 52,
+        minSize: 52,
+        enableSorting: false,
+        enableHiding: false,
+        enableResizing: false,
+      },
+    ];
+  }, []);
+
+  const table = useTable({
+    features: tableFeatureSet,
+    columns: tableColumns,
+    data: rows,
+    getRowId: (pool) => pool.address,
+    columnResizeMode: "onChange",
+    enableMultiSort: true,
+    // Clicking a sorted header cycles desc → asc → desc rather than passing
+    // through unsorted: an unsorted scanner table has no meaning here, every
+    // view of it is "the strongest by some measure, first".
+    enableSortingRemoval: false,
+    meta: { watchlist, preset: PRESETS[preset] },
+    state: { sorting, columnOrder, columnVisibility, columnSizing, columnPinning },
+    onSortingChange: (updater) =>
+      patch({ sorting: typeof updater === "function" ? updater(sorting) : updater }),
+    onColumnOrderChange: (updater) =>
+      patch({ columnOrder: typeof updater === "function" ? updater(columnOrder) : updater }),
+    onColumnVisibilityChange: (updater) =>
+      patch({ columnVisibility: typeof updater === "function" ? updater(columnVisibility) : updater }),
+    onColumnSizingChange: (updater) =>
+      patch({ columnSizing: typeof updater === "function" ? updater(columnSizing) : updater }),
+    onColumnPinningChange: (updater) =>
+      patch({ columnPinning: typeof updater === "function" ? updater(columnPinning) : updater }),
+  });
+
+  // Layout is per preset and survives a reload. Sorting is deliberately left
+  // out — see tableStateFor.
+  useEffect(() => {
+    saveTablePrefs(preset, { columnOrder, columnVisibility, columnSizing, columnPinning });
+  }, [preset, columnOrder, columnVisibility, columnSizing, columnPinning]);
+
+  /**
+   * Pinned cells are sticky, and their offset is the summed width of everything
+   * pinned before them — which changes as soon as a column is resized. The old
+   * CSS hardcoded those offsets (left: 0 / 34px / 202px), so any resize would
+   * have torn the frozen edge apart.
+   */
+  const pinnedStyle = (column) => {
+    const pinned = column.getIsPinned();
+    return {
+      width: column.getSize(),
+      ...(pinned === "start" ? { insetInlineStart: `${column.getStart("start")}px` } : null),
+      ...(pinned === "end" ? { insetInlineEnd: `${column.getAfter("end")}px` } : null),
+    };
+  };
+
+  const pinnedClass = (column) => (column.getIsPinned() ? "fx-col-pinned" : "");
+
+  /**
+   * Cards read the same ordering as the table. `rows` arrives unsorted now that
+   * the table owns sorting, so going through the row model is what keeps the
+   * two views showing the same pool first — switching layout must not silently
+   * reshuffle the list.
+   */
+  const sortedPools = table.getRowModel().rows.map((row) => row.original);
 
   return (
     <div className="fx-view fx-scanner">
@@ -739,7 +939,7 @@ export default function ScannerView({
           >
             <Filter /> Filter
           </button>
-          <ColumnPicker visible={columns} preset={preset} onChange={(next) => patch({ columns: next })} />
+          <ColumnPicker table={table} />
           <div className="fx-segment" role="group" aria-label="Bentuk tampilan">
             <button
               type="button"
@@ -860,7 +1060,7 @@ export default function ScannerView({
         <div className="fx-card-grid">
           {loading
             ? Array.from({ length: 8 }, (_, index) => <div className="fx-card-skeleton f-skeleton" key={index} />)
-            : rows.map((pool) => (
+            : sortedPools.map((pool) => (
                 <PoolCard
                   key={pool.address}
                   pool={pool}
@@ -874,106 +1074,88 @@ export default function ScannerView({
         </div>
       ) : (
         <div className={`fx-table-frame fx-table-frame--${density}`}>
-          <table className="fx-table">
+          <table className="fx-table" style={{ width: table.getTotalSize() }}>
             <thead>
-              <tr>
-                <th className="fx-col-star" scope="col">
-                  <span className="f-visually-hidden">Watchlist</span>
-                </th>
-                <th className="fx-col-pool" scope="col" aria-sort={sort.key === "pair" ? (sort.direction === "asc" ? "ascending" : "descending") : "none"}>
-                  <button type="button" onClick={() => changeSort("pair")}>
-                    Pool <SortIcon active={sort.key === "pair"} direction={sort.direction} />
-                  </button>
-                </th>
-                <th className="fx-col-score" scope="col" aria-sort={sort.key === "score" ? (sort.direction === "asc" ? "ascending" : "descending") : "none"}>
-                  <button type="button" onClick={() => changeSort("score")}>
-                    Skor <SortIcon active={sort.key === "score"} direction={sort.direction} />
-                  </button>
-                </th>
-                {visibleColumns.map((column) => (
-                  <th
-                    key={column.key}
-                    scope="col"
-                    aria-sort={sort.key === column.key ? (sort.direction === "asc" ? "ascending" : "descending") : "none"}
-                  >
-                    {column.sortable === false ? (
-                      <span>{column.label}</span>
-                    ) : (
-                      <button type="button" onClick={() => changeSort(column.key)}>
-                        {column.label} <SortIcon active={sort.key === column.key} direction={sort.direction} />
-                      </button>
-                    )}
-                  </th>
-                ))}
-                <th scope="col">
-                  <span className="f-visually-hidden">Tautan</span>
-                </th>
-              </tr>
+              {table.getHeaderGroups().map((group) => (
+                <tr key={group.id}>
+                  {group.headers.map((header) => {
+                    const { column } = header;
+                    const sorted = column.getIsSorted();
+                    return (
+                      <th
+                        key={header.id}
+                        scope="col"
+                        className={`fx-col-${header.id} ${pinnedClass(column)}`}
+                        style={pinnedStyle(column)}
+                        aria-sort={sorted ? (sorted === "asc" ? "ascending" : "descending") : "none"}
+                      >
+                        {column.getCanSort() ? (
+                          <button
+                            type="button"
+                            // Shift-click adds a column to the sort instead of
+                            // replacing it; the handler reads the modifier off
+                            // the event itself.
+                            onClick={column.getToggleSortingHandler()}
+                            title="Klik untuk urutkan · Shift+klik untuk urutan bertingkat"
+                          >
+                            <table.FlexRender header={header} />
+                            <SortIcon sorted={sorted} rank={column.getSortIndex()} />
+                          </button>
+                        ) : (
+                          <span>
+                            <table.FlexRender header={header} />
+                          </span>
+                        )}
+                        {column.getCanResize() ? (
+                          <span
+                            className={`fx-col-resize ${column.getIsResizing() ? "is-active" : ""}`}
+                            role="separator"
+                            aria-orientation="vertical"
+                            aria-label={`Ubah lebar kolom ${typeof column.columnDef.header === "string" ? column.columnDef.header : header.id}`}
+                            // Both events, not a single pointerdown: the shipped
+                            // handler branches on touchstart, and a pointer-only
+                            // listener leaves touch resizing inert.
+                            onMouseDown={header.getResizeHandler()}
+                            onTouchStart={header.getResizeHandler()}
+                            onClick={(event) => event.stopPropagation()}
+                            onDoubleClick={() => column.resetSize()}
+                          />
+                        ) : null}
+                      </th>
+                    );
+                  })}
+                </tr>
+              ))}
             </thead>
             <tbody>
               {loading
                 ? Array.from({ length: 9 }, (_, index) => (
                     <tr key={index} className="fx-row-skeleton">
-                      {Array.from({ length: visibleColumns.length + 4 }, (_, cell) => (
-                        <td key={cell}>
+                      {table.getVisibleLeafColumns().map((column) => (
+                        <td key={column.id}>
                           <span className="f-skeleton" />
                         </td>
                       ))}
                     </tr>
                   ))
-                : rows.map((pool) => {
-                    const watched = watchlist.has(pool.address);
-                    return (
-                      <tr
-                        key={pool.address}
-                        className={pool.address === selectedAddress ? "is-selected" : ""}
-                        style={heatVars(pool.score)}
-                        onClick={() => onOpenPool(pool)}
-                      >
-                        <td className="fx-col-star">
-                          <button
-                            type="button"
-                            className={`fx-star ${watched ? "is-on" : ""}`}
-                            aria-label={watched ? `Hapus ${pool.pair} dari watchlist` : `Simpan ${pool.pair} ke watchlist`}
-                            aria-pressed={watched}
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              watchlist.toggle(pool.address);
-                            }}
-                          >
-                            <Star fill={watched ? "currentColor" : "none"} />
-                          </button>
+                : table.getRowModel().rows.map((row) => (
+                    <tr
+                      key={row.id}
+                      className={row.original.address === selectedAddress ? "is-selected" : ""}
+                      style={heatVars(row.original.score)}
+                      onClick={() => onOpenPool(row.original)}
+                    >
+                      {row.getVisibleCells().map((cell) => (
+                        <td
+                          key={cell.id}
+                          className={`fx-col-${cell.column.id} ${pinnedClass(cell.column)}`}
+                          style={pinnedStyle(cell.column)}
+                        >
+                          <table.FlexRender cell={cell} />
                         </td>
-                        <td className="fx-col-pool">
-                          <div className="fx-pool-cell">
-                            <PoolAvatar symbol={pool.baseSymbol} quote={pool.quoteSymbol} />
-                            <div>
-                              <strong>{pool.pair}</strong>
-                              <small className="f-num">MC {formatUsd(pool.marketCap)}</small>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="fx-col-score">
-                          <HeatBadge score={pool.score} status={poolTier(pool.score, preset)} />
-                        </td>
-                        {visibleColumns.map((column) => (
-                          <td key={column.key}>{cellFor(column.key, pool)}</td>
-                        ))}
-                        <td>
-                          <a
-                            className="fx-row-link"
-                            href={`https://www.meteora.ag/dlmm/${pool.address}`}
-                            target="_blank"
-                            rel="noreferrer"
-                            aria-label={`Buka ${pool.pair} di Meteora`}
-                            onClick={(event) => event.stopPropagation()}
-                          >
-                            <ExternalLink />
-                          </a>
-                        </td>
-                      </tr>
-                    );
-                  })}
+                      ))}
+                    </tr>
+                  ))}
             </tbody>
           </table>
         </div>

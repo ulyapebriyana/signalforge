@@ -1234,54 +1234,130 @@
   background: color-mix(in srgb, var(--heat) 9%, var(--f-iron-900));
 }
 
-.fx-col-star,
-.fx-col-pool,
-.fx-col-score {
+/**
+ * Pinned cells are sticky; the inline-start offset is supplied per cell by the
+ * table, because it is the running total of the widths before it and those
+ * widths are now draggable. The offsets used to be hardcoded here (0/34/202px),
+ * which only held while the three frozen columns could never be resized.
+ */
+.fx-col-pinned {
   position: sticky;
   z-index: 2;
   background: var(--f-iron-950);
+}
+
+.fx-col-star,
+.fx-col-pair,
+.fx-col-score {
   text-align: left !important;
 }
 
 .fx-col-star {
-  left: 0;
-  width: 34px;
   padding-right: 0 !important;
 }
 
-.fx-col-pool {
-  left: 34px;
-  min-width: 168px;
-}
-
-.fx-col-score {
-  left: 202px;
-  min-width: 104px;
+/* The seam between the frozen run and the scrolling remainder. */
+.fx-table thead th.fx-col-pinned:last-of-type,
+.fx-table tbody td.fx-col-pinned:last-of-type {
   box-shadow: 1px 0 0 var(--f-line);
 }
 
-.fx-table thead .fx-col-star,
-.fx-table thead .fx-col-pool,
-.fx-table thead .fx-col-score {
+.fx-table thead .fx-col-pinned {
   z-index: 4;
   background: var(--f-iron-900);
 }
 
-.fx-table thead .fx-col-pool button,
+.fx-table thead .fx-col-pair button,
 .fx-table thead .fx-col-score button {
   justify-content: flex-start;
 }
 
-.fx-table tbody tr:hover .fx-col-star,
-.fx-table tbody tr:hover .fx-col-pool,
-.fx-table tbody tr:hover .fx-col-score {
+.fx-table tbody tr:hover .fx-col-pinned {
   background: var(--f-iron-900);
 }
 
-.fx-table tbody tr.is-selected .fx-col-star,
-.fx-table tbody tr.is-selected .fx-col-pool,
-.fx-table tbody tr.is-selected .fx-col-score {
+.fx-table tbody tr.is-selected .fx-col-pinned {
   background: color-mix(in srgb, var(--heat) 9%, var(--f-iron-900));
+}
+
+/* --- resize handle ------------------------------------------------------- */
+
+/* `thead th` is already sticky above, which makes it a positioned ancestor —
+   the handle anchors to it without needing its own `position: relative`. */
+.fx-col-resize {
+  position: absolute;
+  top: 0;
+  right: 0;
+  height: 100%;
+  width: 9px;
+  cursor: col-resize;
+  touch-action: none;
+  user-select: none;
+  /* Invisible until wanted: a permanent rule between every pair of columns
+     would compete with the data for attention on an 18-column table. */
+  opacity: 0;
+  background: linear-gradient(to right, transparent 4px, var(--f-heat, var(--f-line-strong)) 4px 5px, transparent 5px);
+  transition: opacity 0.12s ease;
+}
+
+.fx-table thead th:hover .fx-col-resize,
+.fx-col-resize.is-active {
+  opacity: 1;
+}
+
+.fx-col-resize.is-active {
+  background: linear-gradient(to right, transparent 4px, var(--f-ember, #ff7a45) 4px 5px, transparent 5px);
+}
+
+/* --- multi-sort rank ----------------------------------------------------- */
+
+.fx-sort-rank {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 13px;
+  height: 13px;
+  margin-left: 0.1rem;
+  border-radius: 999px;
+  background: var(--f-line-strong);
+  color: var(--f-bone);
+  font-size: 0.5625rem;
+  font-style: normal;
+  font-weight: 700;
+}
+
+/* --- pin toggle in the column picker ------------------------------------- */
+
+.fx-col-pin {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  flex: none;
+  border-radius: var(--f-r-sm, 6px);
+  color: var(--f-slag);
+  opacity: 0;
+  transition: opacity 0.12s ease, color 0.12s ease;
+}
+
+.fx-col-row:hover .fx-col-pin,
+.fx-col-pin.is-on {
+  opacity: 1;
+}
+
+.fx-col-pin:hover {
+  color: var(--f-bone);
+  background: var(--f-line);
+}
+
+.fx-col-pin.is-on {
+  color: var(--f-heat, var(--f-bone));
+}
+
+.fx-col-pin svg {
+  width: 12px;
+  height: 12px;
 }
 
 .fx-pool-cell {
