@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { appendSample, pruneStore, summarizeVelocity } from "../shared/feeVelocity.js";
+import { openScanLog, pruneScanLog, recordScan } from "../shared/scanLog.js";
 import { gmgnAuthQuery, normalizeGmgnToken } from "../shared/gmgn.js";
 import { classifyPhase, PHASE_META } from "../shared/marketRead.js";
 import { normalizePool, poolTier, PRESETS, resolvePresetId } from "../shared/scoring.js";
@@ -64,6 +65,13 @@ let historyWriteQueue = Promise.resolve();
 const feeVelocityStore = new Map();
 const feeVelocityFile = path.join(projectRoot, "data", "fee-velocity.json");
 let feeVelocityWriteQueue = Promise.resolve();
+
+// Raw per-scan history for every pool the scanner looked at — not just the
+// alerts that fired. See shared/scanLog.js for why this exists alongside
+// signalHistory rather than replacing it.
+const scanLogDb = openScanLog(path.join(projectRoot, "data", "scan-log.db"));
+const SCAN_LOG_RETENTION_DAYS = 45;
+let scansSincePrune = 0;
 
 const writeJsonAtomic = async (file, snapshot) => {
   await mkdir(path.dirname(file), { recursive: true });
@@ -523,6 +531,18 @@ const loadPools = async ({ force = false } = {}) => {
     };
     poolCacheAt = Date.now();
     recordDetectedSignals(enriched);
+    try {
+      recordScan(scanLogDb, enriched, scoredAt);
+      scansSincePrune += 1;
+      // Every ~hour at the default 30s cadence, not every scan — the delete
+      // itself is cheap but there is no reason to pay it 2,880 times a day.
+      if (scansSincePrune >= 120) {
+        scansSincePrune = 0;
+        pruneScanLog(scanLogDb, SCAN_LOG_RETENTION_DAYS);
+      }
+    } catch (error) {
+      console.error("scan-log write gagal:", error instanceof Error ? error.message : error);
+    }
     return poolCache;
   })();
 

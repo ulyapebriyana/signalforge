@@ -10,3 +10,5 @@ dist
 .DS_Store
 data/*.json
 data/*.tmp
+data/*.db
+data/*.db-*
