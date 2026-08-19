@@ -108,9 +108,9 @@ describe("SignalForge scoring", () => {
       .toContain("MC ≥ $100000");
     expect(evaluatePreset({ ...heartAttackPool, marketCap: 100_000 }, PRESETS.heartattack).passed).toBe(true);
 
-    expect(evaluatePreset({ ...heartAttackPool, gmgnBundlerPct: 50.1 }, PRESETS.heartattack).misses)
-      .toContain("Bundler ≤ 50%");
-    expect(evaluatePreset({ ...heartAttackPool, gmgnBundlerPct: 50 }, PRESETS.heartattack).passed).toBe(true);
+    expect(evaluatePreset({ ...heartAttackPool, gmgnBundlerPct: 80.1 }, PRESETS.heartattack).misses)
+      .toContain("Bundler ≤ 80%");
+    expect(evaluatePreset({ ...heartAttackPool, gmgnBundlerPct: 80 }, PRESETS.heartattack).passed).toBe(true);
   });
 
   it("declares no active TVL or avg volume/min gate, on the user's explicit instruction", () => {
@@ -147,7 +147,7 @@ describe("SignalForge scoring", () => {
       "Vol 5m ≥ $40000",
       "Sniper ≤ 15%",
       "Insider ≤ 15%",
-      "Bundler ≤ 50%",
+      "Bundler ≤ 80%",
     ]);
   });
 

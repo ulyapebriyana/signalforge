@@ -37,7 +37,7 @@ export const PRESETS = Object.freeze({
   // outright, was 5%), `baseFeeMin` (removed outright, was 2%),
   // `devBalanceMax` (loosened from 0 to 10%), `ageHoursMax` (removed
   // outright, was 24h), and `bundlerPctMax` (loosened from Skolmbeagh-like's
-  // 15% to 50%). None of these are transcription errors — they are recorded
+  // 15% to 50%, then to 80%). None of these are transcription errors — they are recorded
   // here so a later reader does not mistake them for source-backed numbers.
   //
   // NEEDS `GMGN_API_KEY`. Volume 5m, sniper, insider, and bundler all come from
@@ -100,12 +100,13 @@ export const PRESETS = Object.freeze({
     devBalanceMax: 10,
     sniperPctMax: 15,
     insidersPctMax: 15,
-    // Loosened from Skolmbeagh-like's 15% to 50% on the user's explicit
-    // instruction. This is a real weakening of the rugpull check, not a
-    // rounding difference — at 50% a pool can clear this gate with half its
-    // volume run through bundled buys. Left in rather than argued with, but
-    // named so it reads as a deliberate choice, not an oversight.
-    bundlerPctMax: 50,
+    // Loosened from Skolmbeagh-like's 15% to 50%, then to 80%, both on the
+    // user's explicit instruction. This is a real weakening of the rugpull
+    // check, not a rounding difference — at 80% a pool can clear this gate
+    // with four-fifths of its volume run through bundled buys. Left in
+    // rather than argued with, but named so it reads as a deliberate
+    // choice, not an oversight.
+    bundlerPctMax: 80,
     // Only the ceiling, not Skolmbeagh-like's unusual floor. That floor exists
     // because supply spread too thin across a just-migrated token means bots
     // hold it; a runner that has already moved is past the moment that reads.
