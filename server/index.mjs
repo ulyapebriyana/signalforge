@@ -77,6 +77,30 @@ let detectionInitialized = false;
 const historyFile = path.join(projectRoot, "data", "signal-history.json");
 let historyWriteQueue = Promise.resolve();
 
+/**
+ * None of the five caches above ever shrink on their own: a read only checks
+ * whether an entry is stale, it never deletes it, so a mint the scanner looks
+ * at once and then never sees again (the common case — pools churn constantly
+ * since discovery walks newest-first) sits in memory for the life of the
+ * process. Run alongside the scan-log prune (~every 30 min) to bound them.
+ *
+ * The two TTL caches are safe to sweep at face value: an expired entry is
+ * already treated as a miss on read, so deleting it changes nothing but
+ * memory. The two cooldown maps store a bare timestamp instead of an
+ * expiresAt, so eviction uses a margin well past the longest cooldown any
+ * preset defines (60 min) rather than duplicating that number here.
+ */
+const STALE_COOLDOWN_MS = 6 * 60 * 60_000;
+
+const pruneCaches = () => {
+  const now = Date.now();
+  for (const [key, entry] of rugCheckCache) if (entry.expiresAt <= now) rugCheckCache.delete(key);
+  for (const [key, entry] of rugCheckClusterCache) if (entry.expiresAt <= now) rugCheckClusterCache.delete(key);
+  for (const [key, entry] of gmgnCache) if (entry.expiresAt <= now) gmgnCache.delete(key);
+  for (const [key, sentAt] of alertCooldowns) if (now - sentAt > STALE_COOLDOWN_MS) alertCooldowns.delete(key);
+  for (const [key, seenAt] of detectionCooldowns) if (now - seenAt > STALE_COOLDOWN_MS) detectionCooldowns.delete(key);
+};
+
 // Fee/TVL readings per pool, one per scan. Held here rather than in the pool
 // cache because the whole point is to outlive a single scan — and persisted so
 // a restart does not reset every position's decay history to zero.
@@ -803,6 +827,7 @@ const loadPools = async ({ force = false } = {}) => {
       if (scansSincePrune >= 120) {
         scansSincePrune = 0;
         pruneScanLog(scanLogDb, SCAN_LOG_RETENTION_DAYS);
+        pruneCaches();
       }
     } catch (error) {
       console.error("scan-log write gagal:", error instanceof Error ? error.message : error);
