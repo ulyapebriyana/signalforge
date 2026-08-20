@@ -3091,9 +3091,11 @@
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 8px;
+  gap: 10px;
   color: var(--f-faint);
-  font-size: 11px;
+  /* A ten-digit memecoin price is the widest thing in this cell, and two of
+     them side by side were touching at 11px. */
+  font-size: 10.5px;
 }
 
 /* How much room is left before the position stops earning — the number that
@@ -4071,7 +4073,7 @@
  * keeps every column readable at the cost of a swipe.
  */
 .fx-positions .fx-table--positions {
-  min-width: 980px;
+  min-width: 1044px;
 }
 
 /*
@@ -4082,9 +4084,34 @@
  */
 .fx-positions .fx-col-w-pair { width: 160px; }
 .fx-positions .fx-col-w-status { width: 132px; }
-.fx-positions .fx-col-w-range { width: 152px; }
+.fx-positions .fx-col-w-range { width: 172px; }
 .fx-positions .fx-col-w-price { width: 108px; }
 .fx-positions .fx-col-w-value { width: 116px; }
-.fx-positions .fx-col-w-fees { width: 130px; }
-.fx-positions .fx-col-w-ratio { width: 92px; }
+.fx-positions .fx-col-w-fees { width: 142px; }
+.fx-positions .fx-col-w-ratio { width: 106px; }
 .fx-positions .fx-col-w-actions { width: 108px; }
+
+/*
+ * The header labels.
+ *
+ * `.fx-table thead th` sets `padding: 0` because the scanner carries its own
+ * padding inside `.fx-th-label`, the flex wrapper that also holds its sort and
+ * pin controls. This table has no such controls and puts a bare `<span>` in the
+ * cell instead — which inherited the zero padding and nothing else. So every
+ * label sat flush against the column edge while its data was inset 12px, and
+ * rendered in the body face at full brightness, reading as one more row of
+ * values rather than as the header above them.
+ */
+.fx-positions .fx-table--positions thead th > span {
+  display: block;
+  padding: 10px 12px;
+  overflow: hidden;
+  font-family: var(--f-mono);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  line-height: 1.2;
+  text-transform: uppercase;
+  text-overflow: ellipsis;
+  color: var(--f-slag);
+}
