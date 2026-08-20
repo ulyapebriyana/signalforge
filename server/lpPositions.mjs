@@ -48,6 +48,19 @@ const BASE58 = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
  * bin, neither of which is faster than the scanner's own cadence.
  */
 const POSITION_CACHE_MS = 30_000;
+
+/**
+ * How often an open dashboard should ask, exported so the client polls at the
+ * cache's own clock rather than guessing.
+ *
+ * It used to poll on `lpScanSeconds`, the background out-of-range alert
+ * cadence, which is a different job with different constraints — that one has
+ * to keep running after the tab closes, so it is deliberately slow. Polling
+ * slower than this TTL shows the reader positions staler than the server
+ * already has; polling faster just re-serves the same cached object. Matching
+ * it is the only setting that is neither.
+ */
+export const positionPollSeconds = POSITION_CACHE_MS / 1_000;
 const POOL_CACHE_MS = 60_000;
 
 const positionCache = new Map();

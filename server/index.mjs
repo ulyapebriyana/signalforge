@@ -12,7 +12,7 @@ import { normalizePool, poolTier, PRESETS, resolvePresetId, volatileGateLabels }
 import { alertPresetsFor, cooldownKey, presetsCleared } from "../shared/alertRouting.js";
 import { collectSignalEntries } from "../shared/signalTransitions.js";
 import { collectPositionAlerts, RANGE_LABEL } from "../shared/lpPositions.js";
-import { configuredWallets, isValidWallet, readWalletPositions, rpcConfigured } from "./lpPositions.mjs";
+import { configuredWallets, isValidWallet, positionPollSeconds, readWalletPositions, rpcConfigured } from "./lpPositions.mjs";
 import {
   clearPendingZap,
   pendingZapsFor,
@@ -955,6 +955,7 @@ app.get("/api/status", (_request, response) => {
     lpTrackingConfigured: rpcConfigured(),
     lpWallets: configuredWallets(),
     lpScanSeconds,
+    positionPollSeconds,
   });
 });
 

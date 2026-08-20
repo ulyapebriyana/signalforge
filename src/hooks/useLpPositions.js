@@ -17,7 +17,7 @@ const readJson = async (response) => {
  * from LP_WALLETS in .env, because those have to keep running after the tab is
  * closed.
  */
-export function useLpPositions(intervalSeconds = 60) {
+export function useLpPositions(intervalSeconds = 30) {
   const [wallet, setWalletState] = useState(() => localStorage.getItem(STORAGE_KEY) || "");
   const [payload, setPayload] = useState(null);
   const [loading, setLoading] = useState(false);

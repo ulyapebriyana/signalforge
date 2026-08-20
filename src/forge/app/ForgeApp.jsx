@@ -250,7 +250,7 @@ export default function ForgeApp({ path }) {
   const signalHistory = useSignalHistory(scanInterval);
   // Polled on the server's own LP cadence rather than the pool scan's: a
   // position moves when the price crosses a bin, and each read costs an RPC call.
-  const lp = useLpPositions(status?.lpScanSeconds || 60);
+  const lp = useLpPositions(status?.positionPollSeconds || 30);
 
   const [preset, setPreset] = useState(() => resolvePresetId(localStorage.getItem("signalforge:preset")));
   const [scanner, setScanner] = useState(() => initialScannerState(PRESETS[preset]));
@@ -855,6 +855,7 @@ export default function ForgeApp({ path }) {
               error={lp.error}
               onRefresh={lp.refresh}
               configured={status?.lpTrackingConfigured !== false}
+              pollSeconds={status?.positionPollSeconds || 30}
             />
           </Suspense>
         ) : null}

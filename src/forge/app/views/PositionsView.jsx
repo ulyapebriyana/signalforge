@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { ExternalLink, Loader2, LogOut, Plug, RefreshCw, TriangleAlert, Wallet } from "lucide-react";
 import { RANGE_LABEL } from "../../../../shared/lpPositions.js";
-import { formatUsd } from "../../../lib/format.js";
+import { formatUsdExact } from "../../../lib/format.js";
 import { useWallet } from "../lib/wallet.jsx";
 import { useZapOut } from "../../../hooks/useZapOut.js";
 import { EmptyState, StatTile } from "../components/bits.jsx";
@@ -16,7 +16,54 @@ const STATE_TONE = {
   unknown: "muted",
 };
 
-const money = (value) => (value === null || value === undefined ? "—" : formatUsd(value));
+/**
+ * Exact, never compacted — see `formatUsdExact`. This page shows the reader
+ * their own money, where "$12K" hides a $470 difference.
+ */
+const money = formatUsdExact;
+
+/**
+ * How far the price can still move before this position stops earning.
+ *
+ * The range bar says *where* the price sits; this says *how much room is left*,
+ * which is the number that decides whether to act now or leave it alone. An
+ * out-of-range position reports how far past the edge it already is, so the
+ * two states read on the same scale instead of one of them going blank.
+ */
+const edgeDistance = (position) => {
+  const { activePrice: active, lowerPrice: lower, upperPrice: upper, rangeState, rangeProgress } = position;
+  if (![active, lower, upper].every(Number.isFinite) || active <= 0) return null;
+
+  if (rangeState === "below") return { out: true, pct: ((lower - active) / active) * 100, edge: "bawah" };
+  if (rangeState === "above") return { out: true, pct: ((active - upper) / active) * 100, edge: "atas" };
+
+  /*
+   * Which edge is nearer comes from `rangeProgress`, not from comparing the two
+   * price gaps. Both derive from the same bin ids, but progress is linear in
+   * bin index while a price gap is linear in price, and DLMM bins are
+   * geometric — so on a wide range the two can name different edges. Progress
+   * is what the chip and the marker already use, and a row where the bar leans
+   * right while the text says "ke bawah" reads as a bug whichever is correct.
+   *
+   * How *far* still comes from price, because that is the move a trader has to
+   * picture: "price needs another 6% before this stops earning".
+   */
+  const nearerUpper = Number.isFinite(rangeProgress) ? rangeProgress >= 0.5 : upper - active <= active - lower;
+  return nearerUpper
+    ? { out: false, pct: ((upper - active) / active) * 100, edge: "atas" }
+    : { out: false, pct: ((active - lower) / active) * 100, edge: "bawah" };
+};
+
+const percent = (value) => `${Math.abs(value) >= 10 ? Math.round(value) : value.toFixed(1)}%`;
+
+/** Built once: this renders on every poll, and Intl formatters are not cheap. */
+const readClock = new Intl.DateTimeFormat("id-ID", {
+  timeZone: "Asia/Jakarta",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hour12: false,
+});
 
 /** Token amounts, not dollars — a memecoin balance needs the whole number. */
 const amount = (value) =>
@@ -42,6 +89,11 @@ const price = (value) => {
  * This is the one thing a table of numbers cannot say quickly: how much room is
  * left before the position stops earning. An out-of-range position pins its
  * marker to the edge it left through, so the direction stays visible.
+ *
+ * The track carries a filled portion up to the marker as well as the marker
+ * itself. A 3px tick on a flat bar was legible in isolation and vanished in a
+ * row of five — the fill is what makes the position readable at a glance, and
+ * the marker is what makes it precise.
  */
 function RangeBar({ position }) {
   const progress = position.rangeProgress;
@@ -51,7 +103,12 @@ function RangeBar({ position }) {
   return (
     <div className={`fx-range fx-range--${tone}`}>
       <div className="fx-range-track" aria-hidden="true">
-        {clamped === null ? null : <i className="fx-range-marker" style={{ left: `${clamped * 100}%` }} />}
+        {clamped === null ? null : (
+          <>
+            <i className="fx-range-fill" style={{ width: `${clamped * 100}%` }} />
+            <i className="fx-range-marker" style={{ left: `${clamped * 100}%` }} />
+          </>
+        )}
       </div>
       <div className="fx-range-scale">
         <span className="f-num">{price(position.lowerPrice)}</span>
@@ -72,6 +129,7 @@ export default function PositionsView({
   error,
   onRefresh,
   configured,
+  pollSeconds = 30,
 }) {
   const [draft, setDraft] = useState(wallet);
   const [zapPosition, setZapPosition] = useState(null);
@@ -140,11 +198,20 @@ export default function PositionsView({
         <div>
           <h1>Posisi LP</h1>
           <p>
-            Dibaca langsung dari chain memakai alamat publik. Tidak ada tanda tangan, tidak ada
-            private key — scanner mencari entry, halaman ini menjaga posisi yang sudah jalan.
+            Dibaca langsung dari chain lewat alamat publik — tanpa tanda tangan, tanpa private key.
           </p>
         </div>
         <div className="fx-view-head-tools">
+          {/* The read time belongs next to the control that changes it, not
+              orphaned at the bottom of the page where it was before — "how old
+              is this?" and "make it newer" are one question. */}
+          {readAt ? (
+            <span className="fx-read-stamp">
+              Dibaca <b className="f-num">{readClock.format(new Date(readAt))}</b>
+              <span className="fx-read-stamp-sep">·</span>
+              tiap {pollSeconds}s
+            </span>
+          ) : null}
           <button
             className="f-btn f-btn--ghost"
             type="button"
@@ -166,6 +233,11 @@ export default function PositionsView({
         </div>
       ) : null}
 
+      {/* One panel, not two. The address field and the wallet connection are
+          the same question — "whose positions am I looking at, and can I act on
+          them?" — and as separate bordered boxes stacked flush they rendered as
+          one panel with a stray double border through the middle. */}
+      <div className="fx-wallet-panel">
       <form
         className="fx-wallet-form"
         onSubmit={(event) => {
@@ -209,7 +281,7 @@ export default function PositionsView({
       {/* Always shown, including before any address is set — connecting is now
           the shortest way to start, and gating this on a filled field made that
           route unreachable for a first-time visitor. */}
-      <div className="fx-connect-bar">
+      <div className="fx-connect-bar fx-connect-bar--joined">
         {connected ? (
             <>
               <span className={`f-chip f-chip--${canSign ? "clear" : "warning"}`}>
@@ -271,6 +343,7 @@ export default function PositionsView({
             )}
           </>
         )}
+      </div>
       </div>
 
       {error ? (
@@ -337,6 +410,19 @@ export default function PositionsView({
       {positions.length ? (
         <div className="fx-table-frame fx-table-frame--compact">
           <table className="fx-table fx-table--positions">
+            {/* See `.fx-col-w-*`: fixed layout reads its geometry from the
+                first row, so widths have to be declared here, not on the
+                tbody cells. */}
+            <colgroup>
+              <col className="fx-col-w-pair" />
+              <col className="fx-col-w-status" />
+              <col className="fx-col-w-range" />
+              <col className="fx-col-w-price" />
+              <col className="fx-col-w-value" />
+              <col className="fx-col-w-fees" />
+              <col className="fx-col-w-ratio" />
+              <col className="fx-col-w-actions" />
+            </colgroup>
             <thead>
               {/*
                 Header labels sit in a <span> because .fx-table thead th carries
@@ -358,14 +444,28 @@ export default function PositionsView({
             <tbody>
               {positions.map((position) => (
                 <tr key={position.positionKey} className={position.earning ? "" : "is-idle"}>
-                  <td className="fx-col-lp">
+                  <td className="fx-col-lp fx-pair-cell">
                     <strong>{position.pair || "—"}</strong>
-                    {position.binStep ? <small className="f-muted"> · bin {position.binStep}</small> : null}
+                    {position.binStep ? <small className="f-muted">bin {position.binStep}</small> : null}
                   </td>
-                  <td className="fx-col-lp">
+                  {/* State and distance live together: "keluar bawah" and
+                      "how far out" are one answer, and splitting them left the
+                      range column trying to fit three things into one line. */}
+                  <td className="fx-col-lp fx-status-cell">
                     <span className={`f-chip f-chip--${STATE_TONE[position.rangeState] === "healthy" ? "clear" : STATE_TONE[position.rangeState]}`}>
                       {RANGE_LABEL[position.rangeState]}
                     </span>
+                    {(() => {
+                      const distance = edgeDistance(position);
+                      if (!distance) return null;
+                      return (
+                        <small className={`fx-edge-gap fx-edge-gap--${STATE_TONE[position.rangeState] ?? "muted"}`}>
+                          {distance.out
+                            ? `${percent(distance.pct)} lewat ${distance.edge}`
+                            : `${percent(distance.pct)} ke ${distance.edge}`}
+                        </small>
+                      );
+                    })()}
                   </td>
                   <td className="fx-col-lp fx-range-cell">
                     <RangeBar position={position} />
@@ -435,17 +535,6 @@ export default function PositionsView({
         />
       ) : null}
 
-      {readAt ? (
-        <p className="fx-foot-note">
-          Dibaca {new Intl.DateTimeFormat("id-ID", {
-            timeZone: "Asia/Jakarta",
-            hour: "2-digit",
-            minute: "2-digit",
-            second: "2-digit",
-            hour12: false,
-          }).format(new Date(readAt))} WIB
-        </p>
-      ) : null}
     </div>
   );
 }

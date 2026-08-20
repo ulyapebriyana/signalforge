@@ -3052,22 +3052,36 @@
  */
 .fx-range {
   display: grid;
-  gap: 4px;
+  gap: 5px;
   min-width: 128px;
 }
 
 .fx-range-track {
   position: relative;
-  height: 6px;
-  border-radius: 3px;
+  height: 8px;
+  border-radius: 4px;
   background: var(--f-line);
+  overflow: hidden;
+}
+
+/*
+ * The fill, not the marker, is what makes a row readable at a glance. A 3px
+ * tick on a flat bar is legible on its own and disappears in a column of five:
+ * the bar answers "roughly where?" from across the screen, the marker answers
+ * "exactly where?" on inspection.
+ */
+.fx-range-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: currentColor;
+  opacity: 0.28;
 }
 
 .fx-range-marker {
   position: absolute;
   top: 50%;
   width: 3px;
-  height: 12px;
+  height: 14px;
   border-radius: 2px;
   background: currentColor;
   transform: translate(-50%, -50%);
@@ -3075,10 +3089,31 @@
 
 .fx-range-scale {
   display: flex;
+  align-items: baseline;
   justify-content: space-between;
   gap: 8px;
   color: var(--f-faint);
   font-size: 11px;
+}
+
+/* How much room is left before the position stops earning — the number that
+   decides whether to act now or leave it alone. It sits under the state chip
+   rather than inside the range strip, where it was a third item competing for
+   one line and clipping the upper price. */
+.fx-edge-gap {
+  display: block;
+  margin-top: 3px;
+  font-size: 11px;
+  white-space: nowrap;
+  color: var(--f-faint);
+}
+
+.fx-edge-gap--danger {
+  color: var(--f-scorch);
+}
+
+.fx-edge-gap--warning {
+  color: var(--f-caution);
 }
 
 .fx-range--healthy {
@@ -3097,9 +3132,24 @@
   color: var(--f-faint);
 }
 
-/* An out-of-range position is still real money, so it dims rather than hides. */
+/*
+ * An out-of-range position is still real money, so it dims rather than hides —
+ * by colour, not by `opacity`.
+ *
+ * `opacity` on the cell was the original spelling and it broke the pinned
+ * action column: that cell is `position: sticky` with an opaque background so
+ * the numeric columns slide *under* it, and at 0.72 they showed straight
+ * through. It stayed invisible for as long as this table never actually
+ * scrolled sideways; it appears the moment it does, which on a phone is
+ * always. Excluding the last cell would fix the artifact and leave the row
+ * looking half-dimmed, so the whole row moves to colour instead.
+ */
 .fx-table--positions tr.is-idle td {
-  opacity: 0.72;
+  color: var(--f-slag);
+}
+
+.fx-table--positions tr.is-idle .fx-range {
+  opacity: 0.75;
 }
 
 /* Pool, status and range read as labels, not quantities — the numeric columns
@@ -3111,16 +3161,33 @@
 }
 
 .fx-range-cell {
-  width: 168px;
+  width: 176px;
+}
+
+/*
+ * The address field and the wallet connection are one panel with a divider,
+ * not two bordered boxes stacked flush — with no gap between them they read as
+ * a single panel with a stray double line through the middle.
+ */
+.fx-wallet-panel {
+  margin-bottom: 1.25rem;
+  border: 1px solid var(--f-line);
+  border-radius: var(--f-r-lg);
+  background: var(--f-raised);
+  overflow: hidden;
 }
 
 .fx-wallet-form {
   display: grid;
   gap: 6px;
   padding: 14px 16px;
-  border: 1px solid var(--f-line);
-  border-radius: 8px;
-  background: var(--f-raised);
+}
+
+.fx-connect-bar--joined {
+  border: 0;
+  border-top: 1px solid var(--f-line);
+  border-radius: 0;
+  background: color-mix(in srgb, var(--f-iron-950) 55%, transparent);
 }
 
 .fx-wallet-form label {
@@ -3918,3 +3985,106 @@
 .fx-mover--burst {
   grid-template-columns: 3px minmax(0, 1fr) auto auto;
 }
+
+/* ---- Posisi LP -------------------------------------------------------------
+ * Scoped to .fx-positions on purpose. `.fx-table` is shared with the scanner's
+ * TanStack table, which has its own column sizing, drag handles and pinning, so
+ * anything unscoped written here would land there too.
+ */
+.fx-read-stamp {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--f-faint);
+  font-size: 12px;
+}
+
+.fx-read-stamp b {
+  color: var(--f-slag);
+  font-weight: 600;
+}
+
+.fx-read-stamp-sep {
+  opacity: 0.45;
+}
+
+.fx-positions .fx-table--positions td.f-num {
+  font-variant-numeric: tabular-nums;
+}
+
+.fx-positions .fx-table--positions td {
+  padding: 9px 12px;
+}
+
+.fx-positions .fx-table--positions tbody tr:not(:last-child) td {
+  border-bottom: 1px solid color-mix(in srgb, var(--f-line) 55%, transparent);
+}
+
+/*
+ * `:not(:last-child)` matters: the action column is `position: sticky` with an
+ * opaque background so the numbers slide under it, and a translucent hover
+ * colour on that cell lets them show through it instead.
+ */
+.fx-positions .fx-table--positions tbody tr:hover td:not(:last-child) {
+  background: color-mix(in srgb, var(--f-bone) 3%, transparent);
+}
+
+/* Nothing on this table drags, unlike the scanner's headers. */
+.fx-positions .fx-table--positions thead th {
+  cursor: default;
+}
+
+/* Disabled zap out has to look disabled. It is inert whenever the connected
+   wallet is not the watched one, which is a normal state here, not an error. */
+.fx-positions .fx-zap-btn[disabled] {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.fx-positions .fx-pair-cell strong {
+  display: block;
+  line-height: 1.3;
+}
+
+.fx-positions .fx-pair-cell small {
+  display: block;
+  font-size: 11px;
+  color: var(--f-faint);
+}
+
+.fx-positions .fx-status-cell {
+  white-space: nowrap;
+}
+
+/* Exact money is a longer string than the compacted "$20K" these tiles were
+   sized for, and on a narrow screen it ran into the cell divider. */
+.fx-positions .fx-tile-value {
+  font-size: clamp(1.15rem, 2.6vw, 1.5rem);
+  letter-spacing: -0.01em;
+}
+
+/*
+ * `.fx-table` is `table-layout: fixed`, so without a floor every column gets
+ * squeezed into whatever width is available — on a phone that rendered the
+ * pair as "SOL /" and a position worth $12,480.55 as "$12,". A minimum width
+ * lets the frame's existing `overflow: auto` scroll sideways instead, which
+ * keeps every column readable at the cost of a swipe.
+ */
+.fx-positions .fx-table--positions {
+  min-width: 980px;
+}
+
+/*
+ * Column widths live on a `<colgroup>` because `table-layout: fixed` takes its
+ * geometry from the first row only — a `width` set on a tbody `<td>` (which is
+ * where `.fx-range-cell` had one) is read by nobody, and every column silently
+ * got an equal share instead.
+ */
+.fx-positions .fx-col-w-pair { width: 160px; }
+.fx-positions .fx-col-w-status { width: 132px; }
+.fx-positions .fx-col-w-range { width: 152px; }
+.fx-positions .fx-col-w-price { width: 108px; }
+.fx-positions .fx-col-w-value { width: 116px; }
+.fx-positions .fx-col-w-fees { width: 130px; }
+.fx-positions .fx-col-w-ratio { width: 92px; }
+.fx-positions .fx-col-w-actions { width: 108px; }

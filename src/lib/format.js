@@ -8,6 +8,28 @@ export const formatUsd = (value, compact = true) => {
   }).format(amount);
 };
 
+/**
+ * Money the reader owns, printed in full.
+ *
+ * `formatUsd` compacts anything over $1,000 because a screener column is
+ * comparing pools, where $1.2M against $840K is the whole point and the digits
+ * after are noise. A position table is the opposite: it is one person's own
+ * money, and "$12K" cannot tell $12,480.55 from $12,010.00 — a $470 difference
+ * rendered as the same string. Unclaimed fees are worse, since the interesting
+ * numbers there live in the tens of dollars and their cents.
+ *
+ * So: never compact, always two decimals, grouped.
+ */
+export const formatUsdExact = (value) => {
+  if (value === null || value === undefined || !Number.isFinite(Number(value))) return "—";
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(Number(value));
+};
+
 export const formatNumber = (value) => new Intl.NumberFormat("en-US", {
   notation: Number(value) >= 10_000 ? "compact" : "standard",
   maximumFractionDigits: 1,
