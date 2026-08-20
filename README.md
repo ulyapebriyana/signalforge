@@ -29,11 +29,15 @@ kebetulan: lihat [Menutup posisi](#menutup-posisi-zap-out).
 
 ## Yang sudah berfungsi
 
-- Scan tiga halaman 250 pool dari API resmi Meteora setiap 30 detik: `volume_1h:desc`,
-  `fee_tvl_ratio_1h:desc`, dan `tvl:desc`. Satu urutan tidak bisa melihat seluruh pasar — kepala
-  urutan volume selalu pool tua dan besar, urutan fee memunculkan pool yang baru migrasi, dan
-  urutan TVL adalah satu-satunya yang menanyakan kedalaman secara langsung, yaitu properti yang
-  jadi dasar preset Slow Wallet.
+- Scan empat halaman 250 pool dari API resmi Meteora setiap 15 detik: `volume_1h:desc`,
+  `fee_tvl_ratio_1h:desc`, `tvl:desc`, dan `pool_created_at:desc`. Satu urutan tidak bisa melihat
+  seluruh pasar — kepala urutan volume selalu pool tua dan besar, urutan TVL adalah satu-satunya
+  yang menanyakan kedalaman secara langsung (properti yang jadi dasar preset Slow Wallet), dan
+  urutan umur adalah satu-satunya yang menanyakan kebaruan.
+- Halaman umur ditambahkan 2026-08-20 setelah pengukuran menunjukkan tiga urutan aliran itu
+  melihat pasar yang nyaris beku: dalam 6 jam, 720 tick × 96 kandidat hanya berisi **219 pool
+  berbeda**, 53 di antaranya menempati slot di ≥90% tick. Umur median kandidat dari halaman fee
+  adalah 72 jam — bukan pool baru migrasi seperti asumsi awal — sedangkan dari halaman umur 8 jam.
 - Ambil candle 1 jam untuk maksimal 96 kandidat secara paralel (48 dari halaman volume, 24 dari
   halaman fee, 24 dari halaman TVL yang belum terbawa).
 - Plafon market cap pipeline **$500M** (sebelumnya $15M). Setiap pair yang benar-benar established

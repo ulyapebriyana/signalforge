@@ -27,7 +27,24 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, "..");
 const app = express();
 const port = Number(process.env.PORT || 4173);
-const scanIntervalSeconds = Math.max(20, Number(process.env.SCAN_INTERVAL_SECONDS || 30));
+/**
+ * 15s, halved from 30s on 2026-08-20. The interval, not the scan, was the
+ * dominant term in how long a pool waits to be noticed: measured over 720
+ * ticks on the VPS the gap between scans was p50 30.0s / p90 31.9s / p99
+ * 35.2s, so a scan finishes with most of its window unused. Page fetches are
+ * 0.22-0.58s each and run in parallel, one OHLCV call is 0.11s, and the two
+ * genuinely rate-limited upstreams are cache-bound rather than scan-bound —
+ * RugCheck holds a mint for 15 minutes and GMGN for 10 (60s for young pools),
+ * so scanning twice as often does not fetch either twice as often.
+ *
+ * `activeFetch` is what makes this safe: a tick that lands while a scan is
+ * still running awaits it instead of starting a second, so a slow upstream
+ * degrades back toward the old cadence rather than stacking scans.
+ *
+ * The floor drops to 10 with it. It exists to stop a stray 1 in .env, not to
+ * express an opinion about 15 vs 20.
+ */
+const scanIntervalSeconds = Math.max(10, Number(process.env.SCAN_INTERVAL_SECONDS || 15));
 const scannerPresetName = resolvePresetId(process.env.SCANNER_PRESET);
 // Slower than the pool scan on purpose: an RPC read walks every position
 // account the wallet owns and is billed per call, while a position only changes
@@ -70,7 +87,22 @@ let feeVelocityWriteQueue = Promise.resolve();
 // alerts that fired. See shared/scanLog.js for why this exists alongside
 // signalHistory rather than replacing it.
 const scanLogDb = openScanLog(path.join(projectRoot, "data", "scan-log.db"));
-const SCAN_LOG_RETENTION_DAYS = 45;
+
+/**
+ * 14 days, cut from 45 on 2026-08-20 because halving the scan interval doubles
+ * what this table writes and 45 days no longer fits the box.
+ *
+ * The arithmetic, measured rather than assumed: on the VPS the table held
+ * 377,305 rows in 218MB — 580 bytes per row, most of it the `qualifies` JSON
+ * blob — at 257,435 rows/day. At a 15s interval and ~110 candidates a scan
+ * that becomes ~634,000 rows/day, so 45 days would be roughly 16.5GB against
+ * 28GB free on a disk shared with three other PM2 apps. 14 days is ~5.1GB,
+ * which is less than the 6.7GB the 30s/45-day setting was already heading for.
+ *
+ * 14 days is chosen against how this table is actually read: every retune so
+ * far has queried a window of hours to a couple of days, never weeks.
+ */
+const SCAN_LOG_RETENTION_DAYS = Math.max(1, Number(process.env.SCAN_LOG_RETENTION_DAYS || 14));
 let scansSincePrune = 0;
 
 const writeJsonAtomic = async (file, snapshot) => {
@@ -314,10 +346,38 @@ const gmgnConfigured = () => Boolean(process.env.GMGN_API_KEY);
 const GMGN_SPACING_MS = 120;
 let gmgnQueue = Promise.resolve();
 
-const fetchGmgnToken = async (mint) => {
+/**
+ * A young pool's GMGN row is refreshed on this much shorter clock than the
+ * 10-minute default, because Heart Attack turns on `price.volume_5m` and a
+ * 10-minute cache means a five-minute gate reading data older than the window
+ * it measures.
+ *
+ * SOL/MMC on 2026-08-20 is what that looks like: it lived 11 scans and its
+ * 5-minute volume was the identical $241,016 in every one of them, fetched
+ * once at first sighting and reused until the pool was already down 39%. Over
+ * the same six-hour window `Vol 5m ≥ $40000` was the second most binding gate
+ * in the whole preset, missing on 77.4% of readings — so the number the preset
+ * leans on hardest is the one being served stalest.
+ *
+ * Scoped to young pools rather than applied globally because that is where the
+ * reading actually moves. The 53 pools that hold a candidate slot in ≥90% of
+ * ticks are all far older than this window, and refreshing them every minute
+ * would spend the GMGN lane re-reading numbers that do not change.
+ */
+const GMGN_FRESH_MAX_AGE_MS = 60_000;
+const GMGN_FRESH_FAILURE_TTL_MS = 30_000;
+const GMGN_FRESH_POOL_HOURS = 6;
+
+const fetchGmgnToken = async (mint, { maxAgeMs = Infinity } = {}) => {
   if (!gmgnConfigured()) return null;
   const cached = gmgnCache.get(mint);
-  if (cached && cached.expiresAt > Date.now()) return cached.data;
+  // Two conditions, not one: `expiresAt` is the entry's own TTL and `cachedAt`
+  // lets a caller that needs fresher data than the entry was written for force
+  // a refetch. Without the second, a mint first seen as an old pool would keep
+  // serving a 10-minute-old row for 10 minutes after it started running.
+  if (cached && cached.expiresAt > Date.now() && Date.now() - cached.cachedAt < maxAgeMs) {
+    return cached.data;
+  }
 
   const run = gmgnQueue.then(async () => {
     await new Promise((resolve) => setTimeout(resolve, GMGN_SPACING_MS));
@@ -333,19 +393,42 @@ const fetchGmgnToken = async (mint) => {
   });
   gmgnQueue = run.then(() => undefined, () => undefined);
 
+  const fresh = Number.isFinite(maxAgeMs);
   try {
     const data = normalizeGmgnToken(await run);
-    gmgnCache.set(mint, { data, expiresAt: Date.now() + jitteredTtl(gmgnCacheTtlMs) });
+    gmgnCache.set(mint, {
+      data,
+      cachedAt: Date.now(),
+      expiresAt: Date.now() + jitteredTtl(gmgnCacheTtlMs),
+    });
     return data;
   } catch {
-    gmgnCache.set(mint, { data: null, expiresAt: Date.now() + rugCheckFailureTtlMs });
+    // A brand-new token is often simply not indexed by GMGN yet, so the
+    // two-minute negative cache that suits a settled mint would burn most of a
+    // runner's life on a "no data" that stopped being true 90 seconds ago.
+    gmgnCache.set(mint, {
+      data: null,
+      cachedAt: Date.now(),
+      expiresAt: Date.now() + (fresh ? GMGN_FRESH_FAILURE_TTL_MS : rugCheckFailureTtlMs),
+    });
     return null;
   }
 };
 
-const fetchGmgnTokens = async (mints) => {
-  const uniqueMints = [...new Set(mints.filter(Boolean))];
-  const entries = await mapConcurrent(uniqueMints, 4, async (mint) => [mint, await fetchGmgnToken(mint)]);
+/**
+ * Takes `{ mint, fresh }` rather than bare mints so the caller — which is the
+ * only place that knows how old each pool is — decides which rows are worth
+ * re-reading on the short clock. A mint reached by both a young and an old
+ * pool is fetched once, on the fresher of the two clocks.
+ */
+const fetchGmgnTokens = async (requests) => {
+  const wanted = new Map();
+  for (const { mint, fresh } of requests) {
+    if (!mint) continue;
+    wanted.set(mint, wanted.get(mint) || fresh);
+  }
+  const entries = await mapConcurrent([...wanted], 4, async ([mint, fresh]) =>
+    [mint, await fetchGmgnToken(mint, fresh ? { maxAgeMs: GMGN_FRESH_MAX_AGE_MS } : {})]);
   return new Map(entries);
 };
 
@@ -447,14 +530,49 @@ const FEE_PAGE_BUDGET = 24;
 const TVL_PAGE_BUDGET = 24;
 
 /**
+ * The fourth page, and the one that fixes discovery latency. Measured against
+ * `data/scan-log.db` on 2026-08-20: over 6 hours the scanner ran 720 ticks of
+ * 96 candidates each — 69,120 slot-readings — and saw only **219 distinct
+ * pools**. 53 of them held a slot in ≥90% of ticks and only 8 pools passed
+ * through in 3 ticks or fewer. The three flow sorts rank by size, so their
+ * heads are the same large pools every scan and a young pool is invisible
+ * until it climbs into a top-250 by volume, fee/TVL, or TVL.
+ *
+ * The concrete failure: SOL/MMC was created 22:12:47 and did not enter a
+ * single candidate set until 22:15:40 — six full scans later — because its
+ * lifetime volume had not yet reached the $1,000 admission floor. It passed
+ * Heart Attack on the first scan that saw it, so nothing about the preset was
+ * holding it back; discovery was.
+ *
+ * Median candidate age measured the same day: `fee_tvl_ratio_1h:desc` 72
+ * hours, `fee_tvl_ratio_30m:desc` also 72 hours, `pool_created_at:desc` 8
+ * hours. The comment on the fee page below — that it is where fresh
+ * migrations land — was true when written and is not true now.
+ *
+ * The budget is a cap, not a quota. Of the 250 newest DLMM pools only 11 clear
+ * admission (21 even with the floor dropped to $100), so this page typically
+ * contributes ~12-20 candidates and stops. DLMM pool creation runs about six
+ * per hour, so the mints it brings in are genuinely new roughly that often —
+ * which is what the RugCheck lane, not the page fetch, actually pays for.
+ */
+const NEW_PAGE_BUDGET = 24;
+
+/**
  * 25s rather than the 12s default, because a 250-row page is roughly half a
  * megabyte and the upstream serves it slowly: measured 2026-08-19 over six
  * cold calls, `tvl:desc` took 15.4–34.0s and `volume_1h:desc` 17.5–32.4s. At
  * the default the TVL page timed out often enough to drop out of a scan
  * silently — it is best-effort, so its failure costs 24 candidates with no
  * error anywhere — and the page it drops is the one Slow Wallet depends on.
- * The three pages are fetched in parallel, so this is 25s of wall clock for
- * all three, not each.
+ * The pages are fetched in parallel, so this is 25s of wall clock for all of
+ * them, not each.
+ *
+ * Those numbers were measured from a laptop. Re-measured from the VPS on
+ * 2026-08-20 the same 250-row pages returned in 0.22-0.58s, which is why a
+ * fourth page could be added without touching the scan budget — page fetching
+ * is not what a scan spends its time on. The 25s ceiling stays because it
+ * costs nothing when the upstream is fast and is the difference between a
+ * best-effort page degrading loudly and vanishing silently.
  */
 const fetchPoolPage = async (sortBy) => {
   const query = new URLSearchParams({ page: "1", page_size: "250", sort_by: sortBy });
@@ -473,14 +591,39 @@ const fetchPoolPage = async (sortBy) => {
  * $500M is set to admit those without opening the door to the majors, where a
  * one-sided DLMM position is a different trade than the one this app screens for.
  */
+/**
+ * The volume floor is age-aware because for a pool younger than an hour,
+ * "1h volume" is not a rate — it is everything the pool has ever traded. A
+ * pool three minutes old is asked to have done in three minutes what the flat
+ * floor assumes it had an hour to do.
+ *
+ * SOL/MMC on 2026-08-20 is the worked example: created 22:12:47, it crossed
+ * $1,000 of lifetime volume at roughly 22:15 and was invisible to six scans
+ * before that. At $300 it would have been admitted around 22:14 instead.
+ *
+ * $300 rather than lower because the cost is paid in enrichment slots and the
+ * curve is flat: of the 250 newest DLMM pools, 11 clear the $1,000 floor, 16
+ * clear $500, 18 clear $300, and 21 clear $100. Below $300 the extra pools are
+ * mostly dead deploys, and a pool that has traded under $300 cannot clear
+ * Heart Attack's $40K 5-minute gate anyway.
+ *
+ * The 30-minute window is deliberately shorter than the hour the metric
+ * covers, so the discount only ever applies while the reading is genuinely a
+ * partial one.
+ */
+const YOUNG_POOL_HOURS = 0.5;
+const VOLUME_FLOOR = 1_000;
+const YOUNG_VOLUME_FLOOR = 300;
+
 const admissibleCandidates = (rawPools) => rawPools
   .map((pool) => ({ raw: pool, normalized: normalizePool(pool) }))
-  .filter(({ normalized }) =>
-    normalized.marketCap >= 50_000 &&
-    normalized.marketCap <= 500_000_000 &&
-    normalized.tvl >= 300 &&
-    normalized.volume1h >= 1_000,
-  );
+  .filter(({ normalized }) => {
+    const young = Number.isFinite(normalized.ageHours) && normalized.ageHours <= YOUNG_POOL_HOURS;
+    return normalized.marketCap >= 50_000 &&
+      normalized.marketCap <= 500_000_000 &&
+      normalized.tvl >= 300 &&
+      normalized.volume1h >= (young ? YOUNG_VOLUME_FLOOR : VOLUME_FLOOR);
+  });
 
 const loadPools = async ({ force = false } = {}) => {
   const cacheAge = Date.now() - poolCacheAt;
@@ -498,13 +641,23 @@ const loadPools = async ({ force = false } = {}) => {
      *
      * The fee page is best-effort. If it fails the scan proceeds on the volume
      * page alone, which is the behaviour that existed before it was added.
-     * `created_at:desc` and `age:asc` would be the direct expression of what is
-     * wanted here, but the upstream returns HTTP 400 for both.
+     *
+     * `created_at:desc` and `age:asc` do return HTTP 400 — that much of the
+     * original note was right — but the field is named `pool_created_at`, and
+     * `pool_created_at:desc` returns 200. The upstream names the whole allowed
+     * set in its own 400 body, which is how this was finally found:
+     *
+     *   curl '…/pools?sort_by=bogus:desc'
+     *   → invalid sort field `bogus`. Allowed: […, "pool_created_at", …]
+     *
+     * So the sort this file wanted from the start exists. See NEW_PAGE_BUDGET
+     * for what it changes.
      */
-    const [byVolume, byFeeTvl, byTvl] = await Promise.all([
+    const [byVolume, byFeeTvl, byTvl, byNew] = await Promise.all([
       fetchPoolPage("volume_1h:desc"),
       fetchPoolPage("fee_tvl_ratio_1h:desc").catch(() => ({ rawPools: [], total: 0 })),
       fetchPoolPage("tvl:desc").catch(() => ({ rawPools: [], total: 0 })),
+      fetchPoolPage("pool_created_at:desc").catch(() => ({ rawPools: [], total: 0 })),
     ]);
 
     const seen = new Set();
@@ -519,19 +672,28 @@ const loadPools = async ({ force = false } = {}) => {
         taken += 1;
       }
     };
+    // The new page goes first so that freshness is never what gets crowded
+    // out. Order only decides which page's budget a duplicate is charged to —
+    // `seen` skips it either way — and this page is the only one whose
+    // candidates no other sort can supply.
+    takeFrom(byNew, NEW_PAGE_BUDGET);
     takeFrom(byVolume, VOLUME_PAGE_BUDGET);
     takeFrom(byFeeTvl, FEE_PAGE_BUDGET);
     takeFrom(byTvl, TVL_PAGE_BUDGET);
 
     const scannedAddresses = new Set(
-      [...byVolume.rawPools, ...byFeeTvl.rawPools, ...byTvl.rawPools].map((pool) => pool.address),
+      [...byVolume.rawPools, ...byFeeTvl.rawPools, ...byTvl.rawPools, ...byNew.rawPools]
+        .map((pool) => pool.address),
     );
 
     const [momentumByPool, analyticsByPool, rugCheckByMint, gmgnByMint] = await Promise.all([
       mapConcurrent(candidates, 6, async ({ raw }) => [raw.address, await fetchMomentum(raw.address)]),
       fetchPoolAnalytics(candidates.map(({ raw }) => raw.address)),
       fetchRugCheckSummaries(candidates.map(({ normalized }) => normalized.baseAddress)),
-      fetchGmgnTokens(candidates.map(({ normalized }) => normalized.baseAddress)),
+      fetchGmgnTokens(candidates.map(({ normalized }) => ({
+        mint: normalized.baseAddress,
+        fresh: Number.isFinite(normalized.ageHours) && normalized.ageHours <= GMGN_FRESH_POOL_HOURS,
+      }))),
     ]);
     const momentumMap = new Map(momentumByPool);
     const scoredAt = Date.now();
@@ -565,8 +727,8 @@ const loadPools = async ({ force = false } = {}) => {
     try {
       recordScan(scanLogDb, enriched, scoredAt);
       scansSincePrune += 1;
-      // Every ~hour at the default 30s cadence, not every scan — the delete
-      // itself is cheap but there is no reason to pay it 2,880 times a day.
+      // Every ~30 minutes at the 15s cadence, not every scan — the delete
+      // itself is cheap but there is no reason to pay it 5,760 times a day.
       if (scansSincePrune >= 120) {
         scansSincePrune = 0;
         pruneScanLog(scanLogDb, SCAN_LOG_RETENTION_DAYS);
