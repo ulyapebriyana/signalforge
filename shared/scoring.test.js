@@ -8,6 +8,7 @@ import {
   poolTier,
   PRESETS,
   resolvePresetId,
+  volatileGateLabels,
 } from "./scoring.js";
 
 const healthyPool = {
@@ -419,5 +420,54 @@ describe("SignalForge scoring", () => {
     expect(normalized.jupShieldStatus).toBe("clear");
     expect(normalized.rugCheckStatus).toBe("clear");
     expect(normalized.rugCheckRiskCount).toBe(0);
+  });
+
+  /**
+   * These exist because the server matches misses by their rendered label —
+   * that string is the only handle `evaluatePreset` gives it. If a threshold
+   * moves and the two sides render it differently, the GMGN refresh rule stops
+   * matching and goes quiet with no error anywhere, which is exactly the kind
+   * of failure that takes weeks to notice. Anchoring the labels to the misses
+   * `evaluatePreset` actually produces is what keeps the two from drifting.
+   */
+  describe("volatileGateLabels", () => {
+    it("renders labels that evaluatePreset actually emits as misses", () => {
+      const preset = PRESETS.heartattack;
+      const stalled = {
+        ...heartAttackPool,
+        marketCap: 20_000,        // fails MC ≥, so both MC bounds are exercised
+        priceChange1h: 0,         // fails 1h ≥
+        gmgnVolume5m: 100,        // fails Vol 5m ≥
+      };
+      const { misses } = evaluatePreset(stalled, preset);
+      const volatile = volatileGateLabels(preset);
+
+      for (const label of ["MC ≥ $100000", "1h ≥ 10%", "Vol 5m ≥ $40000"]) {
+        expect(misses).toContain(label);
+        expect(volatile.has(label)).toBe(true);
+      }
+    });
+
+    it("excludes the structural gates, which is what makes the rule selective", () => {
+      const preset = PRESETS.heartattack;
+      const dirty = { ...heartAttackPool, freezeAuthorityDisabled: false, top10HoldersPct: 90 };
+      const { misses } = evaluatePreset(dirty, preset);
+      const volatile = volatileGateLabels(preset);
+
+      expect(misses).toContain("Freeze authority off");
+      expect(misses).toContain("Top-10 holder ≤ 35%");
+      for (const miss of misses) expect(volatile.has(miss)).toBe(false);
+    });
+
+    it("only names gates the preset declares", () => {
+      // Slow Wallet has no five-minute volume gate, so no label for one.
+      const volatile = volatileGateLabels(PRESETS.slowwallet);
+      expect([...volatile].some((label) => label.startsWith("Vol 5m"))).toBe(false);
+      expect(volatile.has("1h ≥ " + PRESETS.slowwallet.momentumMin + "%")).toBe(true);
+    });
+
+    it("accepts a preset id as well as a preset object", () => {
+      expect(volatileGateLabels("heartattack")).toEqual(volatileGateLabels(PRESETS.heartattack));
+    });
   });
 });

@@ -8,7 +8,7 @@ import { appendSample, pruneStore, summarizeVelocity } from "../shared/feeVeloci
 import { openScanLog, pruneScanLog, recordScan } from "../shared/scanLog.js";
 import { gmgnAuthQuery, normalizeGmgnToken } from "../shared/gmgn.js";
 import { classifyPhase, PHASE_META } from "../shared/marketRead.js";
-import { normalizePool, poolTier, PRESETS, resolvePresetId } from "../shared/scoring.js";
+import { normalizePool, poolTier, PRESETS, resolvePresetId, volatileGateLabels } from "../shared/scoring.js";
 import { alertPresetsFor, cooldownKey, presetsCleared } from "../shared/alertRouting.js";
 import { collectSignalEntries } from "../shared/signalTransitions.js";
 import { collectPositionAlerts, RANGE_LABEL } from "../shared/lpPositions.js";
@@ -34,8 +34,9 @@ const port = Number(process.env.PORT || 4173);
  * 35.2s, so a scan finishes with most of its window unused. Page fetches are
  * 0.22-0.58s each and run in parallel, one OHLCV call is 0.11s, and the two
  * genuinely rate-limited upstreams are cache-bound rather than scan-bound —
- * RugCheck holds a mint for 15 minutes and GMGN for 10 (60s for young pools),
- * so scanning twice as often does not fetch either twice as often.
+ * RugCheck holds a mint for 15 minutes and GMGN for 10 — 60s for the handful
+ * of pools `needsFreshVolume5m` marks — so scanning twice as often does not
+ * fetch either twice as often.
  *
  * `activeFetch` is what makes this safe: a tick that lands while a scan is
  * still running awaits it instead of starting a second, so a slow upstream
@@ -359,14 +360,12 @@ let gmgnQueue = Promise.resolve();
  * in the whole preset, missing on 77.4% of readings — so the number the preset
  * leans on hardest is the one being served stalest.
  *
- * Scoped to young pools rather than applied globally because that is where the
- * reading actually moves. The 53 pools that hold a candidate slot in ≥90% of
- * ticks are all far older than this window, and refreshing them every minute
- * would spend the GMGN lane re-reading numbers that do not change.
+ * Who gets it is decided by `needsFreshVolume5m`, not by age. Age was the first
+ * rule here and it was the wrong question: an old token can start running just
+ * as violently as a new one, and Heart Attack has no age gate to stop it.
  */
 const GMGN_FRESH_MAX_AGE_MS = 60_000;
 const GMGN_FRESH_FAILURE_TTL_MS = 30_000;
-const GMGN_FRESH_POOL_HOURS = 6;
 
 const fetchGmgnToken = async (mint, { maxAgeMs = Infinity } = {}) => {
   if (!gmgnConfigured()) return null;
@@ -417,9 +416,9 @@ const fetchGmgnToken = async (mint, { maxAgeMs = Infinity } = {}) => {
 
 /**
  * Takes `{ mint, fresh }` rather than bare mints so the caller — which is the
- * only place that knows how old each pool is — decides which rows are worth
- * re-reading on the short clock. A mint reached by both a young and an old
- * pool is fetched once, on the fresher of the two clocks.
+ * only place that can judge it — decides which rows are worth re-reading on the
+ * short clock. A mint reached by two pools is fetched once, on the fresher of
+ * the two clocks.
  */
 const fetchGmgnTokens = async (requests) => {
   const wanted = new Map();
@@ -430,6 +429,61 @@ const fetchGmgnTokens = async (requests) => {
   const entries = await mapConcurrent([...wanted], 4, async ([mint, fresh]) =>
     [mint, await fetchGmgnToken(mint, fresh ? { maxAgeMs: GMGN_FRESH_MAX_AGE_MS } : {})]);
   return new Map(entries);
+};
+
+/** Presets whose verdict depends on the five-minute volume at all. */
+const volume5mPresets = Object.values(PRESETS).filter((preset) => Number.isFinite(preset.volume5mMin));
+const volatileLabelsByPreset = new Map(
+  volume5mPresets.map((preset) => [preset.id, volatileGateLabels(preset)]),
+);
+
+/**
+ * Is the five-minute volume the thing standing between this pool and an alert?
+ *
+ * Spend a 60-second refresh exactly when the answer decides something, and not
+ * otherwise. Three ways it can be yes:
+ *
+ *   1. No reading from the scan before — a pool new to the candidate set, or
+ *      the first scan after a restart. Nothing to judge on, so do not assume
+ *      the number is irrelevant.
+ *   2. The preset passed last scan. We are alerting on this pool; the figure
+ *      the alert quotes should not be ten minutes old.
+ *   3. Every gate it missed last scan is a volatile one, *and* momentum has
+ *      since come good. That is a pool where the slow, structural checks —
+ *      holders, freeze authority, dev balance, sniper and bundler share — are
+ *      already satisfied and only the fast-moving numbers are in question.
+ *
+ * The third clause is why this replaced the age rule it grew out of. Age asked
+ * the wrong question: Heart Attack has no age gate, so a token that has traded
+ * for a week can start running exactly as violently as one minted an hour ago,
+ * and the first rule would have refreshed the newborn while leaving the runner
+ * on a ten-minute-old number.
+ *
+ * Momentum is read from **this** scan, not the last one, which is the whole
+ * reason `loadPools` fetches OHLCV before it builds this list. That ordering
+ * costs about two seconds and buys the case the rule exists for: an old pool
+ * whose price turns is caught on the scan it turns, not the one after. Taking
+ * momentum from the previous scan instead was measured against 6 hours of
+ * `scan-log.db` and cost 32 refreshes per tick against this rule's 4.05 —
+ * eight times the GMGN traffic to arrive one scan later.
+ *
+ * Momentum is safe to trust mid-scan because OHLCV is the one input here that
+ * is never cached; every scan reads it fresh.
+ */
+const needsFreshVolume5m = (previous, priceChange1h) => {
+  if (!previous) return true;
+  return volume5mPresets.some((preset) => {
+    const verdict = previous.qualifies?.[preset.id];
+    if (!verdict) return true;
+    if (verdict.passed) return true;
+    const volatile = volatileLabelsByPreset.get(preset.id);
+    if (!verdict.misses.every((miss) => volatile.has(miss))) return false;
+    // A preset that does not gate on momentum has nothing left to wait for.
+    if (!Number.isFinite(preset.momentumMin) && !Number.isFinite(preset.momentumMax)) return true;
+    return Number.isFinite(priceChange1h)
+      && (!Number.isFinite(preset.momentumMin) || priceChange1h >= preset.momentumMin)
+      && (!Number.isFinite(preset.momentumMax) || priceChange1h <= preset.momentumMax);
+  });
 };
 
 const fetchRugCheckSummaries = async (mints) => {
@@ -686,16 +740,33 @@ const loadPools = async ({ force = false } = {}) => {
         .map((pool) => pool.address),
     );
 
-    const [momentumByPool, analyticsByPool, rugCheckByMint, gmgnByMint] = await Promise.all([
-      mapConcurrent(candidates, 6, async ({ raw }) => [raw.address, await fetchMomentum(raw.address)]),
+    /**
+     * Momentum runs first and alone, because the GMGN request list below is
+     * built from it — see `needsFreshVolume5m`. It is the cheapest of the four
+     * enrichment calls (one uncached OHLCV read per pool, 0.11s each at
+     * concurrency 6) and the only one whose result another call depends on, so
+     * it is the right one to pull out of the parallel group.
+     */
+    const momentumMap = new Map(
+      await mapConcurrent(candidates, 6, async ({ raw }) => [raw.address, await fetchMomentum(raw.address)]),
+    );
+
+    // `poolCache` still holds the previous scan here — it is not reassigned
+    // until the end of this function — so the last verdict for every pool is
+    // already in memory and needs no store of its own.
+    const previousByAddress = new Map((poolCache?.data ?? []).map((pool) => [pool.address, pool]));
+
+    const [analyticsByPool, rugCheckByMint, gmgnByMint] = await Promise.all([
       fetchPoolAnalytics(candidates.map(({ raw }) => raw.address)),
       fetchRugCheckSummaries(candidates.map(({ normalized }) => normalized.baseAddress)),
-      fetchGmgnTokens(candidates.map(({ normalized }) => ({
+      fetchGmgnTokens(candidates.map(({ raw, normalized }) => ({
         mint: normalized.baseAddress,
-        fresh: Number.isFinite(normalized.ageHours) && normalized.ageHours <= GMGN_FRESH_POOL_HOURS,
+        fresh: needsFreshVolume5m(
+          previousByAddress.get(raw.address),
+          momentumMap.get(raw.address)?.priceChange1h,
+        ),
       }))),
     ]);
-    const momentumMap = new Map(momentumByPool);
     const scoredAt = Date.now();
     const enriched = trackFeeVelocity(
       markBestPoolPerToken(candidates.map(({ raw, normalized }) => normalizePool(

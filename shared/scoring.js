@@ -425,15 +425,51 @@ export function calculateRisk(pool) {
   return { value: clamp(Math.round(risk), 0, 100), flags };
 }
 
+/**
+ * The labels for the three gates that can flip between two consecutive scans,
+ * built here rather than written out at each call site.
+ *
+ * A miss is identified by its rendered label — that is the only thing
+ * `evaluatePreset` returns — so anything matching on one has to build the
+ * string exactly as the check below does. Written twice, the two copies drift
+ * silently the first time a threshold moves: change `volume5mMin` to 30_000
+ * and a hand-written `"Vol 5m ≥ $40000"` simply stops matching, with no error
+ * anywhere. The server's GMGN refresh rule depends on that match, so it reads
+ * these instead of spelling the labels out.
+ *
+ * "Volatile" means the reading behind the gate can change inside one scan
+ * interval: price moves, so momentum and the market-cap bounds move with it,
+ * and five-minute volume is a rolling window. Everything else a preset gates
+ * on — holder distribution, freeze authority, dev balance, sniper and bundler
+ * share — is a property of the token that does not turn over in 15 seconds.
+ */
+export const gateLabels = Object.freeze({
+  marketCapMin: (preset) => `MC ≥ $${preset.marketCapMin}`,
+  marketCapMax: (preset) => `MC ≤ $${preset.marketCapMax}`,
+  momentumMin: (preset) => `1h ≥ ${preset.momentumMin}%`,
+  momentumMax: (preset) => `1h ≤ ${preset.momentumMax}%`,
+  volume5mMin: (preset) => `Vol 5m ≥ $${preset.volume5mMin}`,
+});
+
+/** The subset of `gateLabels` a preset actually declares, as a Set of labels. */
+export function volatileGateLabels(presetInput) {
+  const preset = typeof presetInput === "string" ? PRESETS[resolvePresetId(presetInput)] : presetInput;
+  const labels = new Set();
+  for (const [key, render] of Object.entries(gateLabels)) {
+    if (Number.isFinite(preset[key])) labels.add(render(preset));
+  }
+  return labels;
+}
+
 export function evaluatePreset(pool, presetInput) {
   const preset = typeof presetInput === "string" ? PRESETS[presetInput] : presetInput;
   if (!preset) throw new Error("Preset tidak dikenal");
 
   const checks = [
-    [pool.marketCap >= preset.marketCapMin, `MC ≥ $${preset.marketCapMin}`],
-    [pool.marketCap <= preset.marketCapMax, `MC ≤ $${preset.marketCapMax}`],
-    [pool.priceChange1h !== null && pool.priceChange1h >= preset.momentumMin, `1h ≥ ${preset.momentumMin}%`],
-    [pool.priceChange1h !== null && pool.priceChange1h <= preset.momentumMax, `1h ≤ ${preset.momentumMax}%`],
+    [pool.marketCap >= preset.marketCapMin, gateLabels.marketCapMin(preset)],
+    [pool.marketCap <= preset.marketCapMax, gateLabels.marketCapMax(preset)],
+    [pool.priceChange1h !== null && pool.priceChange1h >= preset.momentumMin, gateLabels.momentumMin(preset)],
+    [pool.priceChange1h !== null && pool.priceChange1h <= preset.momentumMax, gateLabels.momentumMax(preset)],
     [!pool.isBlacklisted, "Tidak di-blacklist"],
     [!preset.requireFreezeOff || pool.freezeAuthorityDisabled, "Freeze authority off"],
   ];
@@ -490,7 +526,7 @@ export function evaluatePreset(pool, presetInput) {
   if (Number.isFinite(preset.volume5mMin)) {
     checks.push([
       Number.isFinite(pool.gmgnVolume5m) && pool.gmgnVolume5m >= preset.volume5mMin,
-      `Vol 5m ≥ $${preset.volume5mMin}`,
+      gateLabels.volume5mMin(preset),
     ]);
   }
   // Sniper, insider, and bundler share. These come from GMGN and are null
