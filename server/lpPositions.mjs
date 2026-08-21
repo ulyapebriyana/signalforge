@@ -47,7 +47,7 @@ const BASE58 = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
  * new information — positions change when the user acts or the price moves a
  * bin, neither of which is faster than the scanner's own cadence.
  */
-const POSITION_CACHE_MS = 30_000;
+const POSITION_CACHE_MS = 10_000;
 
 /**
  * How often an open dashboard should ask, exported so the client polls at the
