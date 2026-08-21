@@ -1630,6 +1630,24 @@
   color: var(--f-scorch);
 }
 
+/*
+ * The cluster-terbesar tile is a link out to Bubblemaps, unlike its plain-text
+ * siblings in the same row. Without this, the icon's own `svg { display:
+ * block }` breaks it onto its own line inside the anchor's inline flow — the
+ * chip components avoid that by being flex containers already, this one was
+ * not.
+ */
+.fx-conc-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.fx-conc-link svg {
+  width: 12px;
+  height: 12px;
+}
+
 /* Swanny rubric: twelve metrics painted, not just the failures. */
 .fx-rubric {
   display: grid;

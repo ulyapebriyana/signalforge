@@ -154,8 +154,13 @@ const formatMoney = (value) => {
   return `$${value.toFixed(5)}`;
 };
 
-/** How long a hold each preset is written around, for the projection's second figure. */
-const HOLD_MINUTES = { heartattack: 10, slowwallet: 660 };
+/**
+ * How long a hold each preset is written around, for the projection's second
+ * figure. Medium Wallet has no stated hold duration — EvilPanda's exit is a
+ * chart-pattern confluence, not a timer — so this sits between the other two
+ * rather than being sourced.
+ */
+const HOLD_MINUTES = { heartattack: 10, mediumwallet: 120, slowwallet: 660 };
 
 /**
  * The market read, as the panel the drawer opens on.
@@ -526,19 +531,33 @@ export default function PoolDrawer({
                   Cluster terbesar
                 </span>
                 {Number.isFinite(pool.clusterLargestPct) ? (
-                  <span
-                    className={`fx-conc fx-conc--${clusterTone(pool.clusterLargestPct)} f-num`}
+                  <a
+                    className={`fx-conc fx-conc-link fx-conc--${clusterTone(pool.clusterLargestPct)} f-num`}
+                    href={`https://app.bubblemaps.io/sol/token/${pool.baseAddress}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={(event) => event.stopPropagation()}
                     title={
                       pool.clusterCount
-                        ? `${pool.clusterCount} cluster terdeteksi · terbesar ${pool.clusterLargestWallets} wallet · total ${pool.clusteredSupplyPct?.toFixed(1)}% supply`
-                        : "Tidak ada cluster wallet terhubung yang terdeteksi"
+                        ? `${pool.clusterCount} cluster terdeteksi · terbesar ${pool.clusterLargestWallets} wallet · total ${pool.clusteredSupplyPct?.toFixed(1)}% supply · buka di Bubblemaps`
+                        : "Tidak ada cluster wallet terhubung yang terdeteksi · buka di Bubblemaps"
                     }
                   >
                     {pool.clusterLargestPct.toFixed(1)}%
                     {pool.clusterLargestWallets ? <em> · {pool.clusterLargestWallets}w</em> : null}
-                  </span>
+                    <ExternalLink />
+                  </a>
                 ) : (
-                  <span className="fx-na" title="Graf cluster tidak terbaca">—</span>
+                  <a
+                    className="fx-na"
+                    href={`https://app.bubblemaps.io/sol/token/${pool.baseAddress}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={(event) => event.stopPropagation()}
+                    title="Graf cluster tidak terbaca di sini · buka di Bubblemaps"
+                  >
+                    — <ExternalLink />
+                  </a>
                 )}
               </div>
             </div>
