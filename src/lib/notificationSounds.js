@@ -35,6 +35,10 @@ export const PRESET_DEFAULT_SOUND = Object.freeze({
   // left unclaimed when the two presets it was meant for got real clips. The
   // preset it was named after finally exists.
   heartattack: "runner",
+  // "fresh" ("Migrasi Baru") — Medium Wallet screens freshly-migrated
+  // memecoins that are neither a mid-spike runner nor a week-old proven pair,
+  // so the one clip literally named for a new migration fit unclaimed.
+  mediumwallet: "fresh",
 });
 
 const isPlayable = (choice) => choice === NOTIFICATION_SOUND_OFF || Boolean(NOTIFICATION_SOUNDS[choice]);

@@ -81,6 +81,7 @@ describe("per-preset notification sound", () => {
     expect(resolveNotificationSoundMap(null, null, null, null)).toEqual({
       slowwallet: "burem",
       heartattack: "runner",
+      mediumwallet: "fresh",
     });
   });
 
@@ -89,6 +90,8 @@ describe("per-preset notification sound", () => {
     expect(resolveNotificationSoundMap(saved, null, null, null)).toEqual({
       slowwallet: "profit",
       heartattack: NOTIFICATION_SOUND_OFF,
+      // Not in the saved map, so it takes its own default rather than none.
+      mediumwallet: "fresh",
     });
   });
 
@@ -98,6 +101,7 @@ describe("per-preset notification sound", () => {
     expect(resolveNotificationSoundMap(null, "profit", "true", null)).toEqual({
       slowwallet: "profit",
       heartattack: "runner",
+      mediumwallet: "fresh",
     });
   });
 
@@ -105,6 +109,7 @@ describe("per-preset notification sound", () => {
     expect(resolveNotificationSoundMap(null, null, "false", null)).toEqual({
       slowwallet: NOTIFICATION_SOUND_OFF,
       heartattack: NOTIFICATION_SOUND_OFF,
+      mediumwallet: NOTIFICATION_SOUND_OFF,
     });
   });
 
@@ -113,6 +118,7 @@ describe("per-preset notification sound", () => {
     expect(resolveNotificationSoundMap(saved, null, null, null)).toEqual({
       slowwallet: "jokowi",
       heartattack: "fight",
+      mediumwallet: "fresh",
     });
   });
 
@@ -120,10 +126,12 @@ describe("per-preset notification sound", () => {
     expect(resolveNotificationSoundMap("{not json", null, null, null)).toEqual({
       slowwallet: "burem",
       heartattack: "runner",
+      mediumwallet: "fresh",
     });
     expect(resolveNotificationSoundMap(JSON.stringify({ slowwallet: "bogus" }), null, null, null)).toEqual({
       slowwallet: "burem",
       heartattack: "runner",
+      mediumwallet: "fresh",
     });
   });
 
@@ -131,5 +139,6 @@ describe("per-preset notification sound", () => {
     expect(soundForPreset({ slowwallet: "profit" }, "slowwallet")).toBe("profit");
     expect(soundForPreset({}, "slowwallet")).toBe("burem");
     expect(soundForPreset(null, "heartattack")).toBe("runner");
+    expect(soundForPreset(null, "mediumwallet")).toBe("fresh");
   });
 });

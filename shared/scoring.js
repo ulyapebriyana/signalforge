@@ -131,6 +131,139 @@ export const PRESETS = Object.freeze({
     // wait five for its second alert.
     cooldownMinutes: 3,
   },
+  // Modelled on @EvilPanda ("Logical TA"), the LP Army DLMM screener whose whole
+  // public output is a numbered checklist rather than a vibe. Sits between
+  // Heart Attack and Slow Wallet on purpose: fresh memecoins, screened hard
+  // before entry, held on 15-minute charts rather than either a 5-minute spike
+  // or a week-old proven pair. His own words on the gap this preset fills —
+  // "Do I still get rugged with this screener? Yes I still get rugged
+  // sometimes... but it also screens out the rugs that would make me lose all
+  // those gains in the first place."
+  //
+  // Every gate below traces to one of four sources, cited inline:
+  //   - SCREEN (28 Jul 2025, "How to screen memecoins for DLMM the LogicalTA
+  //     way", 13-tweet thread) — the original rugcheck+GMGN checklist and its
+  //     12 numbered data points.
+  //   - SUMMARY (26 Dec 2025, "Summary of Evil Panda Strat from Advanced
+  //     Bootcamp #7") — his own consolidated 4-part cheat sheet: coin
+  //     selection, entry, exit, emotions/risk. The single most authoritative
+  //     source here because it is *his* summary of the whole play, not a
+  //     one-off thread.
+  //   - AVOID (6 Feb 2026, "Coins to Avoid doing SOL Sided DLMM", X Article) —
+  //     his most recent update, tightened from SCREEN on a few numbers.
+  //   - EXIT (5 Sep 2025, "Simple DLMM Exit Strategies") — the indicator
+  //     confluence (Supertrend + RSI(2) + MACD + Bollinger) this app has no
+  //     chart engine to evaluate. Not a gate anywhere below; noted so a later
+  //     reader does not go looking for it.
+  //
+  // What this preset cannot express: entry/exit here is a chart pattern
+  // (price crossing Supertrend, then RSI(2)/MACD/BB confluence on the way
+  // out), not a snapshot number. `momentumMin`/`momentumMax` are unconditional
+  // in `evaluatePreset` — every preset must set both — so they are set wide
+  // enough to be non-binding rather than faked into a meaningful band: -90
+  // excludes only a chart already in freefall (arguably broken by his own
+  // rugcheck-adjacent judgement, not something to enter), 1000 excludes
+  // nothing his 15-minute-chart, non-runner-chasing approach would touch.
+  // Pool bin-width (his Fib-retracement-to-bins
+  // sizing, e.g. 80/100/125 bins at -86% to -94% one-sided) is a position
+  // setting, same reasoning as the range note on Heart Attack above — nothing
+  // here can gate it. Position-level discipline from SUMMARY Part 4 (spread
+  // capital across 6+ positions, no new entries after 6pm, sit out a day after
+  // a loss) is portfolio-level, not pool-level, and belongs nowhere in a
+  // preset at all.
+  //
+  // Two numbers are NOT from a source and are named here so they read as
+  // deliberate rather than transcribed:
+  //   - `marketCapMax` (2,000,000): SCREEN/SUMMARY give a floor (250k) but no
+  //     ceiling. Set at Slow Wallet's own floor so the two presets describe
+  //     adjacent bands instead of overlapping — a coin that grows past this is
+  //     Slow Wallet's to evaluate, not this preset's.
+  //   - `totalFeesMin` unit: SUMMARY says "GMGN -> fees over 30" with no unit
+  //     stated. Read as SOL because the field it gates
+  //     (`gmgnTotalFeesSol`/`data.total_fee`) is GMGN's own total-fee figure
+  //     and carries no separate USD reading anywhere in this codebase — worth
+  //     confirming against a live GMGN token page before trusting this gate.
+  //
+  // `insidersPctMax` moved across his own posts and is left at the middle
+  // value rather than the newest one: SCREEN said "more than 5% is a red
+  // flag", SUMMARY said "Insiders < 10%", AVOID (newest) says "Above 0% is a
+  // red flag". 0% would fail almost every real pool outright, so SUMMARY's
+  // 10 — his own cheat-sheet number, not a one-off aside — is what is gated on
+  // here; AVOID's tightening is recorded rather than silently adopted.
+  //
+  // NEEDS `GMGN_API_KEY`, same as Heart Attack: totalFeesMin, phishingPctMax,
+  // freshWalletPctMax, bundlerPctMax, and insidersPctMax are all GMGN-sourced
+  // and fail closed without a key, so this preset goes quiet rather than
+  // waving pools through.
+  mediumwallet: {
+    id: "mediumwallet",
+    label: "Medium Wallet",
+    // SUMMARY Part 1: "Dexscreener Filter -> 250k MC & 1,000,000 24h Volume".
+    marketCapMin: 250_000,
+    // Not sourced — see the note above.
+    marketCapMax: 2_000_000,
+    // Mandatory field, not really a gate — see the note above.
+    momentumMin: -90,
+    momentumMax: 1_000,
+    volume24hMin: 1_000_000,
+    // SUMMARY Part 1: "GMGN -> fees over 30". See the unit note above.
+    totalFeesMin: 30,
+    // SUMMARY: "phising < 30%". AVOID: "Phishing - Above 30% is a red flag".
+    // The one number that never moved across sources.
+    phishingPctMax: 30,
+    // SUMMARY: "Bundling < 60%". AVOID: "above 60% is a red flag" — also
+    // unmoved.
+    bundlerPctMax: 60,
+    // SUMMARY: "Insiders < 10%". See the note above on why this is 10 and not
+    // AVOID's newer, stricter "> 0%".
+    insidersPctMax: 10,
+    // SUMMARY: "Top10 < 30%". AVOID: "above 30% is a red flag" — unmoved.
+    top10HoldersMax: 30,
+    // AVOID: "Above 5% is a red flag, but generally if Dev has even 1% supply
+    // is a red flag cos they can dump anytime." The hard line is 5; his own
+    // text admits 1-5% is already worse than ideal, which a single ceiling
+    // cannot express, so it is recorded here instead.
+    devBalanceMax: 5,
+    // SCREEN, data point 1-2: "For a new coin, usually we will see 500-3000
+    // holders, any number below or above warrants a red flag." A floor and a
+    // ceiling together, not just a floor — too many holders on a coin this
+    // young reads as already-played-out.
+    holdersMin: 500,
+    holdersMax: 3_000,
+    // SCREEN, data point 10: "Number of Fresh wallets(8) divide by
+    // holders(2) - Above 40% is a red flag." Gated as the ratio his own point
+    // 10 computes, not the raw count from point 8 — this codebase has no raw
+    // fresh-wallet-count field to gate on.
+    freshWalletPctMax: 40,
+    // Inferred baseline hygiene rather than a numbered rule of his — every
+    // rugcheck screenshot across his threads shows these already closed on
+    // the coins he treats as clean, the same standing assumption Slow Wallet
+    // makes for "proven".
+    requireFreezeOff: true,
+    requireMintOff: true,
+    // SUMMARY Part 4: "I prefer to only use the 15mins as it gives me time to
+    // do other stuffs and no need to keep watching the charts." His own
+    // chart timeframe, taken directly as the alert cadence.
+    cooldownMinutes: 15,
+    // Not from a source — EvilPanda does not use a 0-100 risk model. Set at
+    // the midpoint between Heart Attack (95) and Slow Wallet (45): this tier
+    // screens harder than a runner but still trades coins young enough that
+    // Slow Wallet's ceiling would be dishonest.
+    maxRisk: 65,
+    // Calibrated against data/scan-log.db rather than a live retune like Slow
+    // Wallet's: sliced to marketCap $250k-$2M and holders 500-3000 (this
+    // preset's own MC/holders band), 2,307 scan-rows across 29 distinct pools
+    // over the local log's full window. Score quartiles there were
+    // 17-21 / 21-26 / 26-44 / 44-96, median ~26. This is a starting point, not
+    // a full retune — scan_log.js does not persist gmgn_phishing/fresh_wallet/
+    // total_fee/insiders/bundler/top10/dev_balance, so the GMGN-sourced gates
+    // above could not be backtested the way Slow Wallet's were. Revisit once
+    // this preset has run long enough to log its own hits.
+    minScore: 30,
+    hotScore: 55,
+    watchScore: 38,
+    earlyScore: 24,
+  },
   // Modelled on @0xVanChu's *other* wallet — the one he says takes "noticeably
   // less time and nerves" than the Action Wallet: "Bid-Ask on more proven
   // tokens, without the constant race for new shitcoins and without the need to
@@ -484,6 +617,12 @@ export function evaluatePreset(pool, presetInput) {
   if (Number.isFinite(preset.volume1hMin)) {
     checks.push([pool.volume1h >= preset.volume1hMin, `Vol 1h ≥ $${preset.volume1hMin}`]);
   }
+  // Dexscreener-style 24h floor — coarser than volume1hMin, and the window
+  // EvilPanda's own coin-selection filter actually names. See
+  // PRESETS.mediumwallet.
+  if (Number.isFinite(preset.volume24hMin)) {
+    checks.push([pool.volume24h >= preset.volume24hMin, `Vol 24h ≥ $${preset.volume24hMin}`]);
+  }
   if (Number.isFinite(preset.volumeTvlMin)) {
     checks.push([pool.volumeTvl1h >= preset.volumeTvlMin, `Vol/TVL ≥ ${preset.volumeTvlMin}x`]);
   }
@@ -550,6 +689,35 @@ export function evaluatePreset(pool, presetInput) {
       `Bundler ≤ ${preset.bundlerPctMax}%`,
     ]);
   }
+  // GMGN's entrapment/phishing-wallet share. Same source call as sniper,
+  // insider, and bundler above, so it fails closed the same way — it was
+  // already being fetched and normalized (see gmgnPhishingPct in gmgn.js)
+  // but no preset gated on it until PRESETS.mediumwallet.
+  if (Number.isFinite(preset.phishingPctMax)) {
+    checks.push([
+      Number.isFinite(pool.gmgnPhishingPct) && pool.gmgnPhishingPct <= preset.phishingPctMax,
+      `Phishing ≤ ${preset.phishingPctMax}%`,
+    ]);
+  }
+  // GMGN's fresh-wallet share — how much of the holder set is brand-new
+  // wallets, one more rat-trader-style pattern. Also already fetched and
+  // unused before PRESETS.mediumwallet.
+  if (Number.isFinite(preset.freshWalletPctMax)) {
+    checks.push([
+      Number.isFinite(pool.gmgnFreshWalletPct) && pool.gmgnFreshWalletPct <= preset.freshWalletPctMax,
+      `Fresh wallet ≤ ${preset.freshWalletPctMax}%`,
+    ]);
+  }
+  // GMGN's total fee figure, in SOL. A tokenomics-quality read distinct from
+  // feeTvl1h: it is cumulative and venue-wide rather than this pool's last
+  // hour, so it tells apart a coin with a real trading history from one
+  // whose chart is wash volume or already dead.
+  if (Number.isFinite(preset.totalFeesMin)) {
+    checks.push([
+      Number.isFinite(pool.gmgnTotalFeesSol) && pool.gmgnTotalFeesSol >= preset.totalFeesMin,
+      `Total fee GMGN ≥ ${preset.totalFeesMin} SOL`,
+    ]);
+  }
   if (Number.isFinite(preset.devBalanceMax)) {
     checks.push([
       Number.isFinite(pool.devBalancePct) && pool.devBalancePct <= preset.devBalanceMax,
@@ -585,6 +753,12 @@ export function evaluatePreset(pool, presetInput) {
   }
   if (Number.isFinite(preset.holdersMin)) {
     checks.push([pool.holders >= preset.holdersMin, `Holder ≥ ${preset.holdersMin}`]);
+  }
+  // The ceiling EvilPanda pairs with the floor above: on a coin this young,
+  // too many holders reads as already-played-out rather than healthy. Paired
+  // gate, only meaningful together — see PRESETS.mediumwallet.
+  if (Number.isFinite(preset.holdersMax)) {
+    checks.push([pool.holders <= preset.holdersMax, `Holder ≤ ${preset.holdersMax}`]);
   }
   if (preset.requireMintOff) {
     checks.push([pool.mintAuthorityDisabled === true, "Mint authority off"]);

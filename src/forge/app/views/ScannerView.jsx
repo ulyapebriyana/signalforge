@@ -294,6 +294,24 @@ const PRESET_COLUMNS = {
     "organicScore",
     "ageHours",
   ],
+  // EvilPanda's own checklist is a screen, not a rate: no minute-scale burst
+  // chase like Heart Attack, no deep-history proof like Slow Wallet. The
+  // 24h volume gate this preset introduced leads, then the same rugcheck +
+  // holder-concentration rows his threads screen on by hand.
+  mediumwallet: [
+    "trend",
+    "priceChange1h",
+    "volume24h",
+    "volume1h",
+    "tvl",
+    "feeTvl1h",
+    "risk",
+    "top10HoldersPct",
+    "devBalancePct",
+    "jupShieldRank",
+    "rugCheckScore",
+    "ageHours",
+  ],
 };
 
 /**

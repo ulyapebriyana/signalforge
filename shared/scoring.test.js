@@ -70,6 +70,26 @@ const slowWalletPool = {
   ageHours: 400,
 };
 
+// A memecoin that clears every EvilPanda-sourced gate: screened, not
+// proven — young enough that Slow Wallet would reject it on age and MC
+// alone, calm enough that it never needed Heart Attack's 5-minute trigger.
+const mediumWalletPool = {
+  marketCap: 700_000,
+  priceChange1h: 8,
+  volume24h: 1_500_000,
+  holders: 1_400,
+  top10HoldersPct: 19,
+  devBalancePct: 1.5,
+  gmgnTotalFeesSol: 45,
+  gmgnPhishingPct: 8,
+  gmgnBundlerPct: 22,
+  gmgnInsidersPct: 4,
+  gmgnFreshWalletPct: 18,
+  freezeAuthorityDisabled: true,
+  mintAuthorityDisabled: true,
+  isBlacklisted: false,
+};
+
 describe("SignalForge scoring", () => {
   it("scores a healthy momentum pool above the watch threshold", () => {
     expect(calculateScore(healthyPool).total).toBeGreaterThanOrEqual(65);
@@ -257,6 +277,93 @@ describe("SignalForge scoring", () => {
     expect(PRESETS.slowwallet.sniperPctMax).toBeUndefined();
     expect(PRESETS.heartattack.ageHoursMin).toBeUndefined();
     expect(PRESETS.heartattack.requireVerified).toBeUndefined();
+  });
+
+  it("passes a screened-but-young memecoin through the Medium Wallet gate", () => {
+    expect(evaluatePreset(mediumWalletPool, PRESETS.mediumwallet).passed).toBe(true);
+  });
+
+  it("sits between Heart Attack and Slow Wallet, not overlapping either", () => {
+    // A mid-spike runner has no screening history and a proven pool is priced
+    // and aged well past this preset's ceiling — neither should qualify.
+    expect(evaluatePreset(heartAttackPool, PRESETS.mediumwallet).passed).toBe(false);
+    expect(evaluatePreset(slowWalletPool, PRESETS.mediumwallet).passed).toBe(false);
+    // And the reverse: a coin built for this preset is too small and too
+    // freshly screened (no 5m spike, no week of age) for the other two.
+    expect(evaluatePreset(mediumWalletPool, PRESETS.heartattack).passed).toBe(false);
+    expect(evaluatePreset(mediumWalletPool, PRESETS.slowwallet).passed).toBe(false);
+  });
+
+  it("turns on the four new GMGN gates SUMMARY and AVOID both name", () => {
+    expect(evaluatePreset({ ...mediumWalletPool, gmgnPhishingPct: 30.1 }, PRESETS.mediumwallet).misses)
+      .toContain("Phishing ≤ 30%");
+    expect(evaluatePreset({ ...mediumWalletPool, gmgnPhishingPct: 30 }, PRESETS.mediumwallet).passed).toBe(true);
+    expect(evaluatePreset({ ...mediumWalletPool, gmgnBundlerPct: 60.1 }, PRESETS.mediumwallet).misses)
+      .toContain("Bundler ≤ 60%");
+    expect(evaluatePreset({ ...mediumWalletPool, gmgnInsidersPct: 10.1 }, PRESETS.mediumwallet).misses)
+      .toContain("Insider ≤ 10%");
+    expect(evaluatePreset({ ...mediumWalletPool, gmgnTotalFeesSol: 29.9 }, PRESETS.mediumwallet).misses)
+      .toContain("Total fee GMGN ≥ 30 SOL");
+    expect(evaluatePreset({ ...mediumWalletPool, gmgnTotalFeesSol: 30 }, PRESETS.mediumwallet).passed).toBe(true);
+  });
+
+  it("gates fresh-wallet share, unused by any preset before this one", () => {
+    expect(evaluatePreset({ ...mediumWalletPool, gmgnFreshWalletPct: 40 }, PRESETS.mediumwallet).passed).toBe(true);
+    expect(evaluatePreset({ ...mediumWalletPool, gmgnFreshWalletPct: 40.1 }, PRESETS.mediumwallet).misses)
+      .toContain("Fresh wallet ≤ 40%");
+  });
+
+  it("requires 24h volume, coarser than the volume1hMin every other preset uses", () => {
+    expect(evaluatePreset({ ...mediumWalletPool, volume24h: 999_999 }, PRESETS.mediumwallet).misses)
+      .toContain("Vol 24h ≥ $1000000");
+    expect(evaluatePreset({ ...mediumWalletPool, volume24h: 1_000_000 }, PRESETS.mediumwallet).passed).toBe(true);
+  });
+
+  it("holds the 500-3000 holder band as a floor and a ceiling together", () => {
+    // SCREEN: "any number below or above warrants a red flag" — a coin this
+    // young with 5,000 holders is read the same as one with 100.
+    expect(evaluatePreset({ ...mediumWalletPool, holders: 499 }, PRESETS.mediumwallet).misses)
+      .toContain("Holder ≥ 500");
+    expect(evaluatePreset({ ...mediumWalletPool, holders: 3_001 }, PRESETS.mediumwallet).misses)
+      .toContain("Holder ≤ 3000");
+    expect(evaluatePreset({ ...mediumWalletPool, holders: 500 }, PRESETS.mediumwallet).passed).toBe(true);
+    expect(evaluatePreset({ ...mediumWalletPool, holders: 3_000 }, PRESETS.mediumwallet).passed).toBe(true);
+  });
+
+  it("keeps the Medium Wallet MC band under Slow Wallet's own floor", () => {
+    expect(evaluatePreset({ ...mediumWalletPool, marketCap: 249_999 }, PRESETS.mediumwallet).misses)
+      .toContain("MC ≥ $250000");
+    expect(evaluatePreset({ ...mediumWalletPool, marketCap: 2_000_001 }, PRESETS.mediumwallet).misses)
+      .toContain("MC ≤ $2000000");
+  });
+
+  it("fails every new GMGN-sourced gate closed when the reading is missing", () => {
+    const blind = {
+      ...mediumWalletPool,
+      gmgnPhishingPct: null,
+      gmgnFreshWalletPct: null,
+      gmgnTotalFeesSol: null,
+    };
+    const { misses } = evaluatePreset(blind, PRESETS.mediumwallet);
+    expect(misses).toContain("Phishing ≤ 30%");
+    expect(misses).toContain("Fresh wallet ≤ 40%");
+    expect(misses).toContain("Total fee GMGN ≥ 30 SOL");
+  });
+
+  it("keeps the five new optional gate types opt-in for every other preset", () => {
+    // Same contract as every other optional gate: a preset that never
+    // declared one of these five cannot start failing on a field it does not
+    // screen.
+    expect(PRESETS.heartattack.phishingPctMax).toBeUndefined();
+    expect(PRESETS.heartattack.freshWalletPctMax).toBeUndefined();
+    expect(PRESETS.heartattack.totalFeesMin).toBeUndefined();
+    expect(PRESETS.heartattack.holdersMax).toBeUndefined();
+    expect(PRESETS.heartattack.volume24hMin).toBeUndefined();
+    expect(PRESETS.slowwallet.phishingPctMax).toBeUndefined();
+    expect(PRESETS.slowwallet.freshWalletPctMax).toBeUndefined();
+    expect(PRESETS.slowwallet.totalFeesMin).toBeUndefined();
+    expect(PRESETS.slowwallet.holdersMax).toBeUndefined();
+    expect(PRESETS.slowwallet.volume24hMin).toBeUndefined();
   });
 
   it("reports a gate result for every preset that exists", () => {
