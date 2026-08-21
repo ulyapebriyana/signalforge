@@ -65,6 +65,7 @@ const POOL_CACHE_MS = 60_000;
 
 const positionCache = new Map();
 const poolCache = new Map();
+const pnlCache = new Map();
 
 let connection = null;
 
@@ -155,6 +156,43 @@ const fetchPoolMeta = async (address) => {
 };
 
 /**
+ * A wallet's positions in one pool, with Meteora's own on-the-fly PnL —
+ * `allTimeDeposits`, `allTimeWithdrawals`, and `allTimeFees` folded into
+ * `pnlUsd`/`pnlPctChange` per position. The chain has no record of what a
+ * position was originally deposited for (the SDK read above is a snapshot of
+ * *now*, not a history), so this is the only source for that half of the
+ * question — same reasoning as `fetchPoolMeta` reaching for the data API
+ * because the chain has no dollars either.
+ *
+ * `status=open` only: `readWalletPositions` never surfaces a closed position
+ * in the first place (it flattens `getAllLbPairPositionsByUser`, which by
+ * definition only knows about open ones), so there is nothing here for a
+ * closed-position record to match against.
+ *
+ * Cached at the same `POSITION_CACHE_MS` clock as the position read itself —
+ * this is live wallet data, not slow-moving pool metadata, so it does not
+ * belong on `poolCache`'s longer TTL.
+ */
+const fetchPositionsPnl = async (poolAddress, wallet) => {
+  const cacheKey = `${poolAddress}:${wallet}`;
+  const cached = pnlCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) return cached.data;
+
+  try {
+    const query = new URLSearchParams({ user: wallet, status: "open", page_size: "100" });
+    const payload = await fetchJson(`${dataApi}/positions/${poolAddress}/pnl?${query}`);
+    const data = Array.isArray(payload?.positions) ? payload.positions : [];
+    pnlCache.set(cacheKey, { data, expiresAt: Date.now() + POSITION_CACHE_MS });
+    return data;
+  } catch {
+    // Same short-TTL-on-failure posture as fetchPoolMeta: a transient miss
+    // should not hide every position's PnL for a full cache interval.
+    pnlCache.set(cacheKey, { data: [], expiresAt: Date.now() + 10_000 });
+    return [];
+  }
+};
+
+/**
  * SDK objects → plain JSON.
  *
  * The SDK hands back BN and PublicKey instances; amounts are turned into
@@ -205,13 +243,29 @@ export const readWalletPositions = async (wallet, { force = false } = {}) => {
   }
 
   const poolAddresses = [...new Set(flattened.map((position) => position.poolAddress))];
-  const metaEntries = await Promise.all(
-    poolAddresses.map(async (address) => [address, await fetchPoolMeta(address)]),
-  );
+  const [metaEntries, pnlEntries] = await Promise.all([
+    Promise.all(poolAddresses.map(async (address) => [address, await fetchPoolMeta(address)])),
+    Promise.all(poolAddresses.map(async (address) => [address, await fetchPositionsPnl(address, wallet)])),
+  ]);
   const metaByPool = new Map(metaEntries);
 
+  // Flattened by position address rather than kept per pool, because a
+  // position is matched by its own key, not by which pool happened to fetch it.
+  const pnlByPosition = new Map();
+  for (const [, records] of pnlEntries) {
+    for (const record of records) {
+      if (record?.positionAddress) pnlByPosition.set(record.positionAddress, record);
+    }
+  }
+
   const positions = flattened
-    .map((position) => summarizePosition(position, metaByPool.get(position.poolAddress)))
+    .map((position) => {
+      const pnl = pnlByPosition.get(position.positionKey);
+      return summarizePosition(
+        { ...position, pnlUsd: pnl?.pnlUsd ?? null, pnlPct: pnl?.pnlPctChange ?? null },
+        metaByPool.get(position.poolAddress),
+      );
+    })
     // Out-of-range first: those are the ones that need a decision. Within a
     // group, the biggest position leads, since that is where the money is.
     .sort((a, b) => Number(a.earning) - Number(b.earning) || (b.valueUsd ?? 0) - (a.valueUsd ?? 0));

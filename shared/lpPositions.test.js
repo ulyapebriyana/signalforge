@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   binIdToPrice,
+  collectPnlAlerts,
   collectPositionAlerts,
   isEarning,
+  PNL_ALERT_THRESHOLD_PCT,
+  pnlBand,
   rangeProgress,
   rangeState,
   summarizePosition,
@@ -142,6 +145,16 @@ describe("position summary", () => {
     expect(summary.pair).toBe("SOL-USDC");
   });
 
+  it("carries Meteora's own PnL figures through untouched", () => {
+    const summary = summarizePosition({ ...position, pnlUsd: "12.5", pnlPct: "8.4" }, pool);
+    expect(summary.pnlUsd).toBeCloseTo(12.5, 6);
+    expect(summary.pnlPct).toBeCloseTo(8.4, 6);
+  });
+
+  it("reports PnL as null when Meteora has not priced this position", () => {
+    expect(summarizePosition(position, pool).pnlPct).toBeNull();
+  });
+
   it("declines to total a position it can only half price", () => {
     const unpriced = { ...pool, tokenY: { ...pool.tokenY, price: null } };
     const summary = summarizePosition(position, unpriced);
@@ -202,6 +215,72 @@ describe("position alerts", () => {
   });
 });
 
+describe("pnl band", () => {
+  it("reads the threshold at exactly 10%, in either direction", () => {
+    expect(pnlBand(10)).toBe("up");
+    expect(pnlBand(9.9)).toBe("neutral");
+    expect(pnlBand(-10)).toBe("down");
+    expect(pnlBand(-9.9)).toBe("neutral");
+    expect(PNL_ALERT_THRESHOLD_PCT).toBe(10);
+  });
+
+  it("reports unknown rather than neutral when PnL has not been read", () => {
+    expect(pnlBand(null)).toBe("unknown");
+  });
+
+  it("takes a custom threshold", () => {
+    expect(pnlBand(6, 5)).toBe("up");
+    expect(pnlBand(4, 5)).toBe("neutral");
+  });
+});
+
+describe("pnl alerts", () => {
+  /** A position record with only the fields the PnL transition rule reads. */
+  const withPnl = (pct, key = "pos1") => ({ positionKey: key, pnlPct: pct });
+
+  it("says nothing the first time it sees a position", () => {
+    const { entries, currentBands } = collectPnlAlerts([withPnl(15)], new Map());
+    expect(entries).toEqual([]);
+    expect(currentBands.get("pos1")).toBe("up");
+  });
+
+  it("fires once PnL crosses up through +10%", () => {
+    const { entries } = collectPnlAlerts([withPnl(12)], new Map([["pos1", "neutral"]]));
+    expect(entries).toHaveLength(1);
+    expect(entries[0].kind).toBe("pnl-up");
+    expect(entries[0].previousBand).toBe("neutral");
+  });
+
+  it("fires once PnL crosses down through -10%", () => {
+    const { entries } = collectPnlAlerts([withPnl(-14)], new Map([["pos1", "neutral"]]));
+    expect(entries).toHaveLength(1);
+    expect(entries[0].kind).toBe("pnl-down");
+  });
+
+  it("fires only the band it lands on, for a swing that jumps both thresholds", () => {
+    const { entries } = collectPnlAlerts([withPnl(15)], new Map([["pos1", "down"]]));
+    expect(entries).toHaveLength(1);
+    expect(entries[0].kind).toBe("pnl-up");
+  });
+
+  it("stays quiet while PnL sits inside the band already alerted on", () => {
+    expect(collectPnlAlerts([withPnl(22)], new Map([["pos1", "up"]])).entries).toEqual([]);
+  });
+
+  it("stays quiet on the way back to neutral, but re-arms for the next crossing", () => {
+    const backToNeutral = collectPnlAlerts([withPnl(3)], new Map([["pos1", "up"]]));
+    expect(backToNeutral.entries).toEqual([]);
+    expect(backToNeutral.currentBands.get("pos1")).toBe("neutral");
+
+    const crossesAgain = collectPnlAlerts([withPnl(11)], backToNeutral.currentBands);
+    expect(crossesAgain.entries).toHaveLength(1);
+  });
+
+  it("does not treat an unpriced position's PnL as a crossing", () => {
+    expect(collectPnlAlerts([withPnl(null)], new Map([["pos1", "up"]])).entries).toEqual([]);
+  });
+});
+
 describe("wallet summary", () => {
   const inside = summarizePosition(position, pool);
   const out = summarizePosition({ ...position, positionKey: "pos2", activeBinId: 40 }, pool);
@@ -229,5 +308,13 @@ describe("wallet summary", () => {
   it("reports null value when nothing could be priced at all", () => {
     const unpriced = summarizePosition(position, { ...pool, tokenX: { ...pool.tokenX, price: null } });
     expect(summarizeWallet([unpriced]).valueUsd).toBeNull();
+  });
+
+  it("adds up PnL like the fee totals, not like valueUsd", () => {
+    // Lenient: a position Meteora has not priced yet contributes nothing
+    // rather than blanking the whole wallet's figure the way valueUsd does.
+    const priced = summarizePosition({ ...position, pnlUsd: "20", pnlPct: "15" }, pool);
+    const unpriced = summarizePosition({ ...position, positionKey: "pos2" }, pool);
+    expect(summarizeWallet([priced, unpriced]).pnlUsd).toBeCloseTo(20, 6);
   });
 });

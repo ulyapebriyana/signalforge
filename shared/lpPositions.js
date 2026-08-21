@@ -18,6 +18,9 @@
 /** Fraction of the range width within which an in-range position reads as "near the edge". */
 const EDGE_MARGIN = 0.15;
 
+/** How far PnL has to move, in either direction, before it is worth a message. */
+export const PNL_ALERT_THRESHOLD_PCT = 10;
+
 /**
  * Number, treating "absent" as unknown rather than zero.
  *
@@ -186,6 +189,23 @@ export function summarizePosition(position, pool) {
     poolApr: num(pool?.apr),
     poolFeeTvl1h: num(pool?.feeTvl1h),
     lastUpdatedAt: num(position?.lastUpdatedAt),
+
+    // Meteora's own on-the-fly PnL for this position — not derived here.
+    // `server/lpPositions.mjs` fetches it from `/positions/{pool}/pnl` (full
+    // deposit/withdrawal/fee history, the thing this codebase otherwise has no
+    // way to know) and attaches it to `position` before this function runs, so
+    // the figure matches what Meteora's own dashboard shows for the same
+    // position rather than a locally-approximated one. Null when that call
+    // failed or has not matched this position yet, same fail-to-null posture
+    // as every other figure here.
+    //
+    // Assumed to already be a percentage number (12.5 meaning +12.5%), not a
+    // 0-1 fraction, by analogy with every other *Pct/*ratio field already
+    // read off this same data-api host (feeTvl1h chief among them). Not
+    // confirmed against a live non-zero reading — worth a quick sanity check
+    // against app.meteora.ag the first time a real position shows a value.
+    pnlUsd: num(position?.pnlUsd),
+    pnlPct: num(position?.pnlPct),
   };
 }
 
@@ -232,6 +252,51 @@ export function collectPositionAlerts(positions, previousStates = new Map()) {
 }
 
 /**
+ * Which side of the ±10% band a position's PnL sits on.
+ *
+ * Three bands, not a boolean, because "neutral" has to be a real state for
+ * `collectPnlAlerts` below to detect a *crossing* into up or down rather than
+ * firing on every scan a position happens to already be past the threshold.
+ */
+export function pnlBand(pnlPct, thresholdPct = PNL_ALERT_THRESHOLD_PCT) {
+  if (!Number.isFinite(pnlPct)) return "unknown";
+  if (pnlPct >= thresholdPct) return "up";
+  if (pnlPct <= -thresholdPct) return "down";
+  return "neutral";
+}
+
+/**
+ * Which PnL crossings are worth a message.
+ *
+ * Same shape as `collectPositionAlerts` on purpose — a position's first
+ * sighting is the baseline, not an event, and only a genuine crossing *into*
+ * up or down fires. A position that stays above +10% for an hour of scans
+ * says nothing again until it drops back to neutral and crosses a second
+ * time, and a swing straight from -12% to +15% fires once, as "up" — the
+ * band it landed on, not every threshold it passed through on the way.
+ */
+export function collectPnlAlerts(positions, previousBands = new Map()) {
+  const currentBands = new Map();
+  const entries = [];
+
+  for (const position of positions) {
+    const key = position.positionKey;
+    if (!key) continue;
+
+    const band = pnlBand(position.pnlPct);
+    const previous = previousBands.get(key);
+    currentBands.set(key, band);
+
+    if (previous === undefined || band === previous || band === "unknown") continue;
+    if (band === "up" || band === "down") {
+      entries.push({ position, band, previousBand: previous, kind: band === "up" ? "pnl-up" : "pnl-down" });
+    }
+  }
+
+  return { currentBands, entries };
+}
+
+/**
  * Roll the positions up into the totals the header shows.
  *
  * `valueUsd` deliberately skips positions that could not be priced instead of
@@ -254,5 +319,9 @@ export function summarizeWallet(positions) {
     unclaimedFeesUsd: sumOf("unclaimedFeesUsd"),
     claimedFeesUsd: sumOf("claimedFeesUsd"),
     totalFeesUsd: sumOf("totalFeesUsd"),
+    // Same lenient posture as the fee totals above, not valueUsd's stricter
+    // all-or-nothing one: a position Meteora has not priced yet contributes
+    // nothing rather than blanking the whole wallet's PnL.
+    pnlUsd: sumOf("pnlUsd"),
   };
 }

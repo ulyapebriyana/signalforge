@@ -11,7 +11,7 @@ import { classifyPhase, PHASE_META } from "../shared/marketRead.js";
 import { normalizePool, poolTier, PRESETS, resolvePresetId, volatileGateLabels } from "../shared/scoring.js";
 import { alertPresetsFor, cooldownKey, presetsCleared } from "../shared/alertRouting.js";
 import { collectSignalEntries } from "../shared/signalTransitions.js";
-import { collectPositionAlerts, RANGE_LABEL } from "../shared/lpPositions.js";
+import { collectPnlAlerts, collectPositionAlerts, RANGE_LABEL } from "../shared/lpPositions.js";
 import { configuredWallets, isValidWallet, positionPollSeconds, readWalletPositions, rpcConfigured } from "./lpPositions.mjs";
 import {
   clearPendingZap,
@@ -1223,6 +1223,8 @@ const runAlertScan = async () => {
 
 /** Position range states, tracked per wallet so one wallet cannot mask another. */
 const positionStates = new Map();
+/** Position PnL bands (up / neutral / down), tracked the same way. */
+const positionPnlBands = new Map();
 
 /** Prices here span SOL-USDC to memecoins, so significant digits beat fixed ones. */
 const price = (value) => (value === null || value === undefined
@@ -1230,6 +1232,11 @@ const price = (value) => (value === null || value === undefined
   : Number(value).toPrecision(6).replace(/\.?0+$/, ""));
 
 const money = (value) => (value === null || value === undefined ? "—" : usd(value));
+
+const pct = (value) => {
+  if (value === null || value === undefined || !Number.isFinite(value)) return "—";
+  return `${value > 0 ? "+" : ""}${value.toFixed(1)}%`;
+};
 
 /**
  * An out-of-range position is not a suggestion to close — it is a statement
@@ -1253,6 +1260,24 @@ const positionAlertMessage = ({ position, kind }) => {
     `Nilai posisi: ${money(position.valueUsd)} · Fee belum diklaim: ${money(position.unclaimedFeesUsd)}`,
     `Total fee didapat: ${money(position.totalFeesUsd)}`,
     consequence,
+    `<a href="https://www.meteora.ag/dlmm/${position.poolAddress}">Buka pool di Meteora</a>`,
+    "<i>Alert otomatis; ini bukan rekomendasi finansial.</i>",
+  ].join("\n");
+};
+
+/**
+ * PnL crossing ±10%, in Meteora's own on-the-fly figure — deposits,
+ * withdrawals, and fees all folded in, not just the fee side. Same reporting
+ * posture as the range alert above: this states a threshold was crossed, it
+ * does not tell the reader what to do about it.
+ */
+const pnlAlertMessage = ({ position, kind }) => {
+  const heading = kind === "pnl-up" ? "PNL TEMBUS +10%" : "PNL TEMBUS -10%";
+  return [
+    `<b>SignalForge · ${heading}</b>`,
+    `<b>${escapeHtml(position.pair || position.poolAddress)}</b>`,
+    `PnL: <b>${pct(position.pnlPct)}</b> · ${money(position.pnlUsd)}`,
+    `Nilai posisi: ${money(position.valueUsd)} · Total fee didapat: ${money(position.totalFeesUsd)}`,
     `<a href="https://www.meteora.ag/dlmm/${position.poolAddress}">Buka pool di Meteora</a>`,
     "<i>Alert otomatis; ini bukan rekomendasi finansial.</i>",
   ].join("\n");
@@ -1289,6 +1314,17 @@ const runPositionScan = async () => {
         } catch {
           // Same posture as the pool alerts: the next scan retries the state it
           // still sees, and the dashboard shows the position either way.
+        }
+      }
+
+      const { currentBands, entries: pnlEntries } = collectPnlAlerts(positions, positionPnlBands.get(wallet) || new Map());
+      positionPnlBands.set(wallet, currentBands);
+
+      for (const entry of pnlEntries) {
+        try {
+          await sendTelegram(pnlAlertMessage(entry));
+        } catch {
+          // Same retry-next-interval posture as every other alert here.
         }
       }
     } catch {

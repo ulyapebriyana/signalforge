@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { ExternalLink, Loader2, LogOut, Plug, RefreshCw, TriangleAlert, Wallet } from "lucide-react";
 import { RANGE_LABEL } from "../../../../shared/lpPositions.js";
-import { formatUsdExact } from "../../../lib/format.js";
+import { formatPercent, formatUsdExact } from "../../../lib/format.js";
 import { useWallet } from "../lib/wallet.jsx";
 import { useZapOut } from "../../../hooks/useZapOut.js";
-import { EmptyState, StatTile } from "../components/bits.jsx";
+import { EmptyState, momentumTone, StatTile } from "../components/bits.jsx";
 import ZapOutSheet from "../components/ZapOutSheet.jsx";
 
 /** Range states in the order an LP cares about them, worst first. */
@@ -391,6 +391,12 @@ export default function PositionsView({
             }
           />
           <StatTile
+            label="PnL"
+            value={money(totals.pnlUsd)}
+            tone={totals.pnlUsd > 0 ? "low" : totals.pnlUsd < 0 ? "high" : undefined}
+            sub="dari Meteora, termasuk deposit & fee"
+          />
+          <StatTile
             label="Masih dapat fee"
             value={`${totals.earningCount}/${totals.positionCount}`}
             tone={totals.outOfRangeCount > 0 ? "high" : undefined}
@@ -419,6 +425,7 @@ export default function PositionsView({
               <col className="fx-col-w-range" />
               <col className="fx-col-w-price" />
               <col className="fx-col-w-value" />
+              <col className="fx-col-w-value" />
               <col className="fx-col-w-fees" />
               <col className="fx-col-w-ratio" />
               <col className="fx-col-w-actions" />
@@ -436,6 +443,7 @@ export default function PositionsView({
                 <th className="fx-col-lp" scope="col"><span>Range</span></th>
                 <th scope="col"><span>Harga aktif</span></th>
                 <th scope="col"><span>Nilai</span></th>
+                <th scope="col"><span>PnL</span></th>
                 <th scope="col"><span>Fee belum klaim</span></th>
                 <th scope="col"><span>Fee/TVL 1j</span></th>
                 <th scope="col"><span className="f-visually-hidden">Tindakan</span></th>
@@ -472,6 +480,18 @@ export default function PositionsView({
                   </td>
                   <td className="f-num">{price(position.activePrice)}</td>
                   <td className="f-num">{money(position.valueUsd)}</td>
+                  <td className="f-num">
+                    {Number.isFinite(position.pnlPct) ? (
+                      <span className="fx-cell-stack">
+                        <span className={`f-num ${momentumTone(position.pnlPct)}`}>
+                          {formatPercent(position.pnlPct)}
+                        </span>
+                        <small className="f-num">{money(position.pnlUsd)}</small>
+                      </span>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
                   <td className="f-num">{money(position.unclaimedFeesUsd)}</td>
                   <td className="f-num">
                     {Number.isFinite(position.poolFeeTvl1h) ? `${position.poolFeeTvl1h.toFixed(2)}%` : "—"}
