@@ -908,9 +908,9 @@ export default function ScannerView({
       {
         id: "link",
         header: () => <span className="f-visually-hidden">Tautan</span>,
-        cell: ({ row }) => <TokenLinks pool={row.original} />,
-        size: 220,
-        minSize: 220,
+        cell: ({ row }) => <TokenLinks pool={row.original} className="fx-table-links" />,
+        size: 260,
+        minSize: 260,
         enableSorting: false,
         enableHiding: false,
       },

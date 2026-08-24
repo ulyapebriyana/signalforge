@@ -1537,6 +1537,25 @@
   border-radius: 3px;
 }
 
+/* The table cell has the least room of the three places this row appears
+   (card footer wraps, drawer has a whole row to itself) and pools with every
+   social link plus the fixed DEX/chart set can reach ~10 icons — so shrink
+   the icon and gap here to keep them fitting inside the fixed-width column
+   instead of getting clipped by the cell's overflow: hidden. */
+.fx-table-links {
+  gap: 0.15rem;
+}
+
+.fx-table-links .fx-link-icon {
+  width: 20px;
+  height: 20px;
+}
+
+.fx-table-links .fx-link-icon img {
+  width: 13px;
+  height: 13px;
+}
+
 .fx-cell-stack {
   display: inline-flex;
   flex-direction: column;
