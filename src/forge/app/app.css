@@ -1472,6 +1472,16 @@
   color: hsl(var(--token-hue) 80% 78%);
 }
 
+.fx-avatar-logo {
+  width: 22px;
+  height: 22px;
+  margin-left: -8px;
+  border-radius: 50%;
+  border: 1px solid var(--f-iron-950);
+  object-fit: cover;
+  background: var(--f-iron-800);
+}
+
 .fx-star,
 .fx-card-star {
   display: grid;
@@ -1500,23 +1510,31 @@
   color: var(--f-caution);
 }
 
-.fx-row-link {
-  display: inline-grid;
-  place-items: center;
-  width: 26px;
-  height: 26px;
-  border-radius: var(--f-r-sm);
-  color: var(--f-faint);
+/* Fabriq-style quick-open row: one favicon per site, tight enough to fit the
+   table's trailing column but still individually clickable. */
+.fx-links {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
 }
 
-.fx-row-link:hover {
-  color: var(--f-ember);
+.fx-link-icon {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--f-r-sm);
+  flex-shrink: 0;
+}
+
+.fx-link-icon:hover {
   background: var(--f-iron-800);
 }
 
-.fx-row-link svg {
+.fx-link-icon img {
   width: 14px;
   height: 14px;
+  border-radius: 3px;
 }
 
 .fx-cell-stack {
@@ -2043,24 +2061,8 @@
   flex-wrap: wrap;
 }
 
-.fx-card-link {
+.fx-card-links {
   margin-left: auto;
-  display: grid;
-  place-items: center;
-  width: 26px;
-  height: 26px;
-  border-radius: var(--f-r-sm);
-  color: var(--f-faint);
-}
-
-.fx-card-link:hover {
-  color: var(--f-ember);
-  background: var(--f-iron-800);
-}
-
-.fx-card-link svg {
-  width: 14px;
-  height: 14px;
 }
 
 /* --- drawer ------------------------------------------------------------------- */
@@ -2102,6 +2104,18 @@
   gap: 1rem;
   padding: 1rem 1.1rem;
   border-bottom: 1px solid var(--f-line);
+}
+
+.fx-drawer-head-title {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.fx-drawer-head-title .fx-avatar i,
+.fx-drawer-head-title .fx-avatar-logo {
+  width: 30px;
+  height: 30px;
 }
 
 .fx-drawer-head h2 {
@@ -2369,14 +2383,37 @@
 
 .fx-drawer-foot {
   display: flex;
-  gap: 0.45rem;
+  flex-direction: column;
+  gap: 0.5rem;
   padding: 0.85rem 1.1rem;
   border-top: 1px solid var(--f-line);
   background: var(--f-iron-900);
 }
 
-.fx-drawer-foot .f-btn:first-child {
+.fx-drawer-foot-actions {
+  display: flex;
+  gap: 0.45rem;
+}
+
+.fx-drawer-foot-actions .f-btn:first-child {
   flex: 1;
+}
+
+.fx-drawer-links {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.2rem;
+}
+
+.fx-drawer-links .fx-link-icon {
+  width: 34px;
+  height: 34px;
+}
+
+.fx-drawer-links .fx-link-icon img {
+  width: 16px;
+  height: 16px;
 }
 
 @media (min-width: 1500px) {

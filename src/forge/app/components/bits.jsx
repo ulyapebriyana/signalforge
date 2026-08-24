@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   Activity,
   Check,
@@ -14,6 +15,7 @@ import { VELOCITY_LABEL } from "../../../../shared/feeVelocity.js";
 import { BURST_LABEL, burstBand, PHASE_META } from "../../../../shared/marketRead.js";
 import { formatNumber, formatUsd } from "../../../lib/format.js";
 import { heatColor, heatVars, STATUS_META } from "../../lib/heat.js";
+import { poolLinks, tokenLogoUrl } from "../lib/tokenLinks.js";
 
 export const optionalNumber = (value) => (Number.isFinite(value) ? formatNumber(value) : "—");
 export const optionalPercent = (value) => (Number.isFinite(value) ? `${value.toFixed(1)}%` : "—");
@@ -263,7 +265,16 @@ export function HeatBadge({ score, status, size = "md" }) {
   );
 }
 
-export function PoolAvatar({ symbol, quote }) {
+/**
+ * The base token's real logo when DexScreener has indexed one, initials when
+ * it hasn't (a brand-new mint, or one it 404s on). `key`ing the img on the
+ * address means a fresh mint gets its own fallback state instead of inheriting
+ * the previous row's — React would otherwise reuse the failed `<img>` node.
+ */
+export function PoolAvatar({ symbol, quote, address }) {
+  const [failed, setFailed] = useState(false);
+  const logo = !failed && tokenLogoUrl(address);
+
   // Constrained to the cool arc (teal → blue → violet → magenta) so avatars stay
   // inside the palette instead of scattering random warm hues across the table.
   const seed = [...String(symbol)].reduce((sum, character) => sum + character.charCodeAt(0), 0);
@@ -271,9 +282,48 @@ export function PoolAvatar({ symbol, quote }) {
   return (
     <span className="fx-avatar" aria-hidden="true">
       <i className="fx-avatar-quote">{String(quote || "?").slice(0, 1)}</i>
-      <i className="fx-avatar-base" style={{ "--token-hue": hue }}>
-        {String(symbol || "?").slice(0, 2)}
-      </i>
+      {logo ? (
+        <img
+          key={address}
+          className="fx-avatar-logo"
+          src={logo}
+          alt=""
+          loading="lazy"
+          onError={() => setFailed(true)}
+        />
+      ) : (
+        <i className="fx-avatar-base" style={{ "--token-hue": hue }}>
+          {String(symbol || "?").slice(0, 2)}
+        </i>
+      )}
+    </span>
+  );
+}
+
+/**
+ * The fabriq-style quick-open row: the pool's DEX plus the chart/swap/intel
+ * sites people actually flip to mid-trade, each drawn as that site's own
+ * favicon rather than a redrawn logo. `poolLinks` decides the set and order;
+ * this just lays out whatever it returns, so the drawer footer and the table
+ * cell stay in sync without duplicating the link list.
+ */
+export function TokenLinks({ pool, className = "" }) {
+  return (
+    <span className={`fx-links ${className}`}>
+      {poolLinks(pool).map((link) => (
+        <a
+          key={link.key}
+          className="fx-link-icon"
+          href={link.href}
+          target="_blank"
+          rel="noreferrer"
+          title={link.label}
+          aria-label={link.label}
+          onClick={(event) => event.stopPropagation()}
+        >
+          <img src={link.favicon} alt="" loading="lazy" />
+        </a>
+      ))}
     </span>
   );
 }

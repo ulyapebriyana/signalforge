@@ -23,7 +23,6 @@ import {
   ArrowUp,
   ChevronsUpDown,
   Columns3,
-  ExternalLink,
   Filter,
   LayoutGrid,
   ListFilter,
@@ -60,6 +59,7 @@ import {
   PoolBurstCell,
   RugCheckChip,
   TokenBurstCell,
+  TokenLinks,
   TurnoverCell,
   Unread,
   VenueShareCell,
@@ -662,7 +662,7 @@ function PoolCard({ pool, preset, selected, watched, onOpen, onToggleWatch }) {
     >
       <span className="fx-card-heat" aria-hidden="true" />
       <header>
-        <PoolAvatar symbol={pool.baseSymbol} quote={pool.quoteSymbol} />
+        <PoolAvatar symbol={pool.baseSymbol} quote={pool.quoteSymbol} address={pool.baseAddress} />
         <div>
           <strong>{pool.pair}</strong>
           <small className="f-num">MC {formatUsd(pool.marketCap)}</small>
@@ -711,16 +711,7 @@ function PoolCard({ pool, preset, selected, watched, onOpen, onToggleWatch }) {
       <footer>
         <JupShieldChip pool={pool} />
         <RugCheckChip pool={pool} />
-        <a
-          className="fx-card-link"
-          href={`https://www.meteora.ag/dlmm/${pool.address}`}
-          target="_blank"
-          rel="noreferrer"
-          onClick={(event) => event.stopPropagation()}
-          aria-label={`Buka ${pool.pair} di Meteora`}
-        >
-          <ExternalLink />
-        </a>
+        <TokenLinks pool={pool} className="fx-card-links" />
       </footer>
     </article>
   );
@@ -884,7 +875,7 @@ export default function ScannerView({
         header: "Pool",
         cell: ({ row }) => (
           <div className="fx-pool-cell">
-            <PoolAvatar symbol={row.original.baseSymbol} quote={row.original.quoteSymbol} />
+            <PoolAvatar symbol={row.original.baseSymbol} quote={row.original.quoteSymbol} address={row.original.baseAddress} />
             <div>
               <strong>{row.original.pair}</strong>
               <small className="f-num">MC {formatUsd(row.original.marketCap)}</small>
@@ -917,20 +908,9 @@ export default function ScannerView({
       {
         id: "link",
         header: () => <span className="f-visually-hidden">Tautan</span>,
-        cell: ({ row }) => (
-          <a
-            className="fx-row-link"
-            href={`https://www.meteora.ag/dlmm/${row.original.address}`}
-            target="_blank"
-            rel="noreferrer"
-            aria-label={`Buka ${row.original.pair} di Meteora`}
-            onClick={(event) => event.stopPropagation()}
-          >
-            <ExternalLink />
-          </a>
-        ),
-        size: 52,
-        minSize: 52,
+        cell: ({ row }) => <TokenLinks pool={row.original} />,
+        size: 168,
+        minSize: 168,
         enableSorting: false,
         enableHiding: false,
       },

@@ -26,9 +26,11 @@ import {
   OrganicChip,
   PhaseChip,
   PHASE_TONE,
+  PoolAvatar,
   PoolBurstCell,
   RugCheckChip,
   TokenBurstCell,
+  TokenLinks,
   TurnoverCell,
   VenueShareCell,
   YieldCell,
@@ -420,11 +422,14 @@ export default function PoolDrawer({
         style={heatVars(pool.score)}
       >
         <header className="fx-drawer-head">
-          <div>
-            <span className="fx-drawer-status">
-              {STATUS_META[tier]?.label ?? tier} · {STATUS_META[tier]?.blurb}
-            </span>
-            <h2>{pool.pair}</h2>
+          <div className="fx-drawer-head-title">
+            <PoolAvatar symbol={pool.baseSymbol} quote={pool.quoteSymbol} address={pool.baseAddress} />
+            <div>
+              <span className="fx-drawer-status">
+                {STATUS_META[tier]?.label ?? tier} · {STATUS_META[tier]?.blurb}
+              </span>
+              <h2>{pool.pair}</h2>
+            </div>
           </div>
           <div className="fx-drawer-head-actions">
             <button
@@ -701,27 +706,22 @@ export default function PoolDrawer({
         </div>
 
         <footer className="fx-drawer-foot">
-          <button
-            className="f-btn f-btn--hot"
-            type="button"
-            onClick={() => onSendAlert(pool)}
-            disabled={alertState === "sending"}
-          >
-            {alertState === "sending" ? <Loader2 className="f-spin" /> : <BellRing />}
-            {alertState === "sending" ? "Mengirim…" : "Kirim ke Telegram"}
-          </button>
-          <button className="f-btn" type="button" onClick={copyMint}>
-            {copied ? <Check /> : <Copy />}
-            {copied ? "Tersalin" : "Salin mint"}
-          </button>
-          <a
-            className="f-btn"
-            href={`https://www.meteora.ag/dlmm/${pool.address}`}
-            target="_blank"
-            rel="noreferrer"
-          >
-            <ExternalLink /> Meteora
-          </a>
+          <div className="fx-drawer-foot-actions">
+            <button
+              className="f-btn f-btn--hot"
+              type="button"
+              onClick={() => onSendAlert(pool)}
+              disabled={alertState === "sending"}
+            >
+              {alertState === "sending" ? <Loader2 className="f-spin" /> : <BellRing />}
+              {alertState === "sending" ? "Mengirim…" : "Kirim ke Telegram"}
+            </button>
+            <button className="f-btn" type="button" onClick={copyMint}>
+              {copied ? <Check /> : <Copy />}
+              {copied ? "Tersalin" : "Salin mint"}
+            </button>
+          </div>
+          <TokenLinks pool={pool} className="fx-drawer-links" />
         </footer>
       </aside>
     </>
