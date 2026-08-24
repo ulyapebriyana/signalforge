@@ -56,9 +56,16 @@ const dataApi = "https://dlmm.datapi.meteora.ag";
 const poolDiscoveryApi = "https://pool-discovery-api.datapi.meteora.ag";
 const rugCheckApi = "https://api.rugcheck.xyz";
 const gmgnApi = "https://openapi.gmgn.ai";
+const dexscreenerApi = "https://api.dexscreener.com";
 const gmgnCacheTtlMs = Math.max(5, Number(process.env.GMGN_CACHE_MINUTES || 10)) * 60_000;
 const rugCheckCacheTtlMs = Math.max(5, Number(process.env.RUGCHECK_CACHE_MINUTES || 15)) * 60_000;
 const rugCheckFailureTtlMs = 2 * 60_000;
+// A token's socials essentially never change between one scan and the next,
+// so this cache holds a mint for hours rather than minutes — the DexScreener
+// call exists to draw icons, not to inform a gate, so a stale website link is
+// a non-event in a way a stale rug-check score would not be.
+const dexscreenerCacheTtlMs = Math.max(30, Number(process.env.DEXSCREENER_CACHE_MINUTES || 360)) * 60_000;
+const dexscreenerFailureTtlMs = 5 * 60_000;
 
 app.disable("x-powered-by");
 app.use(express.json({ limit: "32kb" }));
@@ -72,6 +79,7 @@ const detectionCooldowns = new Map();
 const rugCheckCache = new Map();
 const rugCheckClusterCache = new Map();
 const gmgnCache = new Map();
+const dexscreenerSocialsCache = new Map();
 let detectionStatuses = new Map();
 let detectionInitialized = false;
 const historyFile = path.join(projectRoot, "data", "signal-history.json");
@@ -97,6 +105,7 @@ const pruneCaches = () => {
   for (const [key, entry] of rugCheckCache) if (entry.expiresAt <= now) rugCheckCache.delete(key);
   for (const [key, entry] of rugCheckClusterCache) if (entry.expiresAt <= now) rugCheckClusterCache.delete(key);
   for (const [key, entry] of gmgnCache) if (entry.expiresAt <= now) gmgnCache.delete(key);
+  for (const [key, entry] of dexscreenerSocialsCache) if (entry.expiresAt <= now) dexscreenerSocialsCache.delete(key);
   for (const [key, sentAt] of alertCooldowns) if (now - sentAt > STALE_COOLDOWN_MS) alertCooldowns.delete(key);
   for (const [key, seenAt] of detectionCooldowns) if (now - seenAt > STALE_COOLDOWN_MS) detectionCooldowns.delete(key);
 };
@@ -526,6 +535,69 @@ const fetchRugCheckSummaries = async (mints) => {
   return new Map(entries);
 };
 
+/**
+ * Website/X/Telegram/etc for the base token, drawn straight from DexScreener's
+ * own token-info payload — the same data its trending page uses to draw its
+ * quick-open row. Batched 30 mints per call (its documented ceiling for this
+ * endpoint) rather than one request per token, since a full scan's candidate
+ * list is 100+ mints and almost all of them are already cached from the scan
+ * before.
+ */
+const normalizeSocials = (info) => {
+  const socials = Array.isArray(info?.socials) ? info.socials : [];
+  const websites = Array.isArray(info?.websites) ? info.websites : [];
+  const byType = (type) => socials.find((entry) => String(entry?.type).toLowerCase() === type)?.url || null;
+  const result = {
+    website: websites[0]?.url || null,
+    twitter: byType("twitter"),
+    telegram: byType("telegram"),
+    instagram: byType("instagram"),
+    discord: byType("discord"),
+  };
+  return Object.values(result).some(Boolean) ? result : null;
+};
+
+const DEXSCREENER_BATCH_SIZE = 30;
+
+const fetchDexscreenerSocialsBatch = async (mints) => {
+  const now = Date.now();
+  const uncached = mints.filter((mint) => {
+    const cached = dexscreenerSocialsCache.get(mint);
+    return !cached || cached.expiresAt <= now;
+  });
+
+  for (let start = 0; start < uncached.length; start += DEXSCREENER_BATCH_SIZE) {
+    const batch = uncached.slice(start, start + DEXSCREENER_BATCH_SIZE);
+    const seen = new Set();
+    try {
+      const payload = await fetchJson(`${dexscreenerApi}/latest/dex/tokens/${batch.join(",")}`, { timeoutMs: 10_000 });
+      for (const pair of Array.isArray(payload?.pairs) ? payload.pairs : []) {
+        const address = pair?.baseToken?.address;
+        if (!address || seen.has(address) || !batch.includes(address)) continue;
+        seen.add(address);
+        dexscreenerSocialsCache.set(address, {
+          data: normalizeSocials(pair.info),
+          expiresAt: Date.now() + jitteredTtl(dexscreenerCacheTtlMs),
+        });
+      }
+    } catch {
+      // Fall through — every mint in this batch, seen or not, gets a short
+      // failure TTL below rather than being left to retry on every scan.
+    }
+    for (const mint of batch) {
+      if (!seen.has(mint)) {
+        dexscreenerSocialsCache.set(mint, { data: null, expiresAt: Date.now() + dexscreenerFailureTtlMs });
+      }
+    }
+  }
+};
+
+const fetchDexscreenerSocials = async (mints) => {
+  const uniqueMints = [...new Set(mints.filter(Boolean))];
+  await fetchDexscreenerSocialsBatch(uniqueMints);
+  return new Map(uniqueMints.map((mint) => [mint, dexscreenerSocialsCache.get(mint)?.data ?? null]));
+};
+
 const mapConcurrent = async (items, concurrency, mapper) => {
   const results = new Array(items.length);
   let cursor = 0;
@@ -780,7 +852,7 @@ const loadPools = async ({ force = false } = {}) => {
     // already in memory and needs no store of its own.
     const previousByAddress = new Map((poolCache?.data ?? []).map((pool) => [pool.address, pool]));
 
-    const [analyticsByPool, rugCheckByMint, gmgnByMint] = await Promise.all([
+    const [analyticsByPool, rugCheckByMint, gmgnByMint, socialsByMint] = await Promise.all([
       fetchPoolAnalytics(candidates.map(({ raw }) => raw.address)),
       fetchRugCheckSummaries(candidates.map(({ normalized }) => normalized.baseAddress)),
       fetchGmgnTokens(candidates.map(({ raw, normalized }) => ({
@@ -790,6 +862,7 @@ const loadPools = async ({ force = false } = {}) => {
           momentumMap.get(raw.address)?.priceChange1h,
         ),
       }))),
+      fetchDexscreenerSocials(candidates.map(({ normalized }) => normalized.baseAddress)),
     ]);
     const scoredAt = Date.now();
     const enriched = trackFeeVelocity(
@@ -799,6 +872,7 @@ const loadPools = async ({ force = false } = {}) => {
         analyticsByPool.get(raw.address),
         rugCheckByMint.get(normalized.baseAddress),
         gmgnByMint.get(normalized.baseAddress),
+        socialsByMint.get(normalized.baseAddress),
       ))),
       scoredAt,
     );

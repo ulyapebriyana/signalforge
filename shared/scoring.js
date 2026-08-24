@@ -777,7 +777,7 @@ export function evaluatePreset(pool, presetInput) {
   return { passed: misses.length === 0, misses };
 }
 
-export function normalizePool(raw, momentum = {}, analytics = {}, rugCheck = null, gmgn = null) {
+export function normalizePool(raw, momentum = {}, analytics = {}, rugCheck = null, gmgn = null, socials = null) {
   const { base, quote } = chooseTokens(raw.token_x, raw.token_y);
   const analyticsBaseToken = [analytics.token_x, analytics.token_y]
     .find((token) => token?.address === base.address);
@@ -818,6 +818,10 @@ export function normalizePool(raw, momentum = {}, analytics = {}, rugCheck = nul
     baseSymbol: base.symbol || "?",
     quoteSymbol: quote.symbol || "?",
     baseAddress: base.address,
+    // Website/X/Telegram/etc when DexScreener has any on file for this mint —
+    // null rather than an all-null object when it does not, so the link row
+    // can tell "no socials" apart from "not read yet".
+    socials,
     marketCap: number(base.market_cap),
     holders: number(base.holders),
     isVerified: Boolean(base.is_verified),

@@ -14,15 +14,48 @@ export const tokenLogoUrl = (mint, size = "sm") =>
 /** Each site's own favicon, fetched through Google's public favicon proxy — no logo assets to bundle or keep in sync. */
 const favicon = (domain) => `https://www.google.com/s2/favicons?domain=${domain}&sz=64`;
 
+/** The favicon of whatever domain a social URL actually points to, not a fixed one — a project's own site varies per token. */
+const faviconFor = (url) => {
+  try {
+    return favicon(new URL(url).hostname);
+  } catch {
+    return null;
+  }
+};
+
+const SOCIAL_META = {
+  twitter: { label: "X / Komunitas" },
+  telegram: { label: "Telegram" },
+  website: { label: "Situs resmi" },
+  instagram: { label: "Instagram" },
+  discord: { label: "Discord" },
+};
+
 /**
- * The row fabriq.trade shows per pool: its DEX, a swap shortcut, and the
- * screener/intel tools people actually flip between mid-trade. Ordered by how
- * often each gets clicked while working a pool — chart and swap before the
- * explorer.
+ * Social links live on `pool.socials` — set server-side from DexScreener's
+ * token-info payload (see `fetchDexscreenerSocials` in server/index.mjs) —
+ * rather than fetched here, because the same handful of mints repeat across
+ * every visible pool and the server already holds the long-lived cache that
+ * makes that cheap. `null` means "not read yet or none on file", both of
+ * which render as simply not adding the icon.
+ */
+const socialLinks = (socials) => {
+  if (!socials) return [];
+  return Object.entries(SOCIAL_META)
+    .filter(([type]) => socials[type])
+    .map(([type, meta]) => ({ key: type, label: meta.label, favicon: faviconFor(socials[type]), href: socials[type] }));
+};
+
+/**
+ * The row fabriq.trade shows per pool: whatever socials the project itself
+ * published, then its DEX, a swap shortcut, and the screener/intel tools
+ * people actually flip between mid-trade. Ordered by how often each gets
+ * clicked while working a pool — chart and swap before the explorer.
  */
 export function poolLinks(pool) {
   const mint = pool.baseAddress;
   const links = [
+    ...socialLinks(pool.socials),
     { key: "meteora", label: "Meteora", favicon: favicon("meteora.ag"), href: `https://www.meteora.ag/dlmm/${pool.address}` },
   ];
   if (!mint) return links;
