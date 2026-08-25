@@ -9,7 +9,7 @@ import { openScanLog, pruneScanLog, recordScan } from "../shared/scanLog.js";
 import { gmgnAuthQuery, normalizeGmgnToken } from "../shared/gmgn.js";
 import { classifyPhase, PHASE_META } from "../shared/marketRead.js";
 import { normalizePool, poolTier, PRESETS, resolvePresetId, volatileGateLabels } from "../shared/scoring.js";
-import { alertPresetsFor, cooldownKey, presetsCleared } from "../shared/alertRouting.js";
+import { alertPresetsFor, cooldownKey } from "../shared/alertRouting.js";
 import { collectSignalEntries } from "../shared/signalTransitions.js";
 import { collectPnlAlerts, collectPositionAlerts, RANGE_LABEL } from "../shared/lpPositions.js";
 import { configuredWallets, isValidWallet, positionPollSeconds, readWalletPositions, rpcConfigured } from "./lpPositions.mjs";
@@ -22,6 +22,21 @@ import {
   sendSignedTransaction,
 } from "./zapOut.mjs";
 import { normalizeSlippageBps } from "../shared/zapOut.js";
+import {
+  botTokenFromEnv,
+  cancelLink,
+  clearBotToken,
+  initTelegram,
+  pendingLinkState,
+  removeSubscriber,
+  resolveBotInfo,
+  saveBotToken,
+  sendTelegram,
+  startLink,
+  subscribers,
+  takeLastConnected,
+  telegramConfigured,
+} from "./telegram.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, "..");
@@ -927,30 +942,12 @@ const usd = (value) => new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 0,
 }).format(value);
 
-const telegramConfigured = () => Boolean(process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID);
-
-const sendTelegram = async (text) => {
-  if (!telegramConfigured()) throw new Error("Telegram belum dikonfigurasi di file .env");
-  const response = await fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      chat_id: process.env.TELEGRAM_CHAT_ID,
-      text,
-      parse_mode: "HTML",
-      disable_web_page_preview: true,
-    }),
-  });
-  if (!response.ok) throw new Error("Telegram menolak pesan. Periksa token dan chat ID.");
-  return response.json();
-};
-
 /**
  * `presets` is the list a pool cleared. The tier in the header is read off the
  * first of them rather than pool.status, because that field is computed on the
  * default preset's ladder and would mislabel an alert fired by another.
  */
-const alertMessage = (pool, source = "manual", presets = []) => {
+const alertMessage = (pool, presets = []) => {
   const named = presets.length ? presets : [PRESETS[scannerPresetName]];
   const tier = poolTier(pool.score, named[0]);
   const labels = named.map((preset) => escapeHtml(preset.label)).join(" + ");
@@ -982,7 +979,7 @@ const alertMessage = (pool, source = "manual", presets = []) => {
     `TVL: ${usd(pool.tvl)} · MC: ${usd(pool.marketCap)} · Holder: ${pool.holders.toLocaleString("en-US")}`,
     `<i>${escapeHtml(PHASE_META[phase].action)}</i>`,
     `<a href="https://www.meteora.ag/dlmm/${pool.address}">Buka pool di Meteora</a>`,
-    `<i>${source === "auto" ? "Alert otomatis" : "Dikirim manual"}; ini bukan rekomendasi finansial.</i>`,
+    "<i>Alert otomatis; ini bukan rekomendasi finansial.</i>",
   ].join("\n");
 };
 
@@ -1023,11 +1020,6 @@ const recordDetectedSignals = (pools) => {
   }
 
   detectionStatuses = currentStatuses;
-};
-
-const findPool = async (address) => {
-  const payload = await loadPools();
-  return payload.data.find((pool) => pool.address === address);
 };
 
 app.get("/api/pools", async (request, response) => {
@@ -1246,26 +1238,79 @@ app.delete("/api/history", (_request, response) => {
   response.json({ ok: true });
 });
 
-app.post("/api/telegram/test", async (_request, response) => {
+/**
+ * Everything the settings panel needs to draw the connection in one call: the
+ * bot it would connect through, the chats already receiving alerts, and the
+ * link window if one is open. `justConnected` is read-once, so the browser can
+ * poll this endpoint while a window is open and announce the moment it fills.
+ */
+app.get("/api/telegram/connection", async (_request, response) => {
+  let bot = null;
+  let botError = null;
   try {
-    await sendTelegram("<b>SignalForge tersambung.</b>\nAlert Meteora siap dikirim.");
-    response.json({ ok: true });
+    bot = await resolveBotInfo();
   } catch (error) {
-    response.status(400).json({ error: error instanceof Error ? error.message : "Telegram gagal" });
+    botError = error?.description || (error instanceof Error ? error.message : "Bot tidak dapat dibaca");
+  }
+  response.set("cache-control", "no-store");
+  response.json({
+    botConfigured: Boolean(bot),
+    botFromEnv: botTokenFromEnv(),
+    bot,
+    botError,
+    subscribers: subscribers(),
+    pending: pendingLinkState(),
+    justConnected: takeLastConnected(),
+    autoAlertsEnabled: process.env.ENABLE_ALERTS === "true",
+  });
+});
+
+app.post("/api/telegram/bot", async (request, response) => {
+  try {
+    const bot = await saveBotToken(request.body?.token);
+    return response.json({ ok: true, bot });
+  } catch (error) {
+    return response.status(400).json({ error: error instanceof Error ? error.message : "Token bot ditolak" });
   }
 });
 
-app.post("/api/telegram/alert", async (request, response) => {
+app.delete("/api/telegram/bot", (_request, response) => {
   try {
-    const address = String(request.body?.address || "");
-    const pool = await findPool(address);
-    if (!pool) return response.status(404).json({ error: "Pool tidak ditemukan di hasil scan terbaru" });
-    const cleared = presetsCleared(pool);
-    await sendTelegram(alertMessage(pool, "manual", cleared));
-    recordSignal(pool, "manual", true, { presets: cleared.map((preset) => preset.id) });
+    clearBotToken();
     return response.json({ ok: true });
   } catch (error) {
-    return response.status(400).json({ error: error instanceof Error ? error.message : "Alert gagal" });
+    return response.status(400).json({ error: error instanceof Error ? error.message : "Gagal menghapus token" });
+  }
+});
+
+app.post("/api/telegram/link", async (_request, response) => {
+  try {
+    const link = await startLink();
+    return response.json(link);
+  } catch (error) {
+    return response.status(400).json({ error: error instanceof Error ? error.message : "Gagal membuka koneksi" });
+  }
+});
+
+app.delete("/api/telegram/link", (_request, response) => {
+  cancelLink();
+  response.json({ ok: true });
+});
+
+app.delete("/api/telegram/subscribers/:id", (request, response) => {
+  const removed = removeSubscriber(request.params.id);
+  if (!removed) return response.status(404).json({ error: "Chat tidak ada di daftar" });
+  return response.json({ ok: true });
+});
+
+app.post("/api/telegram/test", async (_request, response) => {
+  try {
+    const { delivered } = await sendTelegram(
+      "<b>SignalForge tersambung.</b>\nAlert Meteora siap dikirim ke chat ini.",
+    );
+    response.json({ ok: true, delivered });
+  } catch (error) {
+    response.status(400).json({ error: error instanceof Error ? error.message : "Telegram gagal" });
   }
 });
 
@@ -1283,7 +1328,7 @@ const runAlertScan = async () => {
 
       const ids = presets.map((preset) => preset.id);
       try {
-        await sendTelegram(alertMessage(pool, "auto", presets));
+        await sendTelegram(alertMessage(pool, presets));
         for (const preset of presets) alertCooldowns.set(cooldownKey(pool.address, preset.id), now);
         recordSignal(pool, "auto", true, { presets: ids });
       } catch {
@@ -1420,7 +1465,11 @@ if (strandedAlertVars.length) {
 }
 
 let vite;
-await Promise.all([hydrateHistory(), hydrateFeeVelocity()]);
+await Promise.all([
+  hydrateHistory(),
+  hydrateFeeVelocity(),
+  initTelegram(path.join(projectRoot, "data", "telegram.json")),
+]);
 
 if (process.env.NODE_ENV === "production") {
   app.use(express.static(path.join(projectRoot, "dist")));

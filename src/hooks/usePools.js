@@ -35,6 +35,20 @@ export function usePools(scanIntervalSeconds = 30) {
     }
   }, []);
 
+  /**
+   * Runtime status alone. Connecting a Telegram chat changes what /api/status
+   * reports but nothing about the pools, and a full refresh would force an
+   * upstream rescan to learn it.
+   */
+  const loadStatus = useCallback(async () => {
+    try {
+      setStatus(await fetch("/api/status").then(readJson));
+    } catch {
+      // The next scheduled load reports it; a failed status poll is not an
+      // error the page needs to surface on its own.
+    }
+  }, []);
+
   useEffect(() => {
     const controller = new AbortController();
     load({ signal: controller.signal });
@@ -53,5 +67,6 @@ export function usePools(scanIntervalSeconds = 30) {
     refreshing,
     error,
     refresh: () => load({ force: true }),
+    refreshStatus: loadStatus,
   };
 }

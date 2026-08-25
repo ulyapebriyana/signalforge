@@ -59,7 +59,8 @@ kebetulan: lihat [Menutup posisi](#menutup-posisi-zap-out).
 - Risk score 0–100 dengan flag freeze authority, blacklist, verifikasi, TVL tipis, usia pool, dan data holder yang belum tersedia.
 - Pencarian, filter angka, tab Hot/Watch/Skipped, panel inspeksi, tautan ke Meteora.
 - Kolom keamanan JupShield, RugCheck, dan Jupiter Organic Score dengan fallback saat data belum tersedia.
-- Telegram alert manual dan scanner otomatis opsional, dengan cooldown per pool.
+- Alert Telegram otomatis dengan cooldown per pool, ke channel/grup/chat yang dihubungkan
+  langsung dari dashboard — tanpa mengisi chat ID di `.env`.
 - Notifikasi Watch/Hot berbunyi saat pool baru masuk status atau naik dari Watch ke Hot, dengan opsi desktop notification.
 - **Pelacakan posisi LP** dari alamat wallet publik: status dalam/luar range, nilai posisi, fee
   belum diklaim, dan alert Telegram saat posisi berhenti menghasilkan fee.
@@ -83,12 +84,27 @@ npm run build
 npm start
 ```
 
-## Mengaktifkan Telegram
+## Menghubungkan Telegram
 
-1. Salin `.env.example` menjadi `.env`.
-2. Isi `TELEGRAM_BOT_TOKEN` dan `TELEGRAM_CHAT_ID`.
-3. Untuk alert otomatis, ubah `ENABLE_ALERTS=true`.
-4. Restart aplikasi dan klik **Telegram → Kirim pesan tes**.
+Penerima alert tidak lagi diisi di `.env`. Bot yang menghubungkan dirinya sendiri ke chat mana
+pun yang mengizinkannya, dan dashboard yang membuka izin itu selama sepuluh menit.
+
+1. Buat bot di [@BotFather](https://t.me/BotFather) dengan `/newbot`, salin tokennya.
+2. Isi `TELEGRAM_BOT_TOKEN` di `.env`, **atau** tempel tokennya di **Pengaturan → Telegram**
+   kalau `.env` dibiarkan kosong. Token yang ditempel disimpan di `data/telegram.json`.
+3. Untuk alert otomatis, ubah `ENABLE_ALERTS=true` lalu restart.
+4. Buka **Pengaturan → Telegram → Hubungkan channel**. Selama jendela sepuluh menit itu:
+   - **chat pribadi** — buka tautannya lalu tekan **Start**;
+   - **channel atau grup** — tambahkan bot itu sebagai admin dengan izin post.
+   Chat yang menjawab langsung muncul di daftar penerima.
+5. Klik **Kirim pesan tes** untuk memastikan pesannya benar-benar sampai.
+
+Satu bot boleh melayani beberapa chat sekaligus; setiap alert dikirim ke semuanya. Memutus
+koneksi bisa dari daftar di dashboard, atau dengan mengirim `/stop` di chat itu sendiri. Chat
+yang memblokir bot atau mengeluarkannya dari channel dibuang otomatis pada pengiriman berikutnya.
+
+`TELEGRAM_CHAT_ID` masih dibaca kalau ada, supaya pemasangan lama tetap jalan. Chat dari `.env`
+ditandai di daftar dan tidak bisa diputus dari dashboard — hapus barisnya dari `.env` untuk itu.
 
 Alert Telegram berjalan untuk **semua preset sekaligus**, masing-masing dengan ambang skor,
 batas risiko, dan cooldown-nya sendiri. Setiap pesan menyebut preset mana yang meloloskannya;
@@ -101,7 +117,8 @@ dipakai — satu ambang global akan membungkam preset yang ladder-nya lebih rend
 `ALERT_MIN_SCORE=65` yang mematikan Slow Wallet sepenuhnya (ladder-nya 38/30). Server
 memperingatkan di log kalau ketiganya masih ada di `.env`.
 
-Token Telegram hanya dibaca oleh server. Browser tidak pernah menerima nilainya.
+Token bot hanya disimpan di server. Browser tidak pernah menerima nilainya kembali — hanya
+nama pengguna botnya, supaya tautan koneksi bisa dibentuk.
 
 ## Melacak posisi LP
 

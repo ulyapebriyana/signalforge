@@ -1,10 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import {
-  BellRing,
   Check,
   Copy,
   ExternalLink,
-  Loader2,
   Star,
   TriangleAlert,
   X,
@@ -374,8 +372,6 @@ export default function PoolDrawer({
   preset,
   gmgnConfigured,
   onClose,
-  onSendAlert,
-  alertState,
   isWatched,
   onToggleWatch,
   onToast,
@@ -707,15 +703,6 @@ export default function PoolDrawer({
 
         <footer className="fx-drawer-foot">
           <div className="fx-drawer-foot-actions">
-            <button
-              className="f-btn f-btn--hot"
-              type="button"
-              onClick={() => onSendAlert(pool)}
-              disabled={alertState === "sending"}
-            >
-              {alertState === "sending" ? <Loader2 className="f-spin" /> : <BellRing />}
-              {alertState === "sending" ? "Mengirim…" : "Kirim ke Telegram"}
-            </button>
             <button className="f-btn" type="button" onClick={copyMint}>
               {copied ? <Check /> : <Copy />}
               {copied ? "Tersalin" : "Salin mint"}

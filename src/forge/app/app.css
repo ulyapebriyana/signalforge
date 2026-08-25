@@ -2992,6 +2992,165 @@
   margin-top: 1rem;
 }
 
+/* --- telegram connect ------------------------------------------------------------------ */
+
+.fx-tg-steps {
+  margin: 0 0 0.85rem;
+  display: grid;
+  gap: 0.4rem;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--f-ash);
+}
+
+/* The app resets list markers globally. Setup is a numbered sequence and wants
+   them back; the two connect routes are alternatives, not steps, so they stay
+   bare and hang on their own bold labels instead. */
+ol.fx-tg-steps {
+  padding-left: 1.1rem;
+  list-style: decimal;
+}
+
+ul.fx-tg-steps {
+  padding-left: 0;
+  list-style: none;
+}
+
+.fx-tg-steps code {
+  padding: 0.05rem 0.28rem;
+  border-radius: 4px;
+  background: var(--f-iron-800);
+  font-size: 0.72rem;
+}
+
+.fx-tg-steps a {
+  color: var(--f-ember);
+}
+
+.fx-tg-token {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.fx-tg-token input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--f-line);
+  border-radius: var(--f-r);
+  background: var(--f-iron-900);
+  color: var(--f-bone);
+  font-size: 0.8125rem;
+  font-family: var(--f-mono);
+}
+
+.fx-tg-token input:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--f-ember) 55%, transparent);
+}
+
+.fx-tg-error {
+  color: var(--f-scorch);
+}
+
+.fx-tg-list {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.fx-tg-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--f-line);
+  border-radius: var(--f-r);
+  background: var(--f-iron-900);
+}
+
+.fx-tg-list li > svg {
+  width: 16px;
+  height: 16px;
+  color: var(--f-ember);
+  flex-shrink: 0;
+}
+
+.fx-tg-list li > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.fx-tg-list strong {
+  display: block;
+  font-size: 0.8125rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fx-tg-list span {
+  font-size: 0.7rem;
+  color: var(--f-slag);
+}
+
+.fx-tg-locked {
+  font-size: 0.65rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--f-faint);
+}
+
+/* The one place in settings that changes on its own while being looked at, so
+   it is marked out rather than left to read as another static row. */
+.fx-tg-waiting {
+  padding: 0.8rem 0.85rem;
+  margin-bottom: 0.25rem;
+  border: 1px solid color-mix(in srgb, var(--f-ember) 34%, transparent);
+  border-radius: var(--f-r);
+  background: color-mix(in srgb, var(--f-ember) 7%, var(--f-iron-900));
+}
+
+.fx-tg-waiting-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.7rem;
+}
+
+.fx-tg-waiting-head svg {
+  width: 15px;
+  height: 15px;
+  color: var(--f-ember);
+}
+
+.fx-tg-waiting-head strong {
+  flex: 1;
+  font-size: 0.8125rem;
+}
+
+.fx-tg-waiting-head span {
+  font-size: 0.75rem;
+  color: var(--f-slag);
+}
+
+.fx-tg-waiting-actions,
+.fx-tg-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.fx-tg-actions {
+  margin-bottom: 0.25rem;
+}
+
+.fx-tg-setup {
+  margin-bottom: 1rem;
+}
+
 /* --- confirm sheet --------------------------------------------------------------------- */
 
 .fx-sheet-backdrop {

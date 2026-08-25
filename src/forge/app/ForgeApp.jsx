@@ -19,7 +19,6 @@ import {
   Moon,
   RefreshCw,
   Search,
-  Send,
   Settings,
   ShieldCheck,
   Star,
@@ -246,7 +245,7 @@ export default function ForgeApp({ path }) {
     const saved = Number(localStorage.getItem("signalforge:scanInterval"));
     return SCAN_INTERVALS.includes(saved) ? saved : 30;
   });
-  const { pools, meta, status, loading, refreshing, error, refresh } = usePools(scanInterval);
+  const { pools, meta, status, loading, refreshing, error, refresh, refreshStatus } = usePools(scanInterval);
   const signalHistory = useSignalHistory(scanInterval);
   // Polled on the server's own LP cadence rather than the pool scan's: a
   // position moves when the price crosses a bin, and each read costs an RPC call.
@@ -259,7 +258,6 @@ export default function ForgeApp({ path }) {
   );
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [notifyOpen, setNotifyOpen] = useState(false);
-  const [alertState, setAlertState] = useState("idle");
 
   // One sound per preset, so the alarm alone says which gate fired.
   const [soundByPreset, setSoundByPreset] = useState(() =>
@@ -626,29 +624,6 @@ export default function ForgeApp({ path }) {
     }));
   }, [preset]);
 
-  const sendAlert = useCallback(
-    async (pool) => {
-      setAlertState("sending");
-      try {
-        const response = await fetch("/api/telegram/alert", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ address: pool.address }),
-        });
-        const payload = await response.json();
-        if (!response.ok) throw new Error(payload.error || "Alert gagal dikirim");
-        setAlertState("sent");
-        push(`Alert ${pool.pair} terkirim.`, "success");
-        signalHistory.refresh();
-      } catch (sendError) {
-        setAlertState("error");
-        push(sendError.message, "error");
-        if (!status?.telegramConfigured) navigate("/app/settings");
-      }
-    },
-    [push, signalHistory, status?.telegramConfigured],
-  );
-
   const toggleWatch = useCallback(
     (pool) => {
       const added = watchlist.toggle(pool.address);
@@ -789,9 +764,6 @@ export default function ForgeApp({ path }) {
           >
             {resolved === "light" ? <Sun /> : <Moon />}
           </button>
-          <button className="f-btn" type="button" onClick={() => navigate("/app/settings")}>
-            <Send /> Telegram
-          </button>
         </div>
         {notifyOpen ? (
           <NotificationPanel
@@ -894,6 +866,7 @@ export default function ForgeApp({ path }) {
               watchlist.clear();
               push("Watchlist dikosongkan.");
             }}
+            onStatusChange={refreshStatus}
             onToast={push}
           />
         ) : null}
@@ -904,8 +877,6 @@ export default function ForgeApp({ path }) {
         pool={selected}
         preset={preset}
         onClose={() => setSelectedAddress(null)}
-        onSendAlert={sendAlert}
-        alertState={alertState}
         isWatched={selected ? watchlist.has(selected.address) : false}
         onToggleWatch={toggleWatch}
         onToast={push}

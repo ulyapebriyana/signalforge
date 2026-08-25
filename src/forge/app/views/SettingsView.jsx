@@ -1,17 +1,15 @@
-import { useState } from "react";
 import {
   Bell,
-  Bot,
-  Loader2,
   Monitor,
   Moon,
-  Send,
+  ServerCog,
   Star,
   Sun,
   Timer,
   Volume2,
   VolumeX,
 } from "lucide-react";
+import TelegramConnect from "../components/TelegramConnect.jsx";
 import { PRESETS, resolvePresetId } from "../../../../shared/scoring.js";
 import {
   NOTIFICATION_SOUND_OFF,
@@ -70,10 +68,9 @@ export default function SettingsView({
   onTheme,
   watchlistCount,
   onClearWatchlist,
+  onStatusChange,
   onToast,
 }) {
-  const [testing, setTesting] = useState(false);
-
   const desktopLabel =
     notificationPermission === "granted"
       ? "Aktif"
@@ -82,20 +79,6 @@ export default function SettingsView({
         : notificationPermission === "unsupported"
           ? "Tidak didukung"
           : "Aktifkan";
-
-  const testTelegram = async () => {
-    setTesting(true);
-    try {
-      const response = await fetch("/api/telegram/test", { method: "POST" });
-      const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error || "Tes gagal");
-      onToast("Pesan tes terkirim ke Telegram.", "success");
-    } catch (error) {
-      onToast(error.message, "error");
-    } finally {
-      setTesting(false);
-    }
-  };
 
   return (
     <div className="fx-view fx-settings">
@@ -107,52 +90,7 @@ export default function SettingsView({
       </header>
 
       <div className="fx-settings-grid">
-        <section className="fx-panel">
-          <header className="fx-panel-head">
-            <div>
-              <span className="f-eyebrow">Server</span>
-              <h2>Telegram</h2>
-            </div>
-            <Bot />
-          </header>
-          <div className={`fx-connection ${status?.telegramConfigured ? "is-connected" : ""}`}>
-            <span className="fx-connection-dot" aria-hidden="true" />
-            <div>
-              <strong>{status?.telegramConfigured ? "Tersambung" : "Belum dikonfigurasi"}</strong>
-              <span>
-                {status?.autoAlertsEnabled
-                  ? "Alert otomatis aktif dengan cooldown per pool."
-                  : "Alert otomatis mati. Ubah ENABLE_ALERTS=true lalu restart server."}
-              </span>
-            </div>
-          </div>
-          <dl className="fx-fact-list">
-            <div>
-              <dt>Preset server</dt>
-              <dd>{PRESETS[resolvePresetId(status?.preset)].label}</dd>
-            </div>
-            <div>
-              <dt>Interval scan server</dt>
-              <dd className="f-num">{status?.scanIntervalSeconds || 30}s</dd>
-            </div>
-            <div>
-              <dt>Riwayat</dt>
-              <dd>{status?.historyPersistent ? "Persisten di disk" : "Sementara"}</dd>
-            </div>
-          </dl>
-          <p className="fx-panel-note">
-            Token bot hanya dibaca di server. Browser tidak pernah menerima nilainya.
-          </p>
-          <button
-            className="f-btn f-btn--hot f-btn--block"
-            type="button"
-            disabled={!status?.telegramConfigured || testing}
-            onClick={testTelegram}
-          >
-            {testing ? <Loader2 className="f-spin" /> : <Send />}
-            {testing ? "Mengirim…" : "Kirim pesan tes"}
-          </button>
-        </section>
+        <TelegramConnect onToast={onToast} onChanged={onStatusChange} />
 
         <section className="fx-panel">
           <header className="fx-panel-head">
@@ -246,6 +184,33 @@ export default function SettingsView({
               <Star /> Kosongkan
             </button>
           </Row>
+        </section>
+
+        <section className="fx-panel">
+          <header className="fx-panel-head">
+            <div>
+              <span className="f-eyebrow">Server</span>
+              <h2>Scanner</h2>
+            </div>
+            <ServerCog />
+          </header>
+          <dl className="fx-fact-list">
+            <div>
+              <dt>Preset server</dt>
+              <dd>{PRESETS[resolvePresetId(status?.preset)].label}</dd>
+            </div>
+            <div>
+              <dt>Interval scan server</dt>
+              <dd className="f-num">{status?.scanIntervalSeconds || 30}s</dd>
+            </div>
+            <div>
+              <dt>Riwayat</dt>
+              <dd>{status?.historyPersistent ? "Persisten di disk" : "Sementara"}</dd>
+            </div>
+          </dl>
+          <p className="fx-panel-note">
+            Preset dan interval scanner diatur di .env server, bukan di browser ini.
+          </p>
         </section>
       </div>
     </div>
