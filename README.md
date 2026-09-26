@@ -194,7 +194,7 @@ Rute swap memakai Jupiter.
 
 | Aturan | Slow Wallet | Heart Attack |
 | --- | ---: | ---: |
-| Market cap | **$2M–$500M** | $100K–$15M |
+| Market cap | **$2M–$500M** | $100K–$35M |
 | TVL minimum | **$50K** | — |
 | Momentum 1h | −15–20% | 20–2000% |
 | Volume 1h minimum | $5K | — |

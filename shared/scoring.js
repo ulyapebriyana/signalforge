@@ -63,9 +63,10 @@ export const PRESETS = Object.freeze({
     // explicit instruction — below Skolmbeagh-like's $50K–$200K floor now, so
     // a runner can qualify here even earlier in its life than the second cut
     // assumed. The Metlex "HEART ATTACK · RUNNER" alert that prompted this
-    // preset showed MC $1.68M, still comfortably inside the $100K–$15M range.
+    // preset showed MC $1.68M, still comfortably inside the range. The ceiling
+    // was raised from $15M to $35M on the user's explicit instruction.
     marketCapMin: 100_000,
-    marketCapMax: 15_000_000,
+    marketCapMax: 35_000_000,
     // "Ripping upward with almost no corrections." Entry is never into
     // something flat and never into something bleeding.
     // Lowered from 20% to 10% on the user's explicit instruction.
