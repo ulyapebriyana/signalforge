@@ -392,8 +392,40 @@ const fetchRugCheckClusters = async (mint) => {
  */
 const gmgnConfigured = () => Boolean(process.env.GMGN_API_KEY);
 
-const GMGN_SPACING_MS = 120;
+// GMGN's free tier limits per IP, and other apps on this VPS share the IP, so leave headroom.
+const GMGN_SPACING_MS = 500;
 let gmgnQueue = Promise.resolve();
+
+/**
+ * GMGN answers 429 for a rate limit and, after repeated violations, bans the IP
+ * (`RATE_LIMIT_BANNED`). Every request sent during a ban extends it (up to five
+ * minutes), so retrying on the usual short failure TTL kept the IP banned
+ * around the clock — for every app on this VPS, not just this one. On a 429 all
+ * GMGN traffic stops until the reset GMGN names, plus a margin, and rows keep
+ * serving their last good data meanwhile.
+ */
+let gmgnPausedUntil = 0;
+class GmgnPaused extends Error {}
+
+const gmgnFetch = async (url, headers, timeoutMs) => {
+  if (Date.now() < gmgnPausedUntil) throw new GmgnPaused();
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, { headers, signal: controller.signal });
+    if (response.status === 429) {
+      const body = await response.json().catch(() => ({}));
+      const reset = Math.max(Number(response.headers.get("x-ratelimit-reset")) || 0, Number(body.reset_at) || 0) * 1000;
+      gmgnPausedUntil = Math.max(gmgnPausedUntil, reset, Date.now() + 60_000) + 30_000;
+      console.warn(`[gmgn] ${body.error || "429"}: pausing GMGN requests until ${new Date(gmgnPausedUntil).toISOString()}`);
+      throw new GmgnPaused();
+    }
+    if (!response.ok) throw new Error(`Upstream ${response.status}`);
+    return await response.json();
+  } finally {
+    clearTimeout(timeout);
+  }
+};
 
 /**
  * A young pool's GMGN row is refreshed on this much shorter clock than the
@@ -425,6 +457,8 @@ const fetchGmgnToken = async (mint, { maxAgeMs = Infinity } = {}) => {
   if (cached && cached.expiresAt > Date.now() && Date.now() - cached.cachedAt < maxAgeMs) {
     return cached.data;
   }
+  // Paused after a 429: do not ask (it would extend a ban); serve the last row we have.
+  if (Date.now() < gmgnPausedUntil) return cached?.data ?? null;
 
   const run = gmgnQueue.then(async () => {
     await new Promise((resolve) => setTimeout(resolve, GMGN_SPACING_MS));
@@ -433,10 +467,7 @@ const fetchGmgnToken = async (mint, { maxAgeMs = Infinity } = {}) => {
       chain: "sol",
       ...gmgnAuthQuery(randomUUID),
     });
-    return fetchJson(`${gmgnApi}/v1/token/info?${query}`, {
-      timeoutMs: 8_000,
-      headers: { "X-APIKEY": process.env.GMGN_API_KEY },
-    });
+    return gmgnFetch(`${gmgnApi}/v1/token/info?${query}`, { "X-APIKEY": process.env.GMGN_API_KEY }, 8_000);
   });
   gmgnQueue = run.then(() => undefined, () => undefined);
 
@@ -449,7 +480,9 @@ const fetchGmgnToken = async (mint, { maxAgeMs = Infinity } = {}) => {
       expiresAt: Date.now() + jitteredTtl(gmgnCacheTtlMs),
     });
     return data;
-  } catch {
+  } catch (error) {
+    // A pause is not a verdict on the token: keep whatever good row it had.
+    if (error instanceof GmgnPaused) return cached?.data ?? null;
     // A brand-new token is often simply not indexed by GMGN yet, so the
     // two-minute negative cache that suits a settled mint would burn most of a
     // runner's life on a "no data" that stopped being true 90 seconds ago.
